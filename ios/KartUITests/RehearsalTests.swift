@@ -18,7 +18,7 @@ final class RehearsalTests: XCTestCase {
 
         debug("debug.say.0")
         expectText("Love it. Spaghetti, Rao's sauce, a baguette, and a Caesar kit. I'll walk you through it.")
-        expectText("Aisle 1 → Caesar Kit")
+        expectText("Aisle 1 → Caesar Salad Kit")
         shot("rehearsal-1-plan")
 
         debug("debug.add.barilla-spaghetti")

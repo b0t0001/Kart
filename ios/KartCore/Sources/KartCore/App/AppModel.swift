@@ -258,7 +258,13 @@ public final class AppModel {
             if action == .yes { await addToPlan(suggestion.productId) }
             if action == .no { try? await backend.dismissSuggestion() }
         case .nudge:
-            try? await backend.dismissNudge(action == .keepIt ? .keep : .ok)
+            let answer: NudgeAction = switch action {
+            case .keepIt: .keep
+            case .goGetIt, .goGetThem: .shop                    // short at checkout: back to the aisles
+            case .skipIt, .skip: .skip
+            default: .ok
+            }
+            try? await backend.dismissNudge(answer)
         case .newDeal(let deal):
             if action == .addIt { await addToPlan(deal.productId) }
             acknowledgedNewDeals.insert("\(deal.id)|\(deal.label)")

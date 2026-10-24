@@ -15,6 +15,8 @@ import Testing
     #expect(try await run(.crowded).cart.items.count == 12)
     let amounts = try await run(.amounts)                     // taco night for eight: 2 lb beef, one in the cart
     #expect(amounts.cart.plan.first { $0.productId == "ground-beef" }.map { ($0.qty, $0.done) } ?? (0, true) == (2, false))
+    let short = try await run(.checkoutShort)                 // beta on: one pound of beef short at checkout
+    #expect(short.cart.status == .checkout && short.cart.nudge?.kind == .under)
     let nudged = try await run(.nudge)                        // beta on: one too many ground beef
     #expect(nudged.cart.quantityNudgesOn && nudged.cart.nudge?.kind == .over)
     let talk = try await run(.talkative)                     // the on-device taco test: long captions plus a deal card

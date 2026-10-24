@@ -272,3 +272,28 @@ import Testing
     #expect(sent.filter { if case .suggestion = $0 { true } else { false } }.count == 1)
     #expect(t.sounds.played.filter { $0 == .added }.count == 1)
 }
+
+@MainActor @Test func atCheckoutTheShortNudgeOffersGoGetItOrSkipIt() async throws {
+    let t = try make(); try await t.backend.setFeature("quantity_nudges", on: true); await t.model.startTrip()
+    try await t.backend.setPlan([PlanItem(productId: "ground-beef", reason: "tacos", qty: 2)])
+    await t.backend.simulateVision(.added, productId: "ground-beef", confidence: 0.9, label: "b")
+    await t.model.beginCheckout(); t.model.ingest(cart: t.backend.cart)
+    let card = try #require(t.model.cards.first { if case .nudge = $0.kind { true } else { false } })
+    #expect(card.actions == [.goGetIt, .skipIt])
+    await t.model.respond(to: card, with: .goGetIt)                 // back to the aisle, the nudge acknowledged
+    #expect(t.backend.cart.status == .shopping && t.backend.cart.nudge == nil)
+}
+
+
+@MainActor @Test func theCheckoutListCardNamesTheAislesWithGoGetThemOrSkip() async throws {
+    let t = try make(); try await t.backend.setFeature("quantity_nudges", on: true); await t.model.startTrip()
+    try await t.backend.setPlan([PlanItem(productId: "ground-beef", reason: "tacos", qty: 2),
+                                 PlanItem(productId: "tostitos-salsa", reason: "tacos")])
+    await t.backend.simulateVision(.added, productId: "ground-beef", confidence: 0.9, label: "b")
+    await t.model.beginCheckout(); t.model.ingest(cart: t.backend.cart)
+    let card = try #require(t.model.cards.first { if case .nudge = $0.kind { true } else { false } })
+    #expect(card.title == "Before you go: you still need Ground Beef (Aisle 3) and Salsa (Aisle 5).")
+    #expect(card.actions == [.goGetThem, .skip])
+    await t.model.respond(to: card, with: .skip)
+    #expect(t.backend.cart.nudge == nil && t.backend.cart.status == .checkout)
+}

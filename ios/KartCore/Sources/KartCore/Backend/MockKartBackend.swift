@@ -79,6 +79,7 @@ public final class MockKartBackend: KartBackend {
         }
         if !cart.nudged.contains(nudge.key) { cart.nudged.append(nudge.key) }
         cart.nudge = nil
+        if action == .shop, cart.status == .checkout { cart.status = .shopping }   // "go get them"
         recompute()
     }
 
@@ -227,20 +228,22 @@ public final class MockKartBackend: KartBackend {
                            aisle: catalog.section(product.section)?.aisleLabel, at: now)
     }
 
+    /// At checkout, as the backend: one combined nudge with every short in-stock plan item, in walking order.
     private func nudgeIfShort() {
+        var items: [NudgeItem] = []
         for line in cart.plan {
             guard let product = catalog.product(line.productId), product.stock > 0 else { continue }
             let have = inCart(line.productId)
             guard have < line.qty, mayNudge("under:\(line.productId)") else { continue }
-            cart.nudged.append("under:\(line.productId)")
-            let short = line.qty - have
-            let aisle = catalog.section(product.section)?.aisleLabel ?? product.section
-            cart.nudge = Nudge(productId: line.productId, name: product.shortName, kind: .under, have: have, need: line.qty,
-                               basis: line.basis,
-                               text: "Before you go: you're \(short == 1 ? "one" : "\(short)") short on \(product.shortName). It's in \(aisle).",
-                               aisle: aisle, at: now)
-            return
+            items.append(NudgeItem(productId: line.productId, name: product.shortName, have: have, need: line.qty,
+                                   aisle: catalog.section(product.section)?.aisleLabel ?? product.section))
         }
+        guard let first = items.first else { return }
+        let names = items.compactMap(\.name)
+        let list = names.count == 1 ? names[0] : names.dropLast().joined(separator: ", ") + " and " + names.last!
+        cart.nudged.append(contentsOf: items.map { "under:\($0.productId)" })
+        cart.nudge = Nudge(productId: first.productId, name: first.name, kind: .under, have: first.have, need: first.need,
+                           text: "Before you go: you still need \(list).", aisle: first.aisle, at: now, items: items)
     }
 
     private func clearMatchedNudge() {

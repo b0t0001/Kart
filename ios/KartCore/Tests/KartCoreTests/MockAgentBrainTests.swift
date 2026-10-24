@@ -41,7 +41,7 @@ import Testing
         let (b, brain) = try await setup()
         try await b.setPlan(DemoScript.pastaPlan)
         #expect(brain.react(to: .cartChanged(.added(productId: "barilla-spaghetti"))) == "Nice. Rao's is right beside it.")
-        #expect(brain.react(to: .cartChanged(.added(productId: "caesar-salad-kit"))) == "Got the Caesar Kit.")
+        #expect(brain.react(to: .cartChanged(.added(productId: "caesar-salad-kit"))) == "Got the Caesar Salad Kit.")
         #expect(brain.react(to: .cartChanged(.added(productId: "bananas"))) == nil)
         #expect(brain.react(to: .cartChanged(.removed(productId: "barilla-spaghetti"))) == "Took the Spaghetti off your bill.")
         #expect(brain.react(to: .cartChanged(.priceDropped(productId: "kirkland-parmesan", from: Decimal(string: "12.99")!, to: Decimal(string: "9.99")!))) == "Good news, Parmesan just dropped to $9.99.")

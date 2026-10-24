@@ -1,7 +1,7 @@
 import Foundation
 
 public enum CardAction: Sendable, Equatable, Hashable {
-    case yes, no, somethingElse, remove, addIt, gotIt, keepIt, retry
+    case yes, no, somethingElse, remove, addIt, gotIt, keepIt, goGetIt, skipIt, goGetThem, skip, retry
     case choose(productId: String)
 
     public var title: String {
@@ -13,6 +13,10 @@ public enum CardAction: Sendable, Equatable, Hashable {
         case .addIt: "Add it"
         case .gotIt: "Got it"
         case .keepIt: "Keep it"
+        case .goGetIt: "Go get it"
+        case .skipIt: "Skip it"
+        case .goGetThem: "Go get them"
+        case .skip: "Skip"
         case .retry: "Retry"
         case .choose: ""
         }
@@ -80,8 +84,19 @@ public enum CardDeriver {
     /// Only with the cart's `quantity_nudges` flag on; with it off nothing changes.
     private static func nudgeCards(_ ctx: CardContext) -> [Card] {
         guard ctx.cart.quantityNudgesOn, let nudge = ctx.cart.nudge else { return [] }
-        return [Card(id: "nudge-\(nudge.key)", kind: .nudge(nudge), title: nudge.text,
-                     actions: nudge.kind == .over ? [.keepIt, .gotIt] : [.gotIt])]
+        // Short at checkout: the bill is where the shopper is, so offer the way back before they pay.
+        if nudge.kind == .under, let items = nudge.items, items.count > 1 {   // checkout: the whole list, with aisles
+            let named = items.map { item in item.aisle.map { "\(item.name ?? item.productId) (\($0))" } ?? (item.name ?? item.productId) }
+            let list = named.dropLast().joined(separator: ", ") + " and " + named.last!
+            return [Card(id: "nudge-\(nudge.key)", kind: .nudge(nudge), title: "Before you go: you still need \(list).",
+                         actions: [.goGetThem, .skip])]
+        }
+        let actions: [CardAction] = switch (nudge.kind, ctx.cart.status) {
+        case (.over, _): [.keepIt, .gotIt]
+        case (.under, .checkout): [.goGetIt, .skipIt]
+        case (.under, _): [.gotIt]
+        }
+        return [Card(id: "nudge-\(nudge.key)", kind: .nudge(nudge), title: nudge.text, actions: actions)]
     }
 
     private static func confirmCards(_ ctx: CardContext) -> [Card] {

@@ -10,6 +10,12 @@ struct CheckoutView: View {
         model.cards.filter { if case .confirmItem = $0.kind { true } else { false } }
     }
 
+    /// Quantity-nudge beta: "Before you go: you're one pack of tortillas short…" lands on the bill, where the shopper
+    /// is, before they pay.
+    private var nudgeCards: [Card] {
+        model.cards.filter { if case .nudge = $0.kind { true } else { false } }
+    }
+
     var body: some View {
         let cart = model.backend.cart
         GeometryReader { geometry in
@@ -26,6 +32,12 @@ struct CheckoutView: View {
                                 .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
                                     .stroke(Theme.amber, lineWidth: pulse ? 4 : 0))
                                 .id("unresolved-\(card.id)")
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                            }
+                            ForEach(nudgeCards) { card in
+                                CardView(card: card, catalog: model.backend.catalog) { action in
+                                    Task { await model.respond(to: card, with: action) }
+                                }
                                 .transition(.move(edge: .top).combined(with: .opacity))
                             }
                             ForEach(cart.items) { item in
@@ -50,12 +62,12 @@ struct CheckoutView: View {
             }
             .frame(width: (geometry.size.width - Theme.xxl) * 0.6)
 
-            PaySummary(model: model, unresolved: confirmCards.count)
+            PaySummary(model: model, unresolved: confirmCards.count, nudgeOpen: !nudgeCards.isEmpty)
                 .frame(width: (geometry.size.width - Theme.xxl) * 0.4)
         }
         }
         .padding(Theme.xxl)
-        .animation(Theme.spring, value: confirmCards.map(\.id))
+        .animation(Theme.spring, value: confirmCards.map(\.id) + nudgeCards.map(\.id))
         .overlay { PayOverlay(state: model.paymentState) { Task { await model.pay() } } }
     }
 }
@@ -99,6 +111,8 @@ private struct BillLine: View {
 private struct PaySummary: View {
     let model: AppModel
     let unresolved: Int
+    /// A nudge card is open: its action is the one to take first, so Pay drops to outlined (still works).
+    var nudgeOpen = false
 
     var body: some View {
         let cart = model.backend.cart
@@ -127,7 +141,7 @@ private struct PaySummary: View {
                                      : "Confirm \(unresolved) \(unresolved == 1 ? "item" : "items") first")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(PayButtonStyle(ready: unresolved == 0))
+            .buttonStyle(PayButtonStyle(ready: unresolved == 0 && !nudgeOpen))
             .accessibilityIdentifier("pay.button")
             Button {
                 Task { await model.resumeShopping() }

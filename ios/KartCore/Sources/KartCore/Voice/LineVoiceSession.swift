@@ -84,8 +84,17 @@ public enum LineCodec {
         case .uiAction(let action):
             return ["type": "ui_action", "action": action]
         case .nudge(let nudge):
-            return ["type": "nudge", "product_id": nudge.productId, "kind": nudge.kind.rawValue, "text": nudge.text,
-                    "have": nudge.have, "need": nudge.need]
+            var meta: [String: Any] = ["type": "nudge", "product_id": nudge.productId, "kind": nudge.kind.rawValue,
+                                       "text": nudge.text, "have": nudge.have, "need": nudge.need]
+            if let items = nudge.items {                       // the combined checkout nudge: every short item
+                meta["items"] = items.map { item -> [String: Any] in
+                    var line: [String: Any] = ["product_id": item.productId, "have": item.have, "need": item.need]
+                    if let name = item.name { line["name"] = name }
+                    if let aisle = item.aisle { line["aisle"] = aisle }
+                    return line
+                }
+            }
+            return meta
         }
     }
 
@@ -112,6 +121,10 @@ public enum LineCodec {
         case .addIt: "add_it"
         case .gotIt: "got_it"
         case .keepIt: "keep_it"
+        case .goGetIt: "go_get_it"
+        case .skipIt: "skip_it"
+        case .goGetThem: "go_get_them"
+        case .skip: "skip"
         case .retry: "retry"
         case .choose(let productId): "choose:\(productId)"
         }

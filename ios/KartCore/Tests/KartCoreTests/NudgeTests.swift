@@ -60,14 +60,20 @@ import Testing
         #expect(b.cart.nudge == nil && b.cart.plan.first { $0.productId == "whole-milk" }?.qty == 1)
     }
 
-    @Test func shortAtCheckoutNudgesUnder() async throws {
+    @Test func shortAtCheckoutIsOneCombinedNudge() async throws {
         let b = try await started()
-        try await b.setPlan([PlanItem(productId: "ground-beef", reason: "tacos", qty: 2)])
-        await add(b, "ground-beef")
+        try await b.setPlan([PlanItem(productId: "ground-beef", reason: "tacos", qty: 2),
+                             PlanItem(productId: "tostitos-salsa", reason: "tacos")])
+        await add(b, "ground-beef")                                     // in Aisle 3: walking order is beef, then salsa
         try await b.setStatus(.checkout)
         let nudge = try #require(b.cart.nudge)
-        #expect(nudge.kind == .under && nudge.have == 1 && nudge.need == 2)
-        #expect(nudge.text == "Before you go: you're one short on Ground Beef. It's in Aisle 3.")
+        #expect(nudge.kind == .under && nudge.productId == "ground-beef" && nudge.have == 1 && nudge.need == 2)
+        #expect(nudge.items?.map(\.productId) == ["ground-beef", "tostitos-salsa"] && nudge.items?.last?.have == 0)
+        #expect(nudge.text == "Before you go: you still need Ground Beef and Salsa.")
+        try await b.dismissNudge(.shop)                                  // "Go get them": back to shopping, answered once
+        #expect(b.cart.nudge == nil && b.cart.status == .shopping)
+        try await b.setStatus(.checkout)
+        #expect(b.cart.nudge == nil)
     }
 
     @Test func aPendingDealTakesPriority() async throws {
@@ -93,6 +99,10 @@ import Testing
         let cart = try KartJSON.decoder().decode(CartState.self, from: Data(json.utf8))
         #expect(cart.quantityNudgesOn && cart.nudged == ["over:ground-beef"])
         #expect(cart.plan[0].basis == "8 people x 1/4 lb = 2 lb" && cart.nudge?.kind == .over && cart.nudge?.have == 3)
+        let combined = #"{"cart_id":"7","nudge":{"product_id":"ground-beef","kind":"under","have":0,"need":1,"text":"t","#
+            + #""items":[{"product_id":"ground-beef","name":"Ground Beef","have":0,"need":1,"aisle":"Aisle 3"}]}}"#
+        let c = try KartJSON.decoder().decode(CartState.self, from: Data(combined.utf8))
+        #expect(c.nudge?.items?.first?.aisle == "Aisle 3" && c.nudge?.items?.first?.need == 1)
         let old = try KartJSON.decoder().decode(CartState.self, from: Data(#"{"cart_id":"7"}"#.utf8))
         #expect(!old.quantityNudgesOn && old.nudge == nil && old.nudged.isEmpty)
     }
@@ -102,5 +112,9 @@ import Testing
         let meta = LineCodec.metadata(.nudge(nudge))
         #expect(meta["type"] as? String == "nudge" && meta["kind"] as? String == "over")
         #expect(meta["product_id"] as? String == "ground-beef" && meta["text"] as? String == "Keep it?")
+        var combined = nudge
+        combined.items = [NudgeItem(productId: "ground-beef", name: "Ground Beef", have: 0, need: 1, aisle: "Aisle 3")]
+        let items = LineCodec.metadata(.nudge(combined))["items"] as? [[String: Any]]
+        #expect(items?.first?["product_id"] as? String == "ground-beef" && items?.first?["need"] as? Int == 1)
     }
 }

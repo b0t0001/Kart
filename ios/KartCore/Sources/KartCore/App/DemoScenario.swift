@@ -3,7 +3,7 @@ import Foundation
 /// Seeded states for screenshots, rehearsal, and the offline demo (launch with `-KartScenario <name>`).
 /// Nothing is spoken: transcript lines are written directly.
 public enum DemoScenario: String, CaseIterable, Sendable {
-    case welcome, greeting, shopping, deal, confirm, crowded, talkative, amounts, nudge, checkout, checkoutUnresolved, receipt
+    case welcome, greeting, shopping, deal, confirm, crowded, talkative, amounts, nudge, checkoutShort, checkout, checkoutUnresolved, receipt
 
     static let unsureLabel = "red jar of Rao's marinara"
     static let crowdedProducts = [
@@ -63,6 +63,15 @@ public enum DemoScenario: String, CaseIterable, Sendable {
                                        PlanItem(productId: "mission-tortillas", reason: "tacos"),
                                        PlanItem(productId: "taco-seasoning", reason: "tacos")])
             for _ in 0..<2 { await backend.simulateVision(.added, productId: "ground-beef", confidence: 0.95, label: "ground beef") }
+        case .checkoutShort:                                 // quantity-nudge beta: short at checkout, on the bill
+            try await backend.setFeature("quantity_nudges", on: true)
+            try await backend.setPlan([PlanItem(productId: "ground-beef", reason: "tacos", qty: 2),
+                                       PlanItem(productId: "mission-tortillas", reason: "tacos"),
+                                       PlanItem(productId: "tostitos-salsa", reason: "tacos")])
+            await backend.simulateVision(.added, productId: "mission-tortillas", confidence: 0.95, label: "tortillas")
+            await backend.simulateVision(.added, productId: "ground-beef", confidence: 0.95, label: "ground beef")
+            try await backend.dismissSuggestion()
+            try await backend.setStatus(.checkout)
         case .checkout, .checkoutUnresolved, .receipt:
             for id in Self.checkoutProducts { await backend.simulateVision(.added, productId: id, confidence: 0.95, label: id) }
             try await backend.dismissSuggestion()

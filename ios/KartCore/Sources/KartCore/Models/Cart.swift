@@ -92,8 +92,26 @@ public struct PlanItem: Codable, Sendable, Equatable, Identifiable {
 /// `carts.nudge` (v0.12, beta): the cart's amount of a planned item doesn't match the list.
 public enum NudgeKind: String, Codable, Sendable { case under, over }
 
-/// `dismiss_nudge`: `keep` raises the list to what's in the cart; `ok` just acknowledges.
-public enum NudgeAction: String, Sendable { case keep, ok }
+/// `dismiss_nudge`: `keep` raises the list to what's in the cart; `ok` / `skip` acknowledge; `shop` ("go get them",
+/// at checkout) also puts the cart back to shopping.
+public enum NudgeAction: String, Sendable { case keep, ok, skip, shop }
+
+/// One short item of the combined checkout nudge.
+public struct NudgeItem: Codable, Sendable, Equatable {
+    public var productId: String
+    public var name: String?
+    public var have: Int
+    public var need: Int
+    public var aisle: String?
+
+    public init(productId: String, name: String? = nil, have: Int, need: Int, aisle: String? = nil) {
+        self.productId = productId
+        self.name = name
+        self.have = have
+        self.need = need
+        self.aisle = aisle
+    }
+}
 
 public struct Nudge: Codable, Sendable, Equatable {
     public var productId: String
@@ -106,9 +124,11 @@ public struct Nudge: Codable, Sendable, Equatable {
     public var savings: Decimal?
     public var aisle: String?
     public var at: Date?
+    /// At checkout, every short item in walking order, answered once; the first one fills productId/have/need.
+    public var items: [NudgeItem]?
 
     public init(productId: String, name: String? = nil, kind: NudgeKind, have: Int, need: Int, basis: String? = nil,
-                text: String, savings: Decimal? = nil, aisle: String? = nil, at: Date? = nil) {
+                text: String, savings: Decimal? = nil, aisle: String? = nil, at: Date? = nil, items: [NudgeItem]? = nil) {
         self.productId = productId
         self.name = name
         self.kind = kind
@@ -119,6 +139,7 @@ public struct Nudge: Codable, Sendable, Equatable {
         self.savings = savings
         self.aisle = aisle
         self.at = at
+        self.items = items
     }
 
     /// `carts.nudged` entry: once per product per direction per trip.

@@ -40,7 +40,7 @@ struct CardView: View {
     private var actionRow: some View {
         HStack(spacing: Theme.m) {
             ForEach(Array(card.actions.enumerated()), id: \.offset) { index, action in
-                let primary = index == 0 && (action == .yes || action == .addIt)
+                let primary = index == 0 && (action == .yes || action == .addIt || action == .goGetIt || action == .goGetThem)
                 Button(action.title) {
                     if action == .somethingElse { withAnimation(Theme.spring) { choosing = true } } else { onAction(action) }
                 }
