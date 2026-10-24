@@ -133,14 +133,29 @@ def _plan_lines(plan: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{k: line[k] for k in keys if line.get(k) is not None} for line in plan]
 
 
+def _package(qty: int, product: dict[str, Any]) -> str:
+    """ "one bag of five avocados" when the package has a count in it, else the amount ("two boxes of spaghetti")."""
+    count, unit = re.search(r"\b(\d+)\s*ct\b", product["name"].lower()), _unit_of(product)
+    if count and unit:
+        units = unit if qty == 1 else unit + ("es" if unit.endswith(("x", "ch")) else "s")
+        return f"{_words(qty)} {units} of {_words(int(count.group(1)))} {_name(product)}"
+    return _amount(qty, product)
+
+
+def _added(qty: int, product: dict[str, Any]) -> str:
+    """What was added, as said: "sour cream", "one bag of five avocados", "two boxes of spaghetti"."""
+    counted = _unit_of(product) is not None
+    if qty == 1:
+        return _package(1, product) if re.search(r"\b\d+\s*ct\b", product["name"].lower()) else _name(product)
+    return _package(qty, product) if counted else f"{_name(product)}, {_words(qty)} of them"
+
+
 def _readback(kind: str, product: dict[str, Any], qty: int, old: dict[str, Any] | None, in_cart: int) -> str:
     """The short line Kart says after a list edit, from the live catalog."""
     where = f", {product['aisle']}" if product.get("aisle") else ""
     counted = _unit_of(product) is not None                 # "two boxes of spaghetti"; else "sour cream, two"
     if kind == "added":
-        if qty == 1 or counted:
-            return f"Added {_name(product) if qty == 1 else _amount(qty, product)}{where}."
-        return f"Added {_name(product)}, {_words(qty)} of them{where}."
+        return f"Added {_added(qty, product)}{where}."
     if kind == "swapped" and old is not None:
         return f"Swapped {_name(old)} for {_name(product)}{where}."
     if kind == "amount":
@@ -285,6 +300,8 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
             kind, pid, old, in_cart = edit
             final = next((line["qty"] for line in lines if line["product_id"] == pid), 1)
             result["readback"] = _readback(kind, catalog[pid], final, old, in_cart)
+            if kind == "added":                              # several adds at once are read back as one line
+                result["edit"] = {"kind": "added", "what": _added(final, catalog[pid]), "aisle": catalog[pid].get("aisle")}
             if kind in ("added", "removed", "swapped", "amount") and isinstance(ctx.get("undo"), list):
                 was = next((line["qty"] for line in before if line["product_id"] == pid), 1)
                 ctx["undo"].append({"plan": before, "readback": _undo_line(kind, catalog[pid], was, old)})

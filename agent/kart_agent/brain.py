@@ -29,8 +29,9 @@ every plan line a short basis, the math behind its amount ("8 people x 1/4 lb = 
 "16 tacos, 20 per pack = 1 pack").
 - Store meal lists: when the shopper asks for one of these, plan exactly this list (scale only for a much bigger \
 party), with these bases:
-  * Pasta night (up to 6 people): barilla-spaghetti x1, rao-marinara x1, french-baguette x1 (call it "garlic bread"). Bases: \
-"1 lb serves 4", "one jar for 1 lb of pasta", "one loaf for 4". Leave Parmesan off: the cart offers it.
+  * Pasta night (for 4; one more of each per 4 more people, so 6 people get 2 of each): barilla-spaghetti x1, \
+rao-marinara x1, french-baguette x1 (call it "garlic bread"). Bases: "1 lb serves 4", "one jar for 1 lb of pasta", \
+"one loaf for 4". Leave Parmesan off: the cart offers it.
   * Game-night nachos (up to 8 people): tostitos-salsa x1, queso x1, black-beans x1, jalapenos x1, \
 daisy-sour-cream x1. Leave the chips off: the cart offers them with a deal. Basis for each: "one tops nachos for 6".
 - When you've just made a list, say what's on it and the first stop, and leave deals out: the cart asks about \
@@ -39,6 +40,11 @@ deals right after.
 the new meal also uses. If set_plan reports in_cart_not_on_list, ask about it once, briefly ("The spaghetti's already \
 in your cart. Keep it?"): yes puts it back on the list (add_to_plan), no gets "Okay, take it out when you can."
 - A second meal ("and breakfast for tomorrow") adds its basics to the list with add_to_plan, keeping the first meal.
+- The party size changes ("it's 6 people now", "just me tonight"): re-plan the same items with set_plan at the new \
+amounts, with new bases, and say what changed ("Two boxes of spaghetti and two jars of marinara now.").
+- If "it" or "that" could mean more than one thing ("make it two" right after a list), ask "Two of what?" instead of \
+guessing.
+- "Talk slower" or "faster": "I can't change how fast I talk yet, but I'll keep it short." Then keep it short.
 - The mic hears the whole store. If what you heard clearly isn't meant for you (people talking to each other, \
 background chatter, half a sentence), reply with exactly <quiet> and nothing else. When unsure, answer briefly.
 - Editing the list: "add the sour cream" (add_to_plan), "take the salsa off" (remove_from_plan), "make it three" or \
@@ -198,5 +204,15 @@ def _clean_edit_readback(tool_uses: list[Any], results: list[dict[str, Any]]) ->
         if not isinstance(out, dict) or not out.get("readback") or out.get("error") or out.get("notes") \
                 or out.get("out_of_stock") or out.get("not_in_store"):
             return None
-        lines.append(out["readback"])
-    return " ".join(lines)
+        lines.append(out)
+    if len(lines) > 1 and all((out.get("edit") or {}).get("kind") == "added" for out in lines):
+        by_aisle: dict[Any, list[str]] = {}
+        for out in lines:
+            by_aisle.setdefault(out["edit"].get("aisle"), []).append(out["edit"]["what"])
+        parts = [f"{_and(names)}, {aisle}" if aisle else _and(names) for aisle, names in by_aisle.items()]
+        return "Added " + ", and ".join(parts) + "."      # "Added salsa and queso, Aisle 5, and sour cream, Aisle 8."
+    return " ".join(out["readback"] for out in lines)
+
+
+def _and(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]

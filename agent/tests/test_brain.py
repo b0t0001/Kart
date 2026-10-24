@@ -171,3 +171,20 @@ async def test_the_prompt_never_lets_kart_imply_a_product_is_safe_for_a_diet():
     system = llm.requests[0]["system"]
     assert "I can't confirm that's gluten-free. Please check the label." in system
     assert "Never promise what the cart will offer later" in system
+
+
+async def test_several_adds_are_read_back_as_one_line():
+    adds = [ToolUse(f"t{i}", "add_to_plan", {"product_id": pid, "reason": "nachos"})
+            for i, pid in enumerate(["tostitos-salsa", "queso", "daisy-sour-cream"])]
+    llm = FakeLLM([Turn(chunks=["Sure."], tools=adds)])
+    said = await collect(Brain(llm=llm).respond("add salsa, queso and sour cream",
+                                                {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
+    assert "".join(said) == "Sure. Added salsa and queso, Aisle 5, and sour cream, Aisle 8."
+
+
+async def test_the_prompt_covers_unclear_it_rescaling_and_talking_slower():
+    llm = FakeLLM([Turn(chunks=["ok"])])
+    await collect(Brain(llm=llm).respond("hi", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
+    system = llm.requests[0]["system"]
+    assert '"Two of what?"' in system and "it's 6 people now" in system
+    assert "I can't change how fast I talk" in system

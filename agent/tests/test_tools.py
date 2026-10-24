@@ -293,3 +293,8 @@ async def test_a_meal_list_remembers_the_meal_on_every_line(backend):
     await run_tool("set_plan", {"meal": "pasta night for 4", "items": [
         {"product_id": "barilla-spaghetti", "reason": "pasta"}, {"product_id": "rao-marinara", "reason": "sauce"}]}, ctx(backend))
     assert [p["reason"] for p in backend.cart["plan"]] == ["pasta night for 4", "pasta night for 4"]
+
+
+async def test_a_package_read_back_says_whats_in_it(backend):
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "avocados", "reason": "tacos"}, ctx(backend)))
+    assert out["readback"] == "Added one bag of five avocados, Aisle 1."

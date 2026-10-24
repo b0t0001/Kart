@@ -29,6 +29,10 @@ CATALOG = [
      "tags": ["tacos", "nachos", "mexican"]},
 ]
 
+CATALOG.append({"id": "avocados", "name": "Hass Avocados, 5 ct bag", "short_name": "Avocados", "price": 5.99,
+                "sale_price": 5.99, "deal_label": None, "aisle": "Aisle 1", "section": "A1", "in_stock": True, "stock": 28,
+                "category": "produce", "tags": ["tacos", "mexican"]})
+
 NEARBY = [{"name": "Berkeley Bowl", "distance": 1.5, "kind": "grocery", "good_for": ["produce", "fresh herbs"]},
           {"name": "Walgreens", "distance": 0.4, "kind": "pharmacy", "good_for": ["household", "snacks"]}]
 
