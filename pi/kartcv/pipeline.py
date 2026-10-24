@@ -96,6 +96,12 @@ class Pipeline:
     def request_reset(self) -> None:
         self._reset_requested.set()
 
+    def mark_personal(self, event_id: str) -> bool:
+        """'That's mine': the unit billed by this (unknown) event is the shopper's; its removal will be silent."""
+        if self._worker is not None:  # memory belongs to the judging thread
+            return self._worker.submit(self.cart.mark_personal, event_id).result(timeout=15)
+        return self.cart.mark_personal(event_id)
+
     def status(self) -> dict:
         with self._lock:
             cams = {c: {"last_ts": (self._latest[c].ts if c in self._latest else None)} for c in self.cams}
@@ -252,6 +258,10 @@ class Pipeline:
             if d.kind == "moved":
                 apply_decision(self.cart, d)
                 continue
+            if d.personal:  # the shopper's own belonging: remembered so its removal is silent, never billed
+                log.info("%s personal item (%s): not billed", d.kind, d.label)
+                apply_decision(self.cart, d)
+                continue
             crops: list[str] = []
             for unit in range(d.count if d.kind == "added" else 1):  # N identical units: N events, N units
                 events.append(self._emit(d, crops))
@@ -265,7 +275,7 @@ class Pipeline:
         if d.kind == "removed" and d.product_id is None:
             inst = self.cart.instances.get(d.instance_id)
             ev.resolves_event_id = (inst.event_id or None) if inst else None
-        for b in d.blobs if not crops else []:
+        for b in d.blobs if not crops and not d.private else []:  # private: its photos never leave memory
             name = f"{ev.event_id}_cam{b.cam}.jpg"
             cv2.imwrite(str(self.crops_dir / name), b.after if d.kind == "added" else b.before)
             rel = f"{self.state_dir.name}/crops/{name}"

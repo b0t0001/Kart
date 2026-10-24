@@ -147,3 +147,20 @@ def test_oversized_blob_asks_claude_for_the_count_only_with_the_flag():
     c2 = FakeCloud(CloudAnswer("kirkland-parmesan", 0.9, "two wedges", 2))
     off = HybridIdentifier(SizedGallery([("kirkland-parmesan", 0.95)]), c2, CAT, C()).identify([CROP])
     assert (off.method, off.count, c2.calls) == ("local", 1, 0)
+
+
+def test_personal_is_offered_only_with_the_flag():
+    fc = FakeClient(ans("personal", 0.9, "black leather purse"))
+    off = CloudIdentifier(CAT, "m", 6.0, client=fc).identify([CROP])
+    assert "personal" not in fc.kwargs["output_config"]["format"]["schema"]["properties"]["product_id"]["enum"]
+    assert off.product_id is None and not off.personal
+    fc = FakeClient(ans("personal", 0.9, "black leather purse"))
+    on = CloudIdentifier(CAT, "m", 6.0, client=fc, personal=True).identify([CROP])
+    assert "personal" in fc.kwargs["output_config"]["format"]["schema"]["properties"]["product_id"]["enum"]
+    assert (on.product_id, on.personal, on.label) == (None, True, "black leather purse")
+
+
+def test_hybrid_can_be_told_not_to_use_the_cloud():
+    c = FakeCloud(CloudAnswer("rao-marinara", 0.9, "jar"))
+    r = HybridIdentifier(FakeGallery([("kirkland-parmesan", 0.6)]), c, CAT, Config()).identify([CROP], allow_cloud=False)
+    assert (r.product_id, r.method, c.calls) == (None, "none", 0)

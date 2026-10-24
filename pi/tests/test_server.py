@@ -70,3 +70,23 @@ def test_camera_frames_are_raw_unless_the_outline_is_asked_for():  # clips must 
         assert b"overlay=1" in get(s.port, "/")[2]
     finally:
         s.stop()
+
+
+def test_thats_mine_endpoint():
+    marked = []
+    s = ControlServer(0, lambda: {}, lambda: None, personal_fn=lambda eid: marked.append(eid) or eid == "e1")
+    s.start()
+    try:
+        def post(body):
+            req = urllib.request.Request(f"http://127.0.0.1:{s.port}/personal", data=body, method="POST",
+                                         headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=2) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                return e.code, None
+        assert post(b'{"event_id": "e1"}') == (200, {"ok": True})
+        assert post(b'{"event_id": "zz"}') == (200, {"ok": False})
+        assert post(b"not json")[0] == 400 and marked == ["e1", "zz"]
+    finally:
+        s.stop()

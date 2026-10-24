@@ -29,6 +29,7 @@ class Instance:
     # spots where another camera's view of this unit was held back when it was billed (an arm was in the
     # way): that camera's next look there is this unit, seen late, not a second one
     awaiting: dict[int, list] = field(default_factory=dict)
+    personal: bool = False  # the shopper's own belonging: tracked so its removal is silent, never billed
 
 
 class CartMemory:
@@ -37,10 +38,12 @@ class CartMemory:
         self.instances: dict[str, Instance] = {}
 
     # --- mutations (each one saves) ---
-    def add(self, product_id: str | None, label: str, views: dict[int, View], awaiting: dict | None = None) -> Instance:
+    def add(self, product_id: str | None, label: str, views: dict[int, View], awaiting: dict | None = None,
+            personal: bool = False) -> Instance:
         views = {c: View(v.cam, tuple(v.box), list(v.fingerprint), v.crop_path) for c, v in views.items()}  # own copies
         inst = Instance(uuid.uuid4().hex, product_id, label, utc_now_iso(), views,
-                        awaiting={int(c): [tuple(b) for b in bs] for c, bs in (awaiting or {}).items()})
+                        awaiting={int(c): [tuple(b) for b in bs] for c, bs in (awaiting or {}).items()},
+                        personal=personal)
         self.instances[inst.instance_id] = inst
         self.save()
         return inst
@@ -60,6 +63,15 @@ class CartMemory:
         for c in views:
             inst.awaiting.pop(c, None)
         self.save()
+
+    def mark_personal(self, event_id: str) -> bool:
+        """The shopper said the unit billed by this event is theirs ("that's mine")."""
+        inst = next((i for i in self.instances.values() if event_id and i.event_id == event_id), None)
+        if inst is None:
+            return False
+        inst.personal = True
+        self.save()
+        return True
 
     def expire_awaiting(self, cams) -> None:
         """Those cameras had a clean look: any late view of an earlier unit would have shown up by now."""
@@ -106,6 +118,7 @@ class CartMemory:
                          for c, v in d["views"].items()}
                 inst = Instance(d["instance_id"], d["product_id"], d["label"], d["added_ts"], views,
                                 d.get("event_id", ""),
-                                {int(c): [tuple(b) for b in bs] for c, bs in d.get("awaiting", {}).items()})
+                                {int(c): [tuple(b) for b in bs] for c, bs in d.get("awaiting", {}).items()},
+                                bool(d.get("personal", False)))
                 mem.instances[inst.instance_id] = inst
         return mem

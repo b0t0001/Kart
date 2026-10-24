@@ -134,9 +134,9 @@ def test_joint_identification_sends_the_biggest_view_first(tmp_path):  # one cam
     seen = []
 
     class Spy:
-        def identify(self, crops, cloud_crops=None):
+        def identify(self, crops, cloud_crops=None, allow_cloud=True):
             seen.append([c.shape[0] * c.shape[1] for c in (cloud_crops or crops)])
-            return w.identifier.identify(crops, cloud_crops)
+            return w.identifier.identify(crops, cloud_crops, allow_cloud)
 
     decide(settle(Scene(), Scene(items=[RED], hidden={}), w.cfg), w.empties, w.cart, Spy(), w.features, w.cfg)
     assert seen and seen[0] == sorted(seen[0], reverse=True)

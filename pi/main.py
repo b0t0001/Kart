@@ -61,7 +61,8 @@ def build(cfg, env: dict, args, cams: list[int], send_events: bool = True, backg
 
     cloud = None
     if env.get("ANTHROPIC_API_KEY") and not getattr(args, "no_cloud", False):
-        cloud = CloudIdentifier(catalog, cfg.cloud_model, cfg.cloud_timeout_s, count=cfg.claude_count)
+        cloud = CloudIdentifier(catalog, cfg.cloud_model, cfg.cloud_timeout_s, count=cfg.claude_count,
+                                personal=cfg.personal_items)
     else:
         log.warning("local-only mode: no Claude fallback (ANTHROPIC_API_KEY unset or --no-cloud)")
     identifier = HybridIdentifier(gallery, cloud, catalog, cfg)
@@ -114,6 +115,7 @@ def start_extras(cfg, env, pipeline) -> list:
         server = ControlServer(cfg.server_port, pipeline.status, pipeline.request_reset,
                                frames_fn=pipeline.latest_frames, debug_view=cfg.debug_view,
                                overlay_fn=lambda cam, img: draw_outline(img, cfg.roi.get(str(cam))),
+                               personal_fn=pipeline.mark_personal,
                                crops_dir=pipeline.crops_dir)
         server.start()
         extras.append(server)
