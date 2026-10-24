@@ -112,3 +112,37 @@ async def test_the_brain_knows_the_store_products_from_the_first_turn():
     agent, backend = make([Turn(chunks=["Love it."])])
     await run(agent, UserTurnEnded(content=[UserTextSent(content="pasta dinner for four")]))
     assert "- rao-marinara: Rao's Sauce (sauce)" in agent.brain.llm.requests[0]["system"]
+
+
+PARM_OFFER = {"type": "suggestion", "deal_id": "d-parm-3off", "product_id": "kirkland-parmesan",
+              "text": "Parmesan is $3 off in Aisle 4. Want it?"}
+
+
+async def test_a_spoken_yes_takes_the_offered_deal_without_claude():
+    agent, backend = make()                                  # no scripted Claude turns: calling Claude would fail
+    agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
+    said = await run(agent, UserTurnEnded(content=[UserTextSent(content="Yeah, sure.")]))
+    assert said == ["Added Parmesan to your list."]
+    plans = [p["p_plan"] for name, p in backend.calls if name == "set_plan"]
+    assert plans and any(line["product_id"] == "kirkland-parmesan" for line in plans[-1])
+
+
+async def test_a_spoken_no_dismisses_the_offered_deal():
+    agent, backend = make()
+    agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="No thanks.")])) == ["No problem."]
+    assert ("dismiss_suggestion", {"p_cart_id": "7"}) in backend.calls
+
+
+async def test_a_longer_answer_to_an_offer_still_goes_to_claude():
+    agent, backend = make([Turn(chunks=["It's the 1.5 pound wedge."])])
+    agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
+    said = await run(agent, UserTurnEnded(content=[UserTextSent(content="Yes, but how big is the parmesan?")]))
+    assert said == ["It's the 1.5 pound wedge."]
+
+
+async def test_a_tap_on_the_card_ends_the_spoken_offer():
+    agent, backend = make([Turn(chunks=["Yes to what?"])])
+    agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
+    agent.run_filter(UserCustomSent(metadata={"type": "card_response", "card_id": "deal-d-parm-3off", "action": "yes"}))
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Yes.")])) == ["Yes to what?"]

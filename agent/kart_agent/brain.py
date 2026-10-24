@@ -56,6 +56,11 @@ class Brain:
         self.system = system
         self.messages: list[dict[str, Any]] = []
 
+    def remember(self, user_text: str, said: str) -> None:
+        """A turn the agent answered itself (a yes/no to a deal), so Claude keeps the thread."""
+        self.messages.append({"role": "user", "content": user_text})
+        self.messages.append({"role": "assistant", "content": [{"type": "text", "text": said}]})
+
     def set_catalog(self, products: list[dict[str, Any]]) -> None:
         """Product ids and names only (no prices, deals or stock: those change), so a plan needs no search round."""
         lines = [f"- {p['id']}: {p.get('short_name') or p['name']} ({p.get('category') or 'other'})" for p in products]

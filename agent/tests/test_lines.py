@@ -36,3 +36,13 @@ def test_deal_changed():
 def test_state_events_are_silent():
     for event in ({"type": "trip_context", "cart_id": "7", "trip_id": "t"}, {"type": "card_response"}, {"type": "ui_action"}):
         assert proactive_line(event, CATALOG, PLAN) is None
+
+
+def test_short_spoken_answers_to_a_deal():
+    from kart_agent.lines import yes_or_no
+    for text in ["Yes.", "Yeah, sure.", "Okay!", "Yes please", "Sounds good", "Sure, add it"]:
+        assert yes_or_no(text) == "yes", text
+    for text in ["No.", "No thanks.", "Nah", "Nope, I'm good", "Not today"]:
+        assert yes_or_no(text) == "no", text
+    for text in ["", "Yes, but how big is the parmesan?", "What aisle is the salsa in?", "Maybe later"]:
+        assert yes_or_no(text) is None, text

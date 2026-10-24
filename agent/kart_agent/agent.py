@@ -8,7 +8,8 @@ from typing import Any, AsyncIterator
 from line.events import AgentSendText, CallEnded, CallStarted, UserCustomSent, UserTurnEnded, UserTurnStarted
 
 from .brain import Brain
-from .lines import proactive_line
+from .lines import DECLINED_LINE, accepted_line, proactive_line, yes_or_no
+from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
 SPEAKING_EVENTS = {"suggestion", "deal_changed", "cart_changed"}
@@ -31,6 +32,7 @@ class KartAgent:
         self._catalog: list[dict[str, Any]] = []
         self._speaking = False
         self._pending: str | None = None            # a proactive line that arrived while Kart was talking
+        self._offer: dict[str, Any] | None = None   # the deal Kart just asked about, until it's answered
 
     # Line filters --------------------------------------------------------------------------------
 
@@ -44,6 +46,10 @@ class KartAgent:
                 self.trip_id = meta.get("trip_id") or self.trip_id
                 self._context.set()
                 return False
+            if meta.get("type") == "suggestion":
+                self._offer = meta                       # "Want it?" can now be answered with a plain yes or no
+            elif meta.get("type") == "card_response":
+                self._offer = None                       # answered on the screen
             if meta.get("type") not in SPEAKING_EVENTS:
                 return False
             line = proactive_line(meta, self._catalog, self._plan)
@@ -78,6 +84,19 @@ class KartAgent:
             await self._caption("user", text)
             await self._refresh()
             ctx = {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id}
+            answer = yes_or_no(text) if self._offer else None
+            if answer:                                   # a plain yes/no to the deal: no Claude round, nothing invented
+                offer, self._offer = self._offer, None
+                if answer == "yes":
+                    await run_tool("add_to_plan", {"product_id": offer.get("product_id"), "reason": "deal"}, ctx)
+                    line = accepted_line(self._catalog, offer.get("product_id"))
+                else:
+                    await run_tool("dismiss_suggestion", {}, ctx)
+                    line = DECLINED_LINE
+                self.brain.remember(text, line)
+                async for out in self._say([line]):
+                    yield out
+                return
             async for out in self._say(self.brain.respond(text, ctx)):
                 yield out
         elif isinstance(event, UserCustomSent):

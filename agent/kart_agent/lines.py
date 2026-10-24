@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
+
+_YES_FIRST = {"yes", "yeah", "yep", "yup", "sure", "ok", "okay", "absolutely", "definitely"}
+_NO_FIRST = {"no", "nope", "nah"}
+_YES = {"please", "yes please", "sounds good", "add it", "do it", "why not", "go for it", "i'll take it", "let's do it"}
+_NO = {"no thanks", "no thank you", "not today", "not now", "skip it", "pass", "i'm good", "im good", "i'm okay"}
 
 
 def _short(catalog: list[dict[str, Any]], product_id: str | None) -> str:
@@ -31,3 +37,23 @@ def proactive_line(event: dict[str, Any], catalog: list[dict[str, Any]], plan: l
     if change == "price_dropped" and event.get("to_price"):
         return f"Good news, {_short(catalog, product_id)} just dropped to ${float(event['to_price']):.2f}."
     return None
+
+
+def yes_or_no(text: str) -> str | None:
+    """A short spoken answer to Kart's deal question ("Yeah, sure." / "No thanks."), or None for anything longer."""
+    words = re.sub(r"[^a-z' ]", " ", text.lower()).split()
+    if not words or len(words) > 4:
+        return None
+    phrase = " ".join(words)
+    if phrase in _NO or words[0] in _NO_FIRST:
+        return "no"
+    if phrase in _YES or words[0] in _YES_FIRST:
+        return "yes"
+    return None
+
+
+def accepted_line(catalog: list[dict[str, Any]], product_id: str | None) -> str:
+    return f"Added {_short(catalog, product_id)} to your list."
+
+
+DECLINED_LINE = "No problem."
