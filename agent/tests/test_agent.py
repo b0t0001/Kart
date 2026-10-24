@@ -111,7 +111,7 @@ async def test_without_trip_context_it_greets_on_its_own_cart_after_a_short_wait
 async def test_the_brain_knows_the_store_products_from_the_first_turn():
     agent, backend = make([Turn(chunks=["Love it."])])
     await run(agent, UserTurnEnded(content=[UserTextSent(content="pasta dinner for four")]))
-    assert "- rao-marinara: Rao's Sauce (sauce)" in agent.brain.llm.requests[0]["system"]
+    assert "- rao-marinara: Rao's Sauce, Rao's Homemade Marinara Sauce, 24 oz (sauce)" in agent.brain.llm.requests[0]["system"]
 
 
 PARM_OFFER = {"type": "suggestion", "deal_id": "d-parm-3off", "product_id": "kirkland-parmesan",
@@ -154,3 +154,36 @@ async def test_claude_hears_the_offer_when_it_gets_the_answer():
     await run(agent, UserTurnEnded(content=[UserTextSent(content="Yes, but how big is the parmesan?")]))
     sent = agent.brain.llm.requests[0]["messages"][-1]["content"]
     assert "Parmesan is $3 off in Aisle 4. Want it?" in sent and sent.endswith("Yes, but how big is the parmesan?")
+
+
+
+async def said_events(agent, event):
+    return [o for o in [o async for o in agent.process(None, event)] if isinstance(o, AgentSendText)]
+
+
+async def test_chatter_cant_cut_off_the_greeting_or_a_deal_line():
+    agent, backend = make()
+    assert [e.interruptible for e in await said_events(agent, CallStarted())] == [False]
+    assert agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
+    assert [e.interruptible for e in await said_events(agent, UserCustomSent(metadata=PARM_OFFER))] == [False]
+
+
+async def test_answers_can_be_cut_off_unless_barge_in_is_off():
+    agent, backend = make([Turn(chunks=["Love it."])])
+    assert [e.interruptible for e in await said_events(agent, UserTurnEnded(content=[UserTextSent(content="pasta dinner")]))] == [True]
+    assert agent.cancel_filter(UserTurnStarted())
+    quiet = KartAgent(backend=FakeBackend(), brain=Brain(llm=FakeLLM([Turn(chunks=["Love it."])])), cart_id="7",
+                      context_wait_seconds=0.01, barge_in=False)
+    assert not quiet.cancel_filter(UserTurnStarted())
+    assert [e.interruptible for e in await said_events(quiet, UserTurnEnded(content=[UserTextSent(content="pasta dinner")]))] == [False]
+
+
+async def test_side_chatter_gets_no_answer_and_no_caption():
+    agent, backend = make([Turn(chunks=["<qui", "et>"])])
+    said = await run(agent, UserTurnEnded(content=[UserTextSent(content="You know we're close to Taco Bell, bro.")]))
+    assert said == [] and backend.transcript == []
+
+
+async def test_a_filler_alone_gets_no_answer():
+    agent, backend = make()                                  # no scripted Claude turns: calling Claude would fail
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Um.")])) == [] and backend.transcript == []

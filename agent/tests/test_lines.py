@@ -48,3 +48,13 @@ def test_short_spoken_answers_to_a_deal():
     for text in ["", "Yes, but how big is the parmesan?", "What aisle is the salsa in?", "Maybe later",
                  "Yeah, how much is it", "Uh", "Yes, and can you also find me some limes for the tacos tonight"]:
         assert yes_or_no(text) is None, text
+
+
+
+def test_an_added_item_counts_toward_its_amount():
+    from kart_agent.lines import proactive_line
+    from fakes import CATALOG
+    plan = [{"product_id": "barilla-spaghetti", "qty": 2}]
+    added = {"type": "cart_changed", "change": "added", "product_id": "barilla-spaghetti"}
+    assert proactive_line(added, CATALOG, plan, items=[{"product_id": "barilla-spaghetti", "qty": 1}]) == "Got one Spaghetti, one more to go."
+    assert proactive_line(added, CATALOG, plan, items=[{"product_id": "barilla-spaghetti", "qty": 2}]) == "Got the Spaghetti."

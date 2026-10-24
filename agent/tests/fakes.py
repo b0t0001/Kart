@@ -9,15 +9,15 @@ from typing import Any, AsyncIterator
 CATALOG = [
     {"id": "barilla-spaghetti", "name": "Barilla Spaghetti, 1 lb", "short_name": "Spaghetti", "price": 1.99,
      "sale_price": 1.99, "deal_label": None, "aisle": "Aisle 6", "section": "A6", "in_stock": True,
-     "category": "pasta", "tags": ["pasta", "italian", "staple"]},
+     "stock": 30, "category": "pasta", "tags": ["pasta", "italian", "staple"]},
     {"id": "rao-marinara", "name": "Rao's Homemade Marinara Sauce, 24 oz", "short_name": "Rao's Sauce", "price": 8.49,
      "sale_price": 8.49, "deal_label": None, "aisle": "Aisle 6", "section": "A6", "in_stock": True,
-     "category": "sauce", "tags": ["pasta", "italian"]},
+     "stock": 20, "category": "sauce", "tags": ["pasta", "italian"]},
     {"id": "kirkland-parmesan", "name": "Kirkland Signature Parmigiano Reggiano, 1.5 lb wedge", "short_name": "Parmesan",
      "price": 12.99, "sale_price": 9.99, "deal_label": "$3 off", "aisle": "Aisle 4", "section": "A4", "in_stock": True,
-     "category": "cheese", "tags": ["pasta", "italian"]},
+     "stock": 2, "category": "cheese", "tags": ["pasta", "italian"]},
     {"id": "bananas", "name": "Bananas, bunch (about 2.5 lb)", "short_name": "Bananas", "price": 1.49, "sale_price": 1.49,
-     "deal_label": None, "aisle": "Aisle 1", "section": "A1", "in_stock": False, "category": "produce", "tags": ["fruit"]},
+     "deal_label": None, "aisle": "Aisle 1", "section": "A1", "in_stock": False, "stock": 0, "category": "produce", "tags": ["fruit"]},
 ]
 
 

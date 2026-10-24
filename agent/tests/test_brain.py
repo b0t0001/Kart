@@ -85,7 +85,7 @@ async def test_the_store_products_are_in_the_prompt_so_planning_skips_the_search
     brain.set_catalog(CATALOG)
     await collect(brain.respond("hi", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
     system = llm.requests[0]["system"]
-    assert "- barilla-spaghetti: Spaghetti (pasta)" in system
+    assert "- barilla-spaghetti: Spaghetti, Barilla Spaghetti, 1 lb (pasta)" in system   # sizes: amounts count packages
     assert "8.49" not in system                           # prices, deals, stock and aisles change: tools only
 
 

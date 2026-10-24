@@ -20,6 +20,14 @@ with those ids directly (search_catalog only when you're unsure). Every price, d
 tool result in this conversation (set_plan, get_cart, get_deals, search_catalog).
 - Before you call a tool, say a few words that state no facts, like "Pasta night, nice. One sec.", so the shopper \
 hears you right away.
+- Amounts count packages as the store sells them (the sizes are in the product list): "three avocados" is one \
+5-count bag, and say so ("one bag of five avocados"). For a meal, size it from the people and the package sizes \
+(about a quarter pound of meat per person; one 20-count pack of tortillas feeds about six). Otherwise one. Say \
+amounts back when they're more than one ("two pounds of ground beef"). "Make it three" or "just one" changes the amount with \
+add_to_plan; "take the salsa off" uses remove_from_plan. If a tool result has notes (like "Only 2 Parmesan in stock"), \
+tell the shopper.
+- The mic hears the whole store. If what you heard clearly isn't meant for you (people talking to each other, \
+background chatter, half a sentence), reply with exactly <quiet> and nothing else. When unsure, answer briefly.
 - If something isn't in the store, say so plainly ("I don't see cilantro here").
 - Don't plan products that are out of stock; offer the closest in-stock alternative instead.
 - For a meal, plan the basics (for a pasta dinner: the pasta, the sauce, bread). Leave extras like cheese, sides and \
@@ -27,6 +35,9 @@ drinks off unless they ask: the cart offers those with deal cards, and it never 
 the list.
 - When the cameras weren't sure about an item and the shopper tells you what it is, use confirm_item.
 - If you didn't catch what they said, ask again in a few words instead of guessing."""
+
+
+QUIET = "<quiet>"                                     # Claude's answer to chatter that wasn't meant for Kart
 
 
 class LLM(Protocol):
@@ -63,8 +74,9 @@ class Brain:
 
     def set_catalog(self, products: list[dict[str, Any]]) -> None:
         """Product ids and names only (no prices, deals or stock: those change), so a plan needs no search round."""
-        lines = [f"- {p['id']}: {p.get('short_name') or p['name']} ({p.get('category') or 'other'})" for p in products]
-        self.system = self.base_system + "\n\nStore products (id: name (kind)):\n" + "\n".join(lines)
+        lines = [f"- {p['id']}: {p.get('short_name') or p['name']}, {p['name']} ({p.get('category') or 'other'})"
+                 for p in products]
+        self.system = self.base_system + "\n\nStore products (id: what you call it, the package as sold (kind)):\n" + "\n".join(lines)
 
     async def respond(self, user_text: str, ctx: dict[str, Any]) -> AsyncIterator[str]:
         self.messages.append({"role": "user", "content": user_text})
@@ -73,7 +85,14 @@ class Brain:
             content: list[Any] = []
             stop_reason = "end_turn"
             streamed: list[str] = []
+            held: list[str] = []                         # text that might still turn out to be <quiet>
             async for item in self.llm.stream(system=self.system, messages=self.messages, tools=TOOLS):
+                if item[0] == "text" and not streamed and QUIET.startswith(("".join(held) + item[1]).strip()):
+                    held.append(item[1])                 # don't speak it yet
+                    continue
+                if item[0] == "text" and held:
+                    item = ("text", "".join(held) + item[1])
+                    held = []
                 if item[0] == "text":
                     text = item[1]
                     if not streamed and last_said and not last_said[-1].isspace() and text[:1] and not text[0].isspace():
@@ -83,6 +102,12 @@ class Brain:
                     yield text
                 elif item[0] == "final":
                     content, stop_reason = item[1], item[2]
+            if "".join(held).strip() == QUIET:            # side chatter: say nothing, and keep the turn in history
+                self.messages.append({"role": "assistant", "content": [{"type": "text", "text": QUIET}]})
+                return
+            if held:                                     # a short reply that only looked like the start of <quiet>
+                streamed.extend(held)
+                yield "".join(held)
             if not content:                              # a refusal or an empty turn: never store an empty message
                 said = "".join(streamed).strip()
                 if not said:

@@ -32,8 +32,11 @@ TOOLS: list[dict[str, Any]] = [
     _tool("get_cart", "The shopper's cart right now: items, total, savings, list progress, next stop, open deal suggestion."),
     _tool("set_plan", "Replace the shopping list with these products. The store orders it by walking route.",
           {"items": {"type": "array", "items": _PLAN_ITEM}}, ["items"]),
-    _tool("add_to_plan", "Add one product to the shopping list, keeping the rest.",
-          {"product_id": {"type": "string"}, "reason": {"type": "string"}}, ["product_id", "reason"]),
+    _tool("add_to_plan", "Add one product to the shopping list, keeping the rest; with qty, sets how many (also for a "
+          "product already on the list: 'make it three').",
+          {"product_id": {"type": "string"}, "reason": {"type": "string"}, "qty": {"type": "integer", "minimum": 1}},
+          ["product_id", "reason"]),
+    _tool("remove_from_plan", "Take one product off the shopping list.", {"product_id": {"type": "string"}}, ["product_id"]),
     _tool("get_deals", "Every live deal in the store, with product, label and aisle."),
     _tool("set_location", "The shopper said where they are, e.g. 'aisle 5'.", {"section": {"type": "string"}}, ["section"]),
     _tool("dismiss_suggestion", "The shopper said no to the current deal suggestion."),
@@ -47,7 +50,7 @@ def _tokens(text: str) -> set[str]:
 
 
 def _product_view(p: dict[str, Any]) -> dict[str, Any]:
-    keys = ("id", "short_name", "name", "price", "sale_price", "deal_label", "aisle", "in_stock")
+    keys = ("id", "short_name", "name", "price", "sale_price", "deal_label", "aisle", "in_stock", "stock")
     return {k: p.get(k) for k in keys}
 
 
@@ -85,24 +88,30 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
             "items": [{"short_name": i.get("short_name") or i["name"], "qty": i["qty"], "price": i["price"],
                        "deal_label": i.get("deal_label")} for i in cart.get("items", [])],
             "total": cart.get("total"), "savings": cart.get("savings"), "status": cart.get("status"),
-            "plan": [{"product_id": p["product_id"], "name": p.get("name"), "done": p.get("done"), "aisle": p.get("aisle")}
+            "plan": [{"product_id": p["product_id"], "name": p.get("name"), "qty": p.get("qty", 1), "done": p.get("done"),
+                      "aisle": p.get("aisle")}
                      for p in cart.get("plan", [])],
             "next_step": cart.get("next_step"),
             "suggestion": (cart.get("suggestion") or {}).get("text"),
             "unrecognized_items": len(await backend.unresolved_events(cart_id, ctx.get("trip_id") or cart.get("trip_id"))),
         }
-    if name in ("set_plan", "add_to_plan"):
+    if name in ("set_plan", "add_to_plan", "remove_from_plan"):
         catalog = {p["id"]: p for p in await backend.get_catalog()}
-        if name == "add_to_plan":
+        if name in ("add_to_plan", "remove_from_plan"):
             cart = await backend.get_cart(cart_id)
             items = [{"product_id": p["product_id"], "reason": p.get("reason", ""), "qty": p.get("qty", 1)} for p in cart.get("plan", [])]
-            if all(i["product_id"] != _str(args, "product_id") for i in items):
-                items.append({"product_id": args["product_id"], "reason": _str(args, "reason")})
+            product_id = _str(args, "product_id")
+            if name == "remove_from_plan":
+                items = [i for i in items if i["product_id"] != product_id]
+            elif all(i["product_id"] != product_id for i in items):
+                items.append({"product_id": product_id, "reason": _str(args, "reason"), "qty": args.get("qty", 1)})
+            elif isinstance(args.get("qty"), int):
+                items = [{**i, "qty": args["qty"]} if i["product_id"] == product_id else i for i in items]
         else:
             items = args.get("items")
             if not isinstance(items, list):
                 raise ValueError("'items' must be a list")
-        planned, missing, sold_out, lines = [], [], [], []
+        planned, missing, sold_out, lines, notes = [], [], [], [], []
         for item in items:
             if not isinstance(item, dict) or not isinstance(item.get("product_id"), str):
                 raise ValueError("each item needs a product_id")
@@ -114,10 +123,15 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
             else:
                 planned.append(item["product_id"])
                 qty = item.get("qty", 1)
-                lines.append({"product_id": item["product_id"], "reason": str(item.get("reason", "")),
-                              "qty": qty if isinstance(qty, int) and qty > 0 else 1})
+                qty = qty if isinstance(qty, int) and qty > 0 else 1
+                stock = product.get("stock")
+                if isinstance(stock, int) and 0 < stock < qty:       # never plan more than the shelf has, and say so
+                    notes.append(f"Only {stock} {product.get('short_name') or product['name']} in stock: planned {stock}, not {qty}.")
+                    qty = stock
+                lines.append({"product_id": item["product_id"], "reason": str(item.get("reason", "")), "qty": qty})
         cart = await backend.rpc("set_plan", p_cart_id=cart_id, p_plan=lines)
-        return {"planned": planned, "not_in_store": missing, "out_of_stock": sold_out, "next_step": cart.get("next_step")}
+        result = {"planned": planned, "not_in_store": missing, "out_of_stock": sold_out, "next_step": cart.get("next_step")}
+        return {**result, "notes": notes} if notes else result
     if name == "get_deals":
         return [_product_view(p) for p in await backend.get_catalog() if p.get("deal_label")]
     if name == "set_location":

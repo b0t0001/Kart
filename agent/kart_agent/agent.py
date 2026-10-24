@@ -8,7 +8,7 @@ from typing import Any, AsyncIterator
 from line.events import AgentSendText, CallEnded, CallStarted, UserCustomSent, UserTurnEnded, UserTurnStarted
 
 from .brain import Brain
-from .lines import DECLINED_LINE, accepted_line, proactive_line, yes_or_no
+from .lines import DECLINED_LINE, accepted_line, only_filler, proactive_line, yes_or_no
 from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
@@ -19,13 +19,14 @@ class KartAgent:
     """One per call. `run_filter` decides which events start a turn (a new turn cuts off the current one)."""
 
     def __init__(self, backend: Any, brain: Brain, cart_id: str = "7", coalesce_seconds: float = 0.6,
-                 context_wait_seconds: float = 1.0):
+                 context_wait_seconds: float = 1.0, barge_in: bool = True):
         self.backend = backend
         self.brain = brain
         self.cart_id = cart_id                      # the default; the iPad's trip_context names the real one
         self.trip_id: str | None = None
         self.coalesce_seconds = coalesce_seconds    # an "added" line waits this long for a paired suggestion
         self.context_wait_seconds = context_wait_seconds   # how long the greeting waits for the iPad's trip_context
+        self.barge_in = barge_in                    # off (KART_BARGE_IN=off) for a loud floor: nothing cuts Kart off
         self._context = asyncio.Event()
         self._plan: list[dict[str, Any]] = []
         self._items: list[dict[str, Any]] = []
@@ -52,7 +53,7 @@ class KartAgent:
                 self._offer = None                       # answered on the screen
             if meta.get("type") not in SPEAKING_EVENTS:
                 return False
-            line = proactive_line(meta, self._catalog, self._plan)
+            line = proactive_line(meta, self._catalog, self._plan, self._items)
             if not line:
                 return False
             if self._speaking:                           # never cut Kart off: say it when this turn ends
@@ -62,7 +63,7 @@ class KartAgent:
         return False
 
     def cancel_filter(self, event: Any) -> bool:
-        return isinstance(event, UserTurnStarted)        # barge-in
+        return self.barge_in and isinstance(event, UserTurnStarted)   # barge-in
 
     # Line agent --------------------------------------------------------------------------------
 
@@ -75,17 +76,17 @@ class KartAgent:
             await self._refresh()
             if self._plan or self._items:                # rejoining a trip in progress (app relaunch, reconnect)
                 return
-            async for out in self._say([GREETING]):
+            async for out in self._say([GREETING], interruptible=False):   # chatter can't wipe the greeting
                 yield out
         elif isinstance(event, UserTurnEnded):
             text = " ".join(part.content for part in event.content if hasattr(part, "content") and part.content).strip()
-            if not text:
+            if not text or only_filler(text):            # "Um." gets no answer and no caption
                 return
-            await self._caption("user", text)
             await self._refresh()
             ctx = {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id}
             answer = yes_or_no(text) if self._offer else None
             if answer:                                   # a plain yes/no to the deal: no Claude round, nothing invented
+                await self._caption("user", text)
                 offer, self._offer = self._offer, None
                 if answer == "yes":
                     await run_tool("add_to_plan", {"product_id": offer.get("product_id"), "reason": "deal"}, ctx)
@@ -94,25 +95,35 @@ class KartAgent:
                     await run_tool("dismiss_suggestion", {}, ctx)
                     line = DECLINED_LINE
                 self.brain.remember(text, line)
-                async for out in self._say([line]):
+                async for out in self._say([line], interruptible=False):
                     yield out
                 return
+            heard = text
             if self._offer:                              # more than a yes/no: Claude still needs to know what was asked
-                text = f'(Kart just asked: "{self._offer.get("text", "")}") {text}'
+                heard = f'(Kart just asked: "{self._offer.get("text", "")}") {text}'
                 self._offer = None
-            async for out in self._say(self.brain.respond(text, ctx)):
+            async for out in self._say(self._caption_first(text, self.brain.respond(heard, ctx)), interruptible=self.barge_in):
                 yield out
         elif isinstance(event, UserCustomSent):
             meta = event.metadata or {}
             if meta.get("type") == "cart_changed" and meta.get("change") == "added":
                 await asyncio.sleep(self.coalesce_seconds)   # a paired deal suggestion arriving now replaces this line
             await self._refresh()
-            line = proactive_line(meta, self._catalog, self._plan)
+            line = proactive_line(meta, self._catalog, self._plan, self._items)
             if line:
-                async for out in self._say([line]):
+                async for out in self._say([line], interruptible=False):
                     yield out
 
-    async def _say(self, chunks: Any) -> AsyncIterator[AgentSendText]:
+    async def _caption_first(self, user_text: str, chunks: AsyncIterator[str]) -> AsyncIterator[str]:
+        """The shopper's words reach the thread only once Kart answers, so chatter Kart stays quiet on never shows."""
+        first = True
+        async for chunk in chunks:
+            if first:
+                first = False
+                await self._caption("user", user_text)
+            yield chunk
+
+    async def _say(self, chunks: Any, interruptible: bool = True) -> AsyncIterator[AgentSendText]:
         """Speaks chunks as they arrive and captions whatever was actually said, even if the shopper cuts in."""
         spoken: list[str] = []
         self._speaking = True
@@ -120,16 +131,16 @@ class KartAgent:
             if hasattr(chunks, "__aiter__"):
                 async for chunk in chunks:
                     spoken.append(chunk)
-                    yield AgentSendText(text=chunk)
+                    yield AgentSendText(text=chunk, interruptible=interruptible)
             else:
                 for chunk in chunks:
                     spoken.append(chunk)
-                    yield AgentSendText(text=chunk)
+                    yield AgentSendText(text=chunk, interruptible=interruptible)
             if self._pending:                            # a deal or cart line that waited for Kart to finish
                 await self._flush_caption(spoken)
                 spoken = [self._pending]
                 self._pending = None
-                yield AgentSendText(text=spoken[0])
+                yield AgentSendText(text=spoken[0], interruptible=False)
         finally:
             self._speaking = False
             await self._flush_caption(spoken)

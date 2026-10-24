@@ -12,7 +12,8 @@ from kart_agent.llm import AnthropicLLM
 
 async def get_agent(env, call_request):
     backend = SupabaseBackend(os.environ["SUPABASE_URL"], os.environ["SUPABASE_ANON_KEY"])
-    agent = KartAgent(backend=backend, brain=Brain(llm=AnthropicLLM()), cart_id=os.getenv("CART_ID", "7"))
+    agent = KartAgent(backend=backend, brain=Brain(llm=AnthropicLLM()), cart_id=os.getenv("CART_ID", "7"),
+                      barge_in=os.getenv("KART_BARGE_IN", "on") != "off")
     return agent, agent.run_filter, agent.cancel_filter
 
 

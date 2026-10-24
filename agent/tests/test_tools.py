@@ -18,7 +18,7 @@ def ctx(backend):
 
 def test_every_tool_streams_eagerly_and_has_a_schema():
     names = {t["name"] for t in TOOLS}
-    assert names == {"search_catalog", "get_cart", "set_plan", "add_to_plan", "get_deals", "set_location",
+    assert names == {"search_catalog", "get_cart", "set_plan", "add_to_plan", "remove_from_plan", "get_deals", "set_location",
                      "dismiss_suggestion", "confirm_item", "start_checkout"}
     assert all(t["eager_input_streaming"] and t["input_schema"]["type"] == "object" for t in TOOLS)
 
@@ -66,3 +66,30 @@ async def test_start_checkout_and_dismiss(backend):
     await run_tool("dismiss_suggestion", {}, ctx(backend))
     assert [c[0] for c in backend.calls] == ["set_cart_status", "dismiss_suggestion"]
     assert backend.calls[0][1]["p_status"] == "checkout"
+
+
+
+async def test_add_to_plan_sets_the_amount_of_a_planned_line(backend):
+    await run_tool("set_plan", {"items": [{"product_id": "barilla-spaghetti", "reason": "pasta"}]}, ctx(backend))
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 3}, ctx(backend)))
+    assert [(p["product_id"], p["qty"]) for p in backend.cart["plan"]] == [("barilla-spaghetti", 3)]
+    assert "notes" not in out
+
+
+async def test_amounts_never_go_above_stock_and_say_so(backend):
+    out = json.loads(await run_tool("set_plan", {"items": [{"product_id": "kirkland-parmesan", "reason": "pasta", "qty": 5}]},
+                                    ctx(backend)))
+    assert [(p["product_id"], p["qty"]) for p in backend.cart["plan"]] == [("kirkland-parmesan", 2)]
+    assert out["notes"] == ["Only 2 Parmesan in stock: planned 2, not 5."]
+
+
+async def test_remove_from_plan_takes_one_line_off(backend):
+    await run_tool("set_plan", {"items": [{"product_id": "barilla-spaghetti", "reason": "pasta"},
+                                          {"product_id": "rao-marinara", "reason": "pasta"}]}, ctx(backend))
+    await run_tool("remove_from_plan", {"product_id": "rao-marinara"}, ctx(backend))
+    assert [p["product_id"] for p in backend.cart["plan"]] == ["barilla-spaghetti"]
+
+
+async def test_search_shows_how_many_are_in_stock(backend):
+    found = json.loads(await run_tool("search_catalog", {"query": "parmesan"}, ctx(backend)))
+    assert found[0]["stock"] == 2

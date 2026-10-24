@@ -8,7 +8,10 @@ Kart's voice runs on **Cartesia Line**: Cartesia handles speech-to-text, text-to
 - **Answers the shopper** with Claude (`claude-opus-5-5` at `effort: low`, streamed so speech starts on the first words, with server-side refusal fallbacks). Claude works through store tools that read and write the live Supabase backend: `search_catalog`, `get_cart`, `set_plan`, `add_to_plan`, `get_deals`, `set_location`, `dismiss_suggestion`, `confirm_item`, `start_checkout`. Every product, price, deal and aisle Kart says comes from a tool result; the system prompt forbids inventing them.
 - **Speaks up on its own** when the iPad tells it something changed (Line `custom` events): a deal suggestion, a store-created deal, a price drop, an item added or removed. These lines are fixed templates (`kart_agent/lines.py`): fast, and they can't invent a price. Silent events (`trip_context`, `card_response`, `ui_action`) update state without cutting Kart off.
 - **Captions** both sides into the backend's `transcript` table, which the iPad shows live.
-- **Barge-in:** a new user turn cancels what Kart is saying (Line's `UserTurnStarted`).
+- **Barge-in:** a new user turn cancels Claude's answers (Line's `UserTurnStarted`). The greeting, deal lines and yes/no replies are sent `interruptible=False`, so store chatter can't wipe them. For a loud floor, `cartesia env set KART_BARGE_IN=off` makes everything Kart says uninterruptible. Line has no turn-detection or VAD settings (its WebSocket takes only the audio format, voice and delivery pace), so these are the levers, plus hold-to-talk on the iPad.
+- **Chatter:** a filler alone ("Um.") gets nothing. For speech that clearly isn't meant for Kart, Claude answers `<quiet>`: Kart says nothing, and neither side is captioned.
+- **Deals by voice:** a plain "yes" or "no" to the open deal is handled without Claude.
+- **Amounts:** plan lines count packages as sold ("three avocados" is one 5-count bag). Amounts never go above stock, and Kart says so ("Only 2 Parmesan in stock"). "Make it three" and "take the salsa off" edit the list.
 
 ## Layout
 
