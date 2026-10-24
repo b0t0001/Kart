@@ -41,7 +41,7 @@ def proactive_line(event: dict[str, Any], catalog: list[dict[str, Any]], plan: l
     if kind == "suggestion":
         return event.get("text") or None
     if kind == "nudge":
-        return _nudge_line(event, catalog, meal)
+        return _nudge_line(event, catalog, meal, plan)
     if kind == "reconnected":                             # a new call mid-trip; the shopper's last turn went unanswered
         return RECONNECT_LINE if event.get("unanswered") else None
     if kind == "ui_action":                               # the iPad tells Kart what just happened on screen
@@ -127,7 +127,8 @@ def _list_amount(n: int, product: dict[str, Any]) -> str:
     return _amount(n, product)
 
 
-def _combined_line(items: list[dict[str, Any]], catalog: list[dict[str, Any]], meal: str | None) -> str | None:
+def _combined_line(items: list[dict[str, Any]], catalog: list[dict[str, Any]], meal: str | None,
+                   plan: list[dict[str, Any]] | None = None) -> str | None:
     """The combined checkout nudge: every short item in one sentence (None when nothing can be named)."""
     by_id = {p["id"]: p for p in catalog}
     parts = [_list_amount(i["need"] - i["have"], by_id[i["product_id"]]) if i.get("product_id") in by_id
@@ -137,11 +138,18 @@ def _combined_line(items: list[dict[str, Any]], catalog: list[dict[str, Any]], m
         return None
     listed = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
     one = len(items) == 1 and items[0].get("need", 1) - items[0].get("have", 0) == 1
+    if one and plural(by_id.get(items[0].get("product_id"))):
+        one = False                                      # "kids' scissors": grab them
+    if plan and any(line.get("meal") for line in plan):  # the list knows which lines are the meal's
+        meals = {line.get("product_id"): line.get("meal") for line in plan}
+        if not all(meals.get(i.get("product_id")) for i in items):
+            meal = None                                  # something added on the side: not "for pasta night"
     dish = _dish(meal)
     return f"Before you go: you still need {listed}{f' for {dish}' if dish else ''}. Want to grab {'it' if one else 'them'}?"
 
 
-def _nudge_line(event: dict[str, Any], catalog: list[dict[str, Any]], meal: str | None) -> str | None:
+def _nudge_line(event: dict[str, Any], catalog: list[dict[str, Any]], meal: str | None,
+                plan: list[dict[str, Any]] | None = None) -> str | None:
     """The backend's nudge text uses digits and short names ("1 Tortillas"). For speech: counts in words, in the
     package as sold ("one pack of tortillas"), tied to the trip's meal when Kart knows it. Falls back to the text when
     the product or counts aren't known."""
@@ -149,7 +157,7 @@ def _nudge_line(event: dict[str, Any], catalog: list[dict[str, Any]], meal: str 
     have, need = event.get("have"), event.get("need")
     items = event.get("items")
     if event.get("kind") == "under" and isinstance(items, list) and items:   # the checkout list (even of one)
-        return _combined_line(items, catalog, meal) or event.get("text") or None
+        return _combined_line(items, catalog, meal, plan) or event.get("text") or None
     if product is None or not isinstance(have, int) or not isinstance(need, int):
         return event.get("text") or None
     if event.get("kind") == "over":

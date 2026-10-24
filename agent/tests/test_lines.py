@@ -123,3 +123,15 @@ def test_canned_goods_count_in_cans():
     from kart_agent.lines import _amount
     beans = {"id": "black-beans", "name": "Black Beans, 15 oz can", "short_name": "Black Beans", "category": "canned"}
     assert _amount(2, beans) == "two cans of black beans"
+
+
+def test_a_checkout_list_of_something_outside_the_meal_says_them_and_no_meal():
+    from kart_agent.lines import proactive_line
+    from fakes import CATALOG
+    plan = [{"product_id": "barilla-spaghetti", "qty": 1, "meal": "pasta night for 4"},
+            {"product_id": "kids-scissors", "qty": 1}]                       # added on the side: no meal
+    nudge = {"type": "nudge", "kind": "under", "product_id": "kids-scissors", "have": 0, "need": 1,
+             "text": "Before you go: you still need Kids' Scissors.",
+             "items": [{"product_id": "kids-scissors", "have": 0, "need": 1, "name": "Kids' Scissors"}]}
+    assert proactive_line(nudge, CATALOG, plan, meal="pasta night for 4") == \
+        "Before you go: you still need kids' scissors. Want to grab them?"
