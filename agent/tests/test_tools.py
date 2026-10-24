@@ -216,3 +216,12 @@ async def test_substitutes_skip_what_is_already_on_the_list(backend):
     salsa["stock"], salsa["in_stock"] = 0, False
     out = json.loads(await run_tool("add_to_plan", {"product_id": "tostitos-salsa", "reason": "nachos"}, ctx(backend)))
     assert [s["id"] for s in out["substitutes"]] == ["daisy-sour-cream"]
+
+
+async def test_nearby_stores_read_the_backends_shape(backend):
+    backend.nearby = [{"kind": "produce", "name": "Berkeley Bowl", "address": "2020 Oregon St, Berkeley",
+                       "good_for": ["produce", "fruit"], "distance_mi": 1.5}]
+    out = json.loads(await run_tool("not_sold_here", {"item": "cilantro"}, ctx(backend)))
+    assert out["nearby_stores"] == [{"name": "Berkeley Bowl", "distance": "about 1.5 miles away", "kind": "produce",
+                                     "good_for": ["produce", "fruit"], "address": "2020 Oregon St, Berkeley",
+                                     "might_have_it": True}]
