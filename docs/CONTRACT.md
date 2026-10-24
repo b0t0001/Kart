@@ -202,6 +202,7 @@ Out of scope (Dylan). The backend dropped `mark_personal` and `cart_events.resol
 - **Only the demo operator runs `db.py reset-demo` on hosted**, right before judging. It re-seeds the catalog, wipes the merchant change log, and resets cart 7 for everyone.
 - Tests and rehearsals use **throwaway carts** (`cv-e2e-*`, `ios-it-*`, `agent-it-*`, `ipad-live`), never cart `7`. They reset only their own cart: `backend/.venv/bin/python backend/cart.py reset --cart <id>`.
 - Never put the service-role key, DB URL or access token on the Pi or the iPad.
+- **Automated tests and rehearsals on hosted never call `checkout`.** It lowers `products.stock` for everyone (marinara and Parmesan sold out on 2026-10-24). If stock drifts, restore it with `backend/db.py sync-catalog --with-stock`.
 
 ### 3a. As built (backend `1955f3c`, v0.7): additive fields, nothing renamed
 

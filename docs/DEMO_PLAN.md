@@ -13,7 +13,7 @@
 > | 4 | Drop **spaghetti** → "Yes" → drop the **Parmesan** | "Got the Spaghetti. Parmesan is $1 off in Aisle 4. Want it?" → bill shows "saved $1" | Live bill + deal at the moment of decision |
 > | 5 | Drop the **marinara**. "Add olive oil too." | "Got the Marinara." → "We don't carry olive oil here. Trader Joe's, about a mile away, might have it." (exact store per Kart) | Honest "not sold here" |
 > | 5b | *(member beta)* "Oh, next Saturday is Leo's soccer team party, we'll need pasta for 12." → "Yes." | "Got it, I'll remember Leo's party on Saturday. Want me to save a list for it?" → "Saved: three boxes of spaghetti and two jars of marinara for Leo's party." | **Memory created by conversation** |
-> | 6 | Drop the **chocolate**. "Actually, skip the chocolate." → take it out | "Took the chocolate off your bill." (+ "take it off the list too?" → "yes") | Changing your mind |
+> | 6 | Drop the **chocolate** → change your mind and **take it back out** | "Got the Chocolate Bar." → "Took the Chocolate Bar off your bill. Take it off the list too?" → "Yes." → "Took chocolate bar off your list." | Changing your mind |
 > | 7 | Tap **Check out** → **Pay** | Receipt with savings and time in store → "Paid. Enjoy pasta night!" | Uniqlo-style checkout |
 >
 > **ACT 2: fast-forward (member beta, ~30 s, no extra props)**
