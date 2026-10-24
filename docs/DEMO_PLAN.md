@@ -15,10 +15,10 @@ Buy the **exact brands and sizes in the table if you can**. If you substitute, n
 | # | Buy (suggested) | Qty | Catalog id | Mini-store aisle | Role in the demo |
 |---|---|---|---|---|---|
 | 1 | **Barilla Spaghetti, 1 lb** (blue box) | **3** | `barilla-spaghetti` | A6 Pasta & Sauce | **Meal A:** box 1 = the item that starts the bill; box 2 = the **"too much" nudge** (beta); box 3 = spare, and **counting** clips (2 boxes dropped together) |
-| 2 | **Marinara, 24 oz, plastic jar** (e.g. Prego Traditional) | 1 | `marinara` *(renamed from rao-marinara)* | A6 Pasta & Sauce | **Meal A:** dropping it **triggers the Parmesan deal card** |
-| 3 | **Grated Parmesan shaker, 8 oz** (Kraft green can) | 1 | `kirkland-parmesan` → `parmesan-shaker` | A4 Cheese & Deli | **Meal A: the headline deal**, "Parmesan is $1 off in Aisle 4. Want it?" → "yes" → drop it |
+| 2 | **Marinara, 24 oz, plastic jar** (e.g. Prego Traditional) | 1 | `rao-marinara` *(id kept; renamed to the jar you buy)* | A6 Pasta & Sauce | **Meal A:** dropping it **triggers the Parmesan deal card** |
+| 3 | **Grated Parmesan shaker, 8 oz** (Kraft green can) | 1 | `kirkland-parmesan` *(id kept; becomes the grated shaker)* | A4 Cheese & Deli | **Meal A: the headline deal**, "Parmesan is $1 off in Aisle 4. Want it?" → "yes" → drop it |
 | 4 | **Tortilla chips, party-size bag** (e.g. Tostitos Restaurant Style, 13 oz) | 1 | `tostitos-chips` | A7 Snacks & Chips | **Meal B: the second deal card**, "Chips are $1.50 off". Big, light, safe to drop |
-| 5 | **Salsa, 15–16 oz jar** (plastic if you can find it, e.g. Pace) | 1 | `salsa` *(renamed from tostitos-salsa)* | A5 Mexican | **Meal B:** dropping it **triggers the chips deal** |
+| 5 | **Salsa, 15–16 oz jar** (plastic if you can find it, e.g. Pace) | 1 | `tostitos-salsa` *(id kept; renamed to the jar you buy)* | A5 Mexican | **Meal B:** dropping it **triggers the chips deal** |
 | 6 | **Salsa con queso dip, 15 oz jar** | 1 | `queso` **(new)** | A5 Mexican | **Meal B:** on the list. Also pairs with the chips deal |
 | 7 | **Black beans, 15 oz can** | 1 | `black-beans` **(new)** | A5 Mexican | **Meal B:** on the list. A can: a small, cylindrical, drop-safe item |
 | 8 | **Sliced jalapeños, small can** (e.g. La Costeña 12 oz) | 1 | `jalapenos` **(new)** | A5 Mexican | **Meal B:** on the list. Small-item test |
@@ -45,10 +45,10 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 | Catalog id | Name (from what you bought) | Spoken name | Price (= shelf price you paid) | Stock (= count bought) | Camera description |
 |---|---|---|---|---|---|
 | `barilla-spaghetti` | Barilla Spaghetti, 1 lb | Spaghetti | shelf | **3** | blue Barilla box, rectangular, white "Spaghetti" text |
-| `marinara` | *(brand)* Marinara, 24 oz | Marinara | shelf | **1** | from the jar you bought |
-| `parmesan-shaker` | Grated Parmesan, 8 oz shaker | Parmesan | shelf | **1** | green cylindrical shaker can, yellow/red label |
+| `rao-marinara` | *(brand)* Marinara, 24 oz | Marinara | shelf | **1** | from the jar you bought |
+| `kirkland-parmesan` | Grated Parmesan, 8 oz shaker | Parmesan | shelf | **1** | green cylindrical shaker can, yellow/red label |
 | `tostitos-chips` | Tortilla Chips, party size | Tortilla Chips | shelf | **1** | large crinkly bag |
-| `salsa` | *(brand)* Salsa, 15–16 oz | Salsa | shelf | **1** | from the jar you bought |
+| `tostitos-salsa` | *(brand)* Salsa, 15–16 oz | Salsa | shelf | **1** | from the jar you bought |
 | `queso` | Salsa con Queso, 15 oz | Queso | shelf | **1** | from the jar you bought |
 | `black-beans` | Black Beans, 15 oz can | Black Beans | shelf | **1** | short metal can, label photo of beans |
 | `jalapenos` | Sliced Jalapeños, can | Jalapeños | shelf | **1** | small can, green label |
@@ -58,7 +58,7 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 **Deals:**
 | Deal | On | Shown when these go in | Demo role |
 |---|---|---|---|
-| `d-parm` | Parmesan shaker, **$1 off** *(scaled to a ~$5 item)* | spaghetti or marinara | **The headline card (Meal A)** |
+| `d-parm-3off` *(id kept)* | Parmesan shaker, **$1 off** *(scaled to a ~$5 item)* | spaghetti or marinara | **The headline card (Meal A)** |
 | `d-chips-150off` | Chips, $1.50 off | salsa or queso | **Card (Meal B)** |
 | `d-baguette-1off` | Garlic bread, $1 off | spaghetti, marinara | Shows on the list row; never bought |
 
@@ -77,8 +77,8 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 |---|---|---|---|---|---|
 | 1 | Tap start, say *"Pasta night for my family of 4"* | — | — | List: Spaghetti, Marinara, Garlic Bread; next stop A6 | "Pasta night for four… spaghetti, marinara and garlic bread. Head to Aisle 6." |
 | 2 | Drop **spaghetti box 1** | `barilla-spaghetti` | settle → identify (local match, ~1.5 s) → 1 add | Bill: Spaghetti $x; list row ✓ | "Got the spaghetti." |
-| 3 | Drop **marinara** | `marinara` | 1 add | Bill +marinara; **Parmesan deal card** | **"Parmesan is $1 off in Aisle 4. Want it?"** |
-| 4 | Say *"Yes"*, drop the **Parmesan shaker** | `parmesan-shaker` | 1 add at the deal price | Bill shows the struck-through price and "saved $1" | "Added the Parmesan." |
+| 3 | Drop **marinara** | `rao-marinara` | 1 add | Bill +marinara; **Parmesan deal card** | **"Parmesan is $1 off in Aisle 4. Want it?"** |
+| 4 | Say *"Yes"*, drop the **Parmesan shaker** | `kirkland-parmesan` | 1 add at the deal price | Bill shows the struck-through price and "saved $1" | "Added the Parmesan." |
 | 5 | Drop the **apple** | (unknown) | settle → Claude → "unknown" | **"Is this…?" card**; Pay blocked | "I'm not sure what that is. Can you check the screen?" |
 | 6 | Tap **"Not this"**, take the apple out | — | removal resolves it | Card clears | — |
 | 7 *(beta)* | Drop **spaghetti box 2** | `barilla-spaghetti` | 1 add (qty 2) | **"Too much" card** | **"That's two boxes of spaghetti, and pasta night for 4 needs one. Keep the extra?"** |
@@ -92,7 +92,7 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 | # | Action | Item | Result |
 |---|---|---|---|
 | 1 | *"Game-night nachos for 6"* | — | List: chips, salsa, queso, black beans, jalapeños, sour cream |
-| 2 | Drop **salsa** | `salsa` | **"Chips are $1.50 off in Aisle 7. Want it?"** |
+| 2 | Drop **salsa** | `tostitos-salsa` | **"Chips are $1.50 off in Aisle 7. Want it?"** |
 | 3 | "Yes", drop **chips** | `tostitos-chips` | Deal price on the bill |
 | 4 | Drop **queso, black beans, jalapeños** one at a time | `queso`, `black-beans`, `jalapenos` | Each one billed and ticked off |
 | 5 *(beta)* | Check out | — | "Before you go: you still need sour cream" |
@@ -107,7 +107,7 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 ## 4. After shopping (in order)
 
 1. **Dylan → manager:** the exact items bought (brand, size, shelf price, count), or a photo of the receipt.
-2. **Backend:** sets the catalog to §2 (renames, 3 new products, the Parmesan shaker, prices, stock = counts, camera descriptions, deals). Applied to hosted without `reset-demo`, and `data/store.json` is updated.
+2. **Backend:** sets the catalog to §2 (**ids never change**: only names, sizes and descriptions; 3 new products, the Parmesan shaker, prices, stock = counts, camera descriptions, deals). Applied to hosted without `reset-demo`, and `data/store.json` is updated.
 3. **Voice agent / iPad chat:** tunes Kart so §2's two lists come out exactly. Rehearses both meals on a test cart.
 4. **James (Pi):**
    - enroll each bought item: `tools/enroll.py <catalog id>`, about 1 minute each, 8 items → about 10 minutes;
