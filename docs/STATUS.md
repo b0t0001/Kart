@@ -21,6 +21,12 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 ~01:50 · check-in
+- **CV: DONE overnight** (idle). All 13 plan tasks are done, with 62 tests passing on the Mac (synthetic two-camera scenes: hands, lighting, bumps, stacked items, a dead camera). **The end-to-end test against local Supabase passes:** the live catalog loads from `product_catalog`, adds and removes reach `carts`, an outbox retry doesn't double-add, and `reset_cart` clears the Pi's memory. It has not run on real hardware. Morning steps are in `pi/docs/OVERNIGHT.md` and `pi/README.md`, and CV still needs `ANTHROPIC_API_KEY` (until then it runs local-only).
+- **iPad: building.** Milestone 1 UI is committed (design system, Kart avatar, welcome/greeting, trip panel with the next-stop map, checkout, pay overlay, receipt). It's now verifying the live-deal beat against local Supabase and planning milestone 2.
+- **Backend:** done, idle.
+- Synced: 10 more commits pushed; no secrets.
+
 ### 2026-10-24 ~01:20 · check-in
 - **Backend: DONE overnight** (idle). Local Supabase is running through colima, with values in `.env` under the `LOCAL SUPABASE` header and no Anthropic or Cartesia keys. Also done: `go_live.sh`, which was rehearsed against local and refuses to run while `.env` points at local; the end-to-end suite (`backend/e2e`); anonymous store insights; `DEMO.md`; and `cart.py` emergency levers. Tests: 50 backend, 42 merchant, 4 end-to-end, 5 Edge Function. Its message to the other chats was blocked by the app's pause, so the manager relayed "local Supabase is up" to CV and the iPad.
 - **CV: building.** Motion/settle, change detection, persistent cart memory, the few-shot gallery and the synthetic scene generator are committed; now on cloud identification.
