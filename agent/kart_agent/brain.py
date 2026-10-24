@@ -54,11 +54,20 @@ class Brain:
         for _ in range(self.MAX_TOOL_ROUNDS):
             content: list[Any] = []
             stop_reason = "end_turn"
+            streamed: list[str] = []
             async for item in self.llm.stream(system=self.system, messages=self.messages, tools=TOOLS):
                 if item[0] == "text":
+                    streamed.append(item[1])
                     yield item[1]
                 elif item[0] == "final":
                     content, stop_reason = item[1], item[2]
+            if not content:                              # a refusal or an empty turn: never store an empty message
+                said = "".join(streamed).strip()
+                if not said:
+                    said = "Sorry, say that again?"
+                    yield said
+                self.messages.append({"role": "assistant", "content": [{"type": "text", "text": said}]})
+                return
             self.messages.append({"role": "assistant", "content": [_block_dict(b) for b in content]})
             tool_uses = [b for b in content if b.type == "tool_use"]
             if stop_reason != "tool_use" or not tool_uses:

@@ -37,3 +37,33 @@ async def test_system_prompt_forbids_invented_prices():
     await collect(Brain(llm=llm).respond("hi", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
     system = llm.requests[0]["system"]
     assert "Never invent" in system and "two short sentences" in system
+
+
+async def test_an_empty_turn_never_leaves_an_empty_assistant_message():
+    llm = FakeLLM([Turn(chunks=[]), Turn(chunks=["Sure."])])     # e.g. a refusal: nothing came back
+    brain = Brain(llm=llm)
+    ctx = {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}
+    first = await collect(brain.respond("hmm", ctx))
+    assert first == ["Sorry, say that again?"]
+    await collect(brain.respond("pasta", ctx))
+    assert all(m["content"] for m in llm.requests[1]["messages"] if m["role"] == "assistant")
+
+
+class RefusingLLM:
+    """Streams its own apology, then returns no content blocks (what llm.py does on a refusal)."""
+
+    def __init__(self):
+        self.requests = []
+
+    async def stream(self, *, system, messages, tools):
+        self.requests.append({"messages": list(messages)})
+        yield ("text", "Sorry, I can't help with that one.")
+        yield ("final", [], "end_turn")
+
+
+async def test_a_refusal_is_said_once_and_stored_as_said():
+    llm = RefusingLLM()
+    brain = Brain(llm=llm)
+    said = await collect(brain.respond("hmm", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
+    assert said == ["Sorry, I can't help with that one."]
+    assert brain.messages[-1] == {"role": "assistant", "content": [{"type": "text", "text": "Sorry, I can't help with that one."}]}
