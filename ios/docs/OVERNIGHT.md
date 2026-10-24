@@ -54,7 +54,7 @@ Local test of the agent before deploying: `cd agent && .venv/bin/python main.py`
 
 ## Things worth knowing
 
-- **The suggestion rule follows the backend's SQL:** a deal can be offered even when its product is already on the list, and the iPad then hides the card and stays quiet. **Backend follow-up (not done):** once a suggestion's product is on the list, treat it as accepted, so the next pairing deal can surface. Today the accepted one holds the slot until it's in the cart.
+- **The suggestion rule follows the backend's SQL (f6e41f3):** nothing is offered for a product already on the list, and a "Yes" (which puts the product on the list) consumes the card, so the next eligible deal pops right away. A deal on a listed product shows as "$3 off" on its list row instead. A store deal created mid-trip on a listed product also gets a one-tap "New deal: … · Got it" note, and Kart says it once. The offline mock follows the same rule. The voice agent plans the basics for a meal (pasta, sauce, bread), so the Parmesan deal card still shows in the demo.
 - **Kart's voice format from Line isn't documented.** The iPad assumes 16 kHz mono PCM16, the same as it sends. If Kart sounds chipmunky or slowed on the iPad, change `EngineAudio.outputSampleRate` (24 000 or 44 100).
 - **The mock backend's route and suggestion order are simpler than the backend's.** That only affects the offline demo mode.
 - **Throwaway test carts:** `ios-it-*`, `agent-it-*`, and `ipad-live` rows exist in the local DB from the integration runs.

@@ -18,12 +18,12 @@ import Testing
         #expect(s.salePrice == Decimal(string: "9.99") && s.aisle == "Aisle 4")
         #expect(b.cart.suggestedDeals == ["d-parm-3off"])
     }
-    @Test func suggestionsIgnoreThePlanLikeTheBackend() async throws {
+    @Test func plannedProductsAreNeverSuggested() async throws {
         let b = try await started()
-        try await b.setPlan([PlanItem(productId: "kirkland-parmesan", reason: "deal"),
+        try await b.setPlan([PlanItem(productId: "kirkland-parmesan", reason: "pasta dinner"),
                              PlanItem(productId: "french-baguette", reason: "pasta dinner")])
         await b.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")
-        #expect(b.cart.suggestion?.dealId == "d-parm-3off")      // backend §3a: only "not in the cart" matters
+        #expect(b.cart.suggestion == nil && b.cart.suggestedDeals.isEmpty)   // backend §3a: not in the cart and not on the plan
     }
     @Test func dismissedDealIsNotOfferedAgainThisTrip() async throws {
         let b = try await started()
@@ -34,13 +34,24 @@ import Testing
         #expect(b.cart.suggestion?.dealId == "d-baguette-1off")
         #expect(b.cart.suggestion?.text == "Baguette is $1 off in Aisle 2. Want it?")
     }
-    @Test func planningSuggestedProductKeepsSuggestionUntilItIsInTheCart() async throws {
+    @Test func planningTheSuggestedProductConsumesItAndOffersTheNextPairing() async throws {
         let b = try await started()
         await b.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")
-        try await b.setPlan([PlanItem(productId: "kirkland-parmesan", reason: "deal")])
         #expect(b.cart.suggestion?.dealId == "d-parm-3off")
-        await b.simulateVision(.added, productId: "kirkland-parmesan", confidence: 0.9, label: "p")
+        try await b.setPlan([PlanItem(productId: "kirkland-parmesan", reason: "deal")])   // the shopper's "Yes"
+        #expect(b.cart.suggestion?.dealId == "d-baguette-1off")
+        #expect(b.cart.suggestedDeals == ["d-parm-3off", "d-baguette-1off"])
+    }
+    @Test func aStoreDealOnAPlannedProductShowsOnItsListRowNotAsASuggestion() async throws {
+        let b = try await started()
+        await b.removeDeal(id: "d-parm-3off")
+        try await b.setPlan([PlanItem(productId: "kirkland-parmesan", reason: "pasta dinner"),
+                             PlanItem(productId: "french-baguette", reason: "pasta dinner")])
+        await b.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")
+        await b.pushDeal(Deal(id: "d-parm-3off", productId: "kirkland-parmesan", type: .amountOff, value: 3, label: "$3 off",
+                              pairsWith: ["barilla-spaghetti", "rao-marinara"], endsAt: nil))
         #expect(b.cart.suggestion == nil)
+        #expect(b.cart.plan.first { $0.productId == "kirkland-parmesan" }?.dealLabel == "$3 off")
     }
     @Test func pushedDealDropsPriceOfItemsAlreadyInCart() async throws {
         let b = try await started()

@@ -49,6 +49,12 @@ public final class MockKartBackend: KartBackend {
 
     public func setPlan(_ plan: [PlanItem]) async throws {
         cart.plan = plan
+        // As the backend: a "Yes" puts the product on the plan, which consumes the suggestion, and the
+        // next eligible pairing is offered right away.
+        if let suggestion = cart.suggestion, plan.contains(where: { $0.productId == suggestion.productId }) {
+            cart.suggestion = nil
+        }
+        offerNextPairing()
         recompute()
     }
 
@@ -132,7 +138,7 @@ public final class MockKartBackend: KartBackend {
         switch type {
         case .added:
             add(product)
-            offerDeal(pairedWith: product)
+            offerNextPairing()
         case .removed:
             remove(product)
         }
@@ -182,17 +188,24 @@ public final class MockKartBackend: KartBackend {
         return (rounded, deal)
     }
 
-    private func offerDeal(pairedWith product: Product) {
-        guard cart.suggestion == nil,
-              let deal = catalog.deals.first(where: { $0.pairsWith.contains(product.id) && isEligible($0) }) else { return }
-        offer(deal)
+    /// As the backend: a deal paired with something in the cart, the most recently added pairing first.
+    private func offerNextPairing() {
+        guard cart.suggestion == nil else { return }
+        let recentFirst = cart.items.sorted { ($0.lastAddedAt ?? $0.addedAt) > ($1.lastAddedAt ?? $1.addedAt) }
+        for item in recentFirst {
+            if let deal = catalog.deals.first(where: { $0.pairsWith.contains(item.productId) && isEligible($0) }) {
+                offer(deal)
+                return
+            }
+        }
     }
 
     private func isEligible(_ deal: Deal) -> Bool {
         let active = deal.endsAt.map { $0 > now } ?? true
-        // As the backend (§3a): the plan doesn't matter, only "not in the cart" and "not offered yet".
+        // As the backend (§3a): not in the cart, not on the plan, and not offered yet this trip.
         return active
             && !cart.items.contains { $0.productId == deal.productId }
+            && !cart.plan.contains { $0.productId == deal.productId }
             && !cart.suggestedDeals.contains(deal.id)
     }
 

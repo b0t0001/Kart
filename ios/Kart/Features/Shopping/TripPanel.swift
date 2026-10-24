@@ -77,8 +77,11 @@ private struct ListColumn: View {
                     Spacer(minLength: Theme.s)
                     if line.inStock == false {
                         Text("Out of stock").font(Theme.caption).foregroundStyle(Theme.amberInk)
-                    } else if let aisle = line.aisle, !line.done {
-                        Text(aisle).font(Theme.caption).foregroundStyle(Theme.inkSecondary)
+                    } else if !line.done {
+                        if let deal = line.dealLabel { DealBadge(label: deal) }
+                        if let aisle = line.aisle {
+                            Text(aisle).font(Theme.caption).foregroundStyle(Theme.inkSecondary)
+                        }
                     }
                 }
                 .frame(minHeight: Theme.minTap)
@@ -86,6 +89,18 @@ private struct ListColumn: View {
             }
         }
         .animation(Theme.spring, value: plan)
+    }
+}
+
+/// "$3 off", on a list row (a deal on something you planned) or a cart row (what you're paying).
+private struct DealBadge: View {
+    let label: String
+
+    var body: some View {
+        Text(label)
+            .font(Theme.caption).foregroundStyle(Theme.greenInk)
+            .padding(.horizontal, Theme.s).padding(.vertical, 2)
+            .background(Theme.greenSoft, in: Capsule())
     }
 }
 
@@ -120,12 +135,7 @@ private struct CartColumn: View {
                         Text("×\(item.qty)").font(Theme.body).foregroundStyle(Theme.inkSecondary)
                     }
                     Spacer(minLength: Theme.s)
-                    if let deal = item.dealLabel {
-                        Text(deal)
-                            .font(Theme.caption).foregroundStyle(Theme.greenInk)
-                            .padding(.horizontal, Theme.s).padding(.vertical, 2)
-                            .background(Theme.greenSoft, in: Capsule())
-                    }
+                    if let deal = item.dealLabel { DealBadge(label: deal) }
                     Text(Money.format(item.price * Decimal(item.qty)))
                         .font(Theme.body).monospacedDigit().foregroundStyle(Theme.ink)
                         .contentTransition(.numericText())

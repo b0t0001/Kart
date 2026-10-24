@@ -46,7 +46,7 @@ On the iPad, a **three-finger long press** anywhere opens the demo controls (or 
 2. "Pasta dinner…" → the list appears in walking order; next stop "Aisle 1 → Caesar Kit".
 3. Add Spaghetti → chime, the list checks off, $1.99, the parmesan deal card, and Kart says it.
 4. "Yes" → parmesan joins the list.
-5. **Merchant beat:** start a trip after "Remove Parmesan deal"; Spaghetti then brings no deal card (the baguette deal is for something already on the list, so it stays quiet). "Create Parmesan $3 off" pops the parmesan card in, and Kart says it once.
+5. **Merchant beat:** start a trip after "Remove Parmesan deal"; Spaghetti then brings no deal card (the baguette is already on the list, and nothing is offered for listed items). "Create Parmesan $3 off" pops the parmesan card in, and Kart says it once.
 6. "Add unsure" on Rao's → "Is this the Rao's Sauce?" → Yes.
 7. Remove Spaghetti → "Took the Spaghetti off your bill.", and the total drops.
 8. "I'm done." → the bill; Pay → the receipt with savings and trip time; Done → Welcome.
