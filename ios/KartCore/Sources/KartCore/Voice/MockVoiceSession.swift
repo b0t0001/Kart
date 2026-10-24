@@ -33,6 +33,13 @@ public final class MockVoiceSession: VoiceSession {
         await speak(DemoScript.greeting)
     }
 
+    /// Rejoins a trip that's already under way (a demo scenario, an app relaunch) without greeting again.
+    public func resume() {
+        guard !forcedOffline else { state = .offline; return }
+        started = true
+        state = .listening
+    }
+
     public func stop() {
         started = false
         tail = nil

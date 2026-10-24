@@ -156,3 +156,17 @@ import Testing
     t.clock.now = t0 + 300; t.model.noteActivity()
     #expect(!t.model.stillShoppingPromptDue(now: t0 + 899))
 }
+
+@MainActor @Test func resumeTripAdoptsStateSilently() async throws {
+    let t = try make()
+    try await t.backend.startTrip()                            // trip started outside the model (scenario, app relaunch)
+    try await t.backend.setPlan(DemoScript.pastaPlan)
+    await t.backend.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")
+    await t.backend.simulateVision(.added, productId: nil, confidence: 0.3, label: "jar")
+    t.model.resumeTrip()
+    t.model.ingest(cart: t.backend.cart); t.model.ingest(events: t.backend.events); t.model.ingest(catalog: t.backend.catalog)
+    t.model.flushDealAnnouncements(now: t.clock.now + 2)
+    #expect(t.sounds.played.isEmpty && t.voice.sent.isEmpty)   // nothing re-announced
+    #expect(!t.model.cards.contains { $0.id.hasPrefix("newdeal-") })
+    #expect(t.model.cards.map(\.id).first == "confirm-2")       // still-open cards still show
+}

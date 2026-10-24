@@ -196,6 +196,19 @@ public final class AppModel {
         voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId))
     }
 
+    /// Adopts a trip that started outside this model (a demo scenario, or an app relaunch mid-trip)
+    /// without replaying it as new events: no chimes, no spoken lines, no "new deal" cards.
+    public func resumeTrip() {
+        lastCart = backend.cart
+        lastSuggestionDealId = backend.cart.suggestion?.dealId
+        announcedDeals = Set(backend.cart.suggestion.map { [$0.dealId] } ?? [])
+        seenEvents = Set(backend.events.map(\.eventId))
+        baselineDeals = Dictionary(backend.catalog.deals.map { ($0.id, $0.label) }, uniquingKeysWith: { first, _ in first })
+        seenNewDealCards = []
+        pendingDeals = []
+        lastActivity = clock()
+    }
+
     public func respond(to card: Card, with action: CardAction) async {
         voice.send(.cardResponse(cardId: card.id, action: action))
         noteActivity()

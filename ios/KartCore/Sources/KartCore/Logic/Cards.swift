@@ -8,7 +8,7 @@ public enum CardAction: Sendable, Equatable, Hashable {
         switch self {
         case .yes: "Yes"
         case .no: "No thanks"
-        case .somethingElse: "Something else"
+        case .somethingElse: "Not this"
         case .remove: "Remove"
         case .addIt: "Add it"
         case .gotIt: "Got it"

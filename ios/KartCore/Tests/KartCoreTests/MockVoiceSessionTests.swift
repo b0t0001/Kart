@@ -27,3 +27,12 @@ import Testing
         await v.simulateUserSays("pasta"); #expect(b.transcript.count == 1)
     }
 }
+
+@MainActor @Test func resumeListensWithoutGreeting() async throws {
+    let b = MockKartBackend(catalog: try Fixtures.catalog()); try await b.startTrip()
+    let speech = SilentSpeech(); let v = MockVoiceSession(brain: MockAgentBrain(backend: b), backend: b, speech: speech)
+    v.resume()
+    #expect(v.state == .listening && speech.spoken.isEmpty && b.transcript.isEmpty)
+    await v.simulateUserSays("pasta")
+    #expect(b.cart.plan.count == 4)
+}
