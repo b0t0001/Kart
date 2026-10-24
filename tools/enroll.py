@@ -5,8 +5,10 @@
   python tools/enroll.py kirkland-parmesan # then follow the prompts, ~5 rounds
   sudo systemctl start kart-cv
 
-Start with the cart EMPTY. Each round: put the item in, wait for "captured", take it out.
-Vary the pose (side, upright, label up/down) between rounds.
+Start with the cart EMPTY. Each round: put the item in BY HAND, out on the floor (not against a wall),
+wait for "captured", take it out. Vary the pose (side, upright, label up/down) between rounds.
+A change no hand made (the liner settling) or that looks like the liner is ignored and says so.
+Each capture prints its photo paths: open them, and delete any that don't show the product.
 """
 from __future__ import annotations
 

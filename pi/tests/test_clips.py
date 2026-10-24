@@ -57,3 +57,19 @@ def test_real_clip(clip):
             assert got.product_id == want["product_id"]
     adds = sum(e.type == "added" for e in events)
     assert len(p.cart.instances) == adds - (len(events) - adds)  # memory agrees with what was billed
+
+
+@pytest.mark.parametrize("clip", CLIPS, ids=[c.name for c in CLIPS])
+def test_enrollment_captures_every_placed_item_and_nothing_else(clip, tmp_path):
+    # The enrollment guards (a hand came and went; not the liner's colors or its edge) must never turn
+    # away a real placement: corner apples, tall bottles, the almond bag on the black-shirt liner.
+    from helpers import synth_catalog
+    from kartcv.enroll import run_enrollment
+    from kartcv.identify.gallery import Gallery
+    exp = json.loads((clip / "expected.json").read_text())
+    cfg = Config(features="hist", roi=exp.get("roi", {}))
+    gallery = Gallery(tmp_path / "gallery", HistogramFeatures())
+    gallery.load()
+    ticks = held(iter_ticks(load_recording(clip)), cfg.settle_s + cfg.intrusion_recheck_s + 1.0)
+    n = run_enrollment(ticks, "red-box", 99, gallery, synth_catalog(), cfg, tmp_path / "w", on_progress=lambda m: None)
+    assert n == sum(x["type"] == "added" for x in exp["expected"])

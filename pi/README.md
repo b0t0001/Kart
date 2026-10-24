@@ -110,8 +110,10 @@ sudo systemctl stop kart-cv
 ~/venv/bin/python tools/enroll.py kirkland-parmesan      # ids: data/store.json, or the tool lists them
 ```
 
-Cart empty → put the item in → wait for `captured 1/5: take it out` → take it out → repeat with
-a different pose (side, upright, label down). A multi-pack is one product: enroll it closed, as sold
+Cart empty → put the item in by hand, out on the floor → wait for `captured 1/5: take it out` → take
+it out → repeat with a different pose (side, upright, label down). Each capture prints its photo
+paths: open them and delete any that don't show the product. Changes no hand made (the liner
+settling) or that look like the liner itself are ignored, with a line saying so. A multi-pack is one product: enroll it closed, as sold
 (`kids-scissors` is the whole 2-pair card, never one pair). If you enable `edge_privacy` (off by default),
 **enroll tall props too** (upright bottles, boxes that reach the top of a camera's view): it keeps
 anything that enters from the frame edge on-cart, so it is never sent to Claude and is only

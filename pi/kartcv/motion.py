@@ -4,10 +4,29 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from kartcv.changes import work_size
+from kartcv.changes import match_gain, work_size
 from kartcv.roi import polygon_mask
 
 _EPS = 1e-6  # tick timestamps are floats; 2.3 - 1.3 must count as a full second
+
+
+def _small(image: np.ndarray, size: tuple[int, int]) -> np.ndarray:
+    size = work_size(image.shape, size)  # portrait mounts keep their shape
+    return cv2.GaussianBlur(cv2.resize(image, size, interpolation=cv2.INTER_AREA), (5, 5), 0)
+
+
+def floor_difference(image: np.ndarray, reference: np.ndarray, size: tuple[int, int] = (320, 180),
+                     thresh: int = 25, roi=None) -> float:
+    """Share of the floor where `image` differs from `reference`, by the same test as motion, after
+    matching brightness (a white bag makes a camera's auto-exposure darken the whole frame)."""
+    a, b = _small(image, size), _small(reference, size)
+    if a.shape != b.shape:
+        return 0.0
+    mask = polygon_mask(roi, (a.shape[1], a.shape[0]))
+    d = cv2.absdiff(match_gain(a, b, mask), b).max(axis=2) > thresh
+    if mask is not None:
+        return float((d & mask.astype(bool)).sum()) / max(1, int(mask.sum()))
+    return float(d.mean())
 
 
 class MotionDetector:
@@ -23,8 +42,8 @@ class MotionDetector:
         self._prev: np.ndarray | None = None
 
     def update(self, image: np.ndarray) -> bool:
-        size = work_size(image.shape, self.size)  # portrait mounts keep their shape
-        small = cv2.GaussianBlur(cv2.resize(image, size, interpolation=cv2.INTER_AREA), (5, 5), 0)
+        small = _small(image, self.size)
+        size = (small.shape[1], small.shape[0])
         prev, self._prev = self._prev, small
         if prev is None or prev.shape != small.shape:
             return False
