@@ -17,4 +17,5 @@ chmod 600 "$secrets"
 printf 'CARTESIA_API_KEY=%s\nCARTESIA_AGENT_ID=%s\n' "$CARTESIA_API_KEY" "${CARTESIA_AGENT_ID:-pending}" > "$secrets"
 supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --env-file "$secrets"
 
-supabase functions deploy voice-token --project-ref "$SUPABASE_PROJECT_REF" --workdir "$BACKEND" "$@"
+# --use-api bundles server-side, so the deploy works without Docker running
+supabase functions deploy voice-token --project-ref "$SUPABASE_PROJECT_REF" --workdir "$BACKEND" --use-api "$@"

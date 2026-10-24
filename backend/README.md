@@ -10,9 +10,14 @@ db/02_cart.sql     pricing, recompute_cart, apply_cart_event / set_plan / reset_
 db/03_seed.sql     seed_catalog(store.json)
 db/04_trip.sql     iPad trip RPCs: set_cart_status, set_location, append_transcript, checkout
 db/05_merchant.sql merchant change log: merchant_apply / merchant_undo / merchant_cancel (service role only)
+db/06_analytics.sql anonymous store_insights / deal_performance views over receipts + deal_offers
 supabase/functions/voice-token   P7 Edge Function: short-lived Cartesia token for the iPad
 db.py              apply migrations, seed, reset the demo
 deploy_functions.sh  deploy the Edge Function and push its Cartesia secrets
+go_live.sh         morning go-live against the hosted project: migrate, seed, deploy, simulate, e2e, reset
+cart.py            demo levers: add/remove items, plan, reset, deals from the laptop
+e2e/               end-to-end tests against a running Supabase (REST + realtime, anon key)
+docs/              DEMO.md (runbook), LOCAL_SUPABASE.md (local stack), OVERNIGHT.md (decisions log)
 simulate_demo.py   plays the 2-minute demo as CV + the iPad would
 tests/             pytest against a throwaway local Postgres
 ```
@@ -64,4 +69,5 @@ Read with the anon key (realtime on `carts`, `cart_events`, `products`, `deals`,
 LC_ALL=en_US.UTF-8 pg_ctl -D /tmp/kartpg -o "-p 54329" start   # after: initdb -D /tmp/kartpg -U postgres --auth=trust
 backend/.venv/bin/python -m pytest backend/tests
 deno test backend/supabase/functions/voice-token/
+backend/.venv/bin/python -m pytest backend/e2e      # needs a running Supabase (local or hosted) + .env
 ```
