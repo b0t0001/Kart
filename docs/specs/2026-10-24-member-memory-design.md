@@ -125,6 +125,13 @@ For a member, one extra line: *"Saved to Dylan's history."*
   - `members.py seed` prints Leo's party's date.
   - `backend/pre_judging.sh --members` reseeds right before judging.
 - **"What do you know about me?"** Kart opens the memory sheet on the iPad and gives a one-line summary. Everything is visible, and anything can be forgotten.
+- **Conversational moments** (Dylan: edge cases are mostly real shopper interactions):
+  - **"That's not me"** after Kart greets: Kart signs the member out (`sign_out` tool → `set_member(cart, null)`), says *"Sorry about that, you're shopping as a guest now. What are we getting?"*, and drops the memory at once.
+  - **"Don't remember that"** right after Kart saved something: Kart forgets that memory (the id came back from `remember`) and says so.
+  - **"What did I buy last time?"** Kart answers briefly from `last_trip`, naming items but not prices unless asked. It never volunteers history otherwise.
+  - **"Remind me about batteries next week"** saves a `reminder` memory dated then, with the product as a saved item when it's in the store.
+    - A reminder stays quiet until its day comes near: from the day before to 3 days after.
+    - In that window Kart brings it up in the greeting, and its items join the For you picks with the reason *"batteries · reminder"*.
 
 ## 4. Recommendations: what "this week" means
 
@@ -158,7 +165,7 @@ The backend computes these deterministically (testable, instant). Claude only ph
   - `member_purchases(id, member_id, product_id, qty, price, bought_at, trip_id null, source 'seed'|'checkout')`
     - Real trips still come from `receipts`: the receipt trigger below copies each paid bill's lines in.
     - It's a separate table only so the ten-week demo seed never shows up as store trips or revenue in `store_insights`, which counts `receipts`.
-  - `member_memories(id bigserial, member_id, kind 'event'|'preference'|'note', text, event_date date null, items jsonb null [{product_id, qty}], trip_id null, created_at)`. Forgetting deletes the row.
+  - `member_memories(id bigserial, member_id, kind 'event'|'reminder'|'preference'|'note', text, event_date date null, items jsonb null [{product_id, qty}], trip_id null, created_at)`. Forgetting deletes the row.
 - **`carts` gains** `member_id text null`, `member_rev int default 0`, and `demo_date date null` (null means real today; §3.8).
 - **`receipts` gains** `member_id text null`.
 - **Flag:** a `feature_flags` row `member_memory`, seeded **false**. It uses the existing per-cart `set_feature`.

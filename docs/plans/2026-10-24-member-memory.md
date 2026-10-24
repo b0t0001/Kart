@@ -62,7 +62,7 @@
   - **Tables:**
     - `members(member_id text pk, name text, household int, created_at timestamptz default now())`
     - `member_purchases(id bigserial pk, member_id text not null references members on delete cascade, product_id text not null, qty int not null, price numeric(10,2) not null, bought_at timestamptz not null, trip_id uuid, source text check in ('seed','checkout'))`
-    - `member_memories(id bigserial pk, member_id text not null references members on delete cascade, kind text check in ('event','preference','note'), text text not null, event_date date, items jsonb, trip_id uuid, created_at timestamptz default now())`
+    - `member_memories(id bigserial pk, member_id text not null references members on delete cascade, kind text check in ('event','reminder','preference','note'), text text not null, event_date date, items jsonb, trip_id uuid, created_at timestamptz default now())`
   - **Columns** added with `add column if not exists`:
     - `carts.member_id text references members(member_id) on delete set null`
     - `carts.member_rev int not null default 0`
@@ -125,7 +125,7 @@
   - `every_days` = the median gap between its dates, rounded (null if `times < 2`).
 - **Taken:** a product on the cart's `items` or `plan` (when `p_cart_id` is given). Picks skip taken products, anything not `in_stock` in `product_catalog`, and anything with a live deal.
 - **Candidates by kind:**
-  - **event:** memories of kind `event` with `event_date` in `[today, today+14]` and saved items, nearest date first. The candidate is each saved item in order. Each pick carries `memory_id`.
+  - **event:** memories of kind `event` with `event_date` in `[today, today+14]`, plus memories of kind `reminder` with `event_date - today` in `[-3, 1]`. They need saved items and go nearest date first. The candidate is each saved item in order, and each pick carries `memory_id`. A reminder's reason is `"{label} · reminder"`.
   - **due:** `times >= 3` and `today - last >= 0.85 * every_days`, ordered by `(today-last)/every_days` descending.
   - **usual:** today's weekday has `>= 2` member trips, and the product was bought on `>= 60%` of them. Ordered by share, then `times`.
 - **Selection:**
@@ -176,13 +176,13 @@
 **Interfaces:**
 - Produces:
   - `member_remember(p_member_id text, p_kind text, p_text text, p_event_date date default null, p_trip_id uuid default null) returns jsonb`
-    - **Row kinds** `event`, `preference` and `note` return `{id, kind, text, event_date}`.
+    - **Row kinds** `event`, `reminder`, `preference` and `note` return `{id, kind, text, event_date}`. A `reminder` needs `p_event_date`.
     - **`name`** sets `members.name` (trimmed, ≤ 40 chars). **`household`** expects digits and sets `members.household`. Both return `{kind, text}`.
     - **Errors:** an unknown kind raises `bad kind`; an empty text raises; an unknown member raises `unknown member`.
   - `member_save_for_later(p_member_id text, p_memory_id bigint, p_items jsonb) returns jsonb`
     - Items are `[{product_id, qty}]` and merge into `items` by `product_id` (the new qty wins).
     - It returns the memory in profile shape, with items carrying `short_name`.
-    - **Errors:** `unknown product: %`, `not your memory` (wrong member), `not an event`.
+    - **Errors:** `unknown product: %`, `not your memory` (wrong member), `not an event` (the kind must be `event` or `reminder`).
   - `member_forget(p_member_id text, p_memory_id bigint default null) returns jsonb`
     - With an id it deletes that memory and returns `{"forgotten": 1}` (0 if it wasn't found).
     - With null it deletes the member row (which cascades) and returns `{"forgotten": "all"}`.
@@ -266,6 +266,8 @@
   - `test_lookup_known_unknown_never_creates`
   - `test_sensitive_lines_not_stored` (temporarily set a product's category to `pharmacy` in the test, then check out → no purchase row for it)
   - `test_undated_event_expires_after_30_days`
+  - `test_reminder_picks_only_near_its_date` (−4 → no pick, −3..+1 → pick with reason `"… · reminder"`, +2 → none)
+  - `test_reminder_requires_date`
   - `test_seed_prints_party_date` (capsys)
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement.**
@@ -299,7 +301,7 @@ Merge `main` into the branch first. `agent.py`, `brain.py` and the tests change 
 - Produces, in `memory.py`:
   - **`MEMBER_TOOLS: list[dict]`**, built with `tools._tool`, eager streaming:
     - `shop_saved_list(memory_id: int)`: "Put a saved event list on today's shopping list, keeping what's already on it." It reads the memory's items from `ctx["profile"]` and appends the ones not already on the plan, with reason = the memory's title, through **one** `set_plan` (reuse `tools._dispatch("set_plan", …)` so the stock caps and notes apply).
-    - `remember(kind: enum[event, preference, note, name, household], text: str, date?: str YYYY-MM-DD)`: "Save something worth knowing on future trips: a coming event (with its date), a lasting preference, their name, how many people are in the household. Not small talk."
+    - `remember(kind: enum[event, reminder, preference, note, name, household], text: str, date?: str YYYY-MM-DD)`: "Save something worth knowing on future trips: a coming event (with its date), a lasting preference, their name, how many people are in the household. Not small talk."
     - `save_for_later(memory_id: int, items: [{product_id, qty}])`: "Put store products on a saved list for a coming event, not on today's list."
     - `forget(memory_id: int)`: "Forget one memory the shopper asked you to forget."
   - **`MEMBER_TOOL_NAMES = {"remember", "save_for_later", "forget", "shop_saved_list"}`**
@@ -419,10 +421,15 @@ Merge `main` into the branch first. `agent.py`, `brain.py` and the tests change 
 - **New fixed lines in `memory.py`:**
   - `FORGOTTEN_LINE = "Done. I've forgotten everything about you."`
   - `still_there_line(profile) -> str`: `"Still shopping, {name}?"`, or `"Still shopping?"` with no name.
+- **New tool in `MEMBER_TOOLS`:** `sign_out()`, "The shopper says they aren't this member, or wants to sign out." It calls `set_member(p_cart_id, null)`, sets `ctx["signed_out"] = True`, and the agent then drops the member exactly as for `member_forgotten`, but silently: Claude's own reply carries the apology.
 - **New tool in `MEMBER_TOOLS`:** `show_memories()`, "The shopper asked what you know or remember about them: open the memory screen." It sets `ctx["show_memories"] = True`. After the turn, the agent yields `AgentSendCustom(metadata={"type": "show_memories"})`.
 - **Added to `MEMBER_RULES`:**
   - for "what do you know about me", call `show_memories` and say one short sentence naming at most three things;
-  - never save health, pregnancy, religion, sexuality, finances or details about children beyond the plan; save the event, not the reason.
+  - never save health, pregnancy, religion, sexuality, finances or details about children beyond the plan; save the event, not the reason;
+  - "that's not me" right after the greeting → `sign_out`, then: "Sorry about that, you're shopping as a guest now. What are we getting?";
+  - "don't remember that" → `forget` the memory you just saved (its id came back from `remember`), and say so;
+  - "what did I buy last time?" → answer briefly from the last trip, with items but no prices unless asked; never volunteer history;
+  - "remind me about X next week" → `remember(kind="reminder", date=…)`, then `save_for_later` for the product if the store has it. Reminders come up near their date, so don't repeat them before then.
 - **iPad→agent events:**
   - **`{"type": "member_forgotten"}`:** `run_filter` returns True when a member is signed in. `process` clears `member_id`, `_profile` and `_question`, calls `brain.set_member(None)`, and says `FORGOTTEN_LINE` with `interruptible=False`.
   - **`{"type": "member_idle"}`:** `run_filter` returns True for a member while Kart isn't speaking. `process` says `still_there_line(profile)`.
@@ -436,6 +443,9 @@ Merge `main` into the branch first. `agent.py`, `brain.py` and the tests change 
   - `test_same_trip_context_same_member_reloads_profile`
   - `test_member_idle_line`
   - `test_show_memories_sends_custom_event`
+  - `test_sign_out_tool_clears_member_and_tools` (the RPC `set_member` gets `p_member_id=None`; the next request has no member section)
+  - `test_dont_remember_that_forgets_saved_id` (scripted: `remember` returns id 41 → Claude's next tool call `forget(41)` → `member_forget` called with `p_memory_id=41`)
+  - `test_member_section_lists_due_reminders_only` (a reminder 6 days away isn't listed as due; at 1 day it is)
   - contract cases for `member_forgotten`, `member_idle` and `show_memories`
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement.**
