@@ -78,7 +78,7 @@
     },
     {
       "id": "A9",
-      "name": "Aisle 9 · Household",
+      "name": "Aisle 9 · Household & School",
       "x": 18,
       "y": 1,
       "w": 1,
@@ -115,7 +115,8 @@
     "whole-milk": "A2",
     "large-eggs": "A2",
     "kirkland-paper-towels": "A9",
-    "kirkland-batteries": "A9"
+    "kirkland-batteries": "A9",
+    "kids-scissors": "A9"
   },
   "prices": {}
 }

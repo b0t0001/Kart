@@ -62,3 +62,15 @@ def test_dessert_and_not_sold_here(conn):
     assert conn.execute("select count(*) from products where name ilike '%olive%' or name ilike '%oil%'").fetchone()[0] == 0
     nearby = conn.execute("select nearby from store_info").fetchone()[0]
     assert {n["name"] for n in nearby if "oil" in n["good_for"]} == {"Trader Joe's", "Safeway", "Berkeley Bowl"}
+
+
+def test_kids_scissors_in_the_far_aisle(conn):
+    row = conn.execute("select short_name, section, section_name, price::float from product_catalog "
+                       "where id = 'kids-scissors'").fetchone()
+    assert row == ("Kids' Scissors", "A9", "Aisle 9 · Household & School", 2.79)
+
+
+def test_judging_stock_counts(conn):
+    counts = kartdb.set_stock_counts(conn)
+    assert counts == {"barilla-spaghetti": 1, "rao-marinara": 1, "kirkland-parmesan": 1, "kids-scissors": 1}
+    assert dict(conn.execute("select id, stock from products where id = any(%s)", [list(counts)]).fetchall()) == counts

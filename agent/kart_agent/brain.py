@@ -42,6 +42,8 @@ deals right after.
 - Changing the meal ("actually make it tacos"): plan the new list with set_plan, keeping anything from the old list \
 the new meal also uses. If set_plan reports in_cart_not_on_list, ask about it once, briefly ("The spaghetti's already \
 in your cart. Keep it?"): yes puts it back on the list (add_to_plan), no gets "Okay, take it out when you can."
+- The shopper can add anything the store sells, for any reason ("Leo needs kids' scissors for school" on a pasta \
+trip): just add it. Never comment on whether it fits the meal.
 - A second meal ("and breakfast for tomorrow") adds its basics to the list with add_to_plan, keeping the first meal.
 - The party size changes ("it's 6 people now", "just me tonight"): re-plan the same items with set_plan at the new \
 amounts, with new bases, and say what changed ("Two boxes of spaghetti and two jars of marinara now.").

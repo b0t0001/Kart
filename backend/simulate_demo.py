@@ -5,6 +5,8 @@
   python backend/simulate_demo.py --via db --db-url postgresql://postgres@localhost:54329/kart_dev
 
 REST mode uses the anon key, exactly like the Pi and the iPad, so it also checks permissions.
+It drives cart 7 and ends in checkout (which takes items off stock), so it refuses a non-local
+database unless --allow-hosted is given (go_live.sh does, then restores stock).
 """
 
 from __future__ import annotations
@@ -96,9 +98,16 @@ def main() -> None:
     ap.add_argument("--db-url")
     ap.add_argument("--cart", default=None, help="default: CART_ID from .env, else 7")
     ap.add_argument("--delay", type=float, default=0.0)
+    ap.add_argument("--allow-hosted", action="store_true",
+                    help="run against a non-local database (its checkout drains shared stock)")
     args = ap.parse_args()
 
     kartdb.load_env()
+    target = (os.environ.get("SUPABASE_URL", "") if args.via != "db" and not args.db_url
+              else (args.db_url or os.environ.get("SUPABASE_DB_URL", "")))
+    if not any(h in target for h in ("127.0.0.1", "localhost")) and not args.allow_hosted:
+        raise SystemExit("simulate_demo refuses a non-local database: it checks out cart 7, which drains "
+                         "shared stock. Use the local stack, or pass --allow-hosted (operator only).")
     cart = args.cart or os.environ.get("CART_ID", "7")
     use_rest = args.via == "rest" or (args.via == "auto" and os.environ.get("SUPABASE_URL") and not args.db_url)
     if use_rest:

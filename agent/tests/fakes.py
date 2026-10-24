@@ -33,6 +33,10 @@ CATALOG.append({"id": "avocados", "name": "Hass Avocados, 5 ct bag", "short_name
                 "sale_price": 5.99, "deal_label": None, "aisle": "Aisle 1", "section": "A1", "in_stock": True, "stock": 28,
                 "category": "produce", "tags": ["tacos", "mexican"]})
 
+CATALOG.append({"id": "kids-scissors", "name": "Kids' Scissors, 5 in blunt tip", "short_name": "Kids' Scissors",
+                "price": 2.49, "sale_price": 2.49, "deal_label": None, "aisle": "Aisle 9", "section": "A9", "in_stock": True,
+                "stock": 12, "category": "school", "tags": ["school"]})
+
 NEARBY = [{"name": "Berkeley Bowl", "distance": 1.5, "kind": "grocery", "good_for": ["produce", "fresh herbs"]},
           {"name": "Walgreens", "distance": 0.4, "kind": "pharmacy", "good_for": ["household", "snacks"]}]
 
@@ -92,6 +96,9 @@ class FakeBackend:
             self.cart["plan"] = [p for p in self.cart["plan"] if p["product_id"] != params["p_product_id"]]
         if name == "set_budget":
             self.cart["budget"] = params["p_amount"]
+        if name in ("set_plan", "add_to_plan", "remove_from_plan"):   # the backend orders the list by walking route
+            aisles = {p["id"]: int("".join(ch for ch in p.get("aisle") or "" if ch.isdigit()) or 0) for p in self.catalog}
+            self.cart["plan"].sort(key=lambda p: aisles.get(p["product_id"], 0))
         if name in ("set_plan", "add_to_plan", "remove_from_plan", "set_budget"):
             prices = {p["id"]: p["sale_price"] for p in self.catalog}
             have = {i["product_id"]: i.get("qty", 1) for i in self.cart["items"]}

@@ -7,7 +7,7 @@ import re
 import uuid
 from typing import Any
 
-from .lines import _amount, _unit_of, _words
+from .lines import _amount, _unit_of, _words, plural
 
 
 def _tool(name: str, description: str, properties: dict[str, Any] | None = None, required: list[str] | None = None) -> dict[str, Any]:
@@ -171,7 +171,8 @@ def _readback(kind: str, product: dict[str, Any], qty: int, old: dict[str, Any] 
     if kind == "already":
         return f"{_cap(_name(product))}'s already on your list."
     if kind == "removed":
-        return f"Took {_name(product)} off your list." + (" It's still in your cart." if in_cart else "")
+        still = " They're still in your cart." if plural(product) else " It's still in your cart."
+        return f"Took {_name(product)} off your list." + (still if in_cart else "")
     return f"{_cap(_name(product))} wasn't on your list."
 
 
@@ -198,6 +199,24 @@ def _budget_view(cart: dict[str, Any]) -> dict[str, Any]:
     view: dict[str, Any] = {"budget": cart["budget"], "estimate": estimate, "fits": estimate <= budget}
     view.update({"left": round(budget - estimate, 2)} if estimate <= budget else {"over_by": round(estimate - budget, 2)})
     return view
+
+
+def _last_stop(kind: str, product: dict[str, Any], cart: dict[str, Any], catalog: dict[str, dict[str, Any]]) -> str:
+    """ " That's across the store, so we'll grab them last." when the new item is the route's last stop, three or more
+    aisles past the stop before it (kids' scissors in Aisle 9 on a pasta trip)."""
+    if kind not in ("added", "swapped"):
+        return ""
+    stops = [line for line in cart.get("plan", []) if not line.get("done")]
+    if len(stops) < 2 or stops[-1].get("product_id") != product["id"]:
+        return ""
+    def number(line: dict[str, Any]) -> int | None:
+        label = line.get("aisle") or (catalog.get(line.get("product_id")) or {}).get("aisle") or ""
+        digits = re.search(r"(\d+)", label)
+        return int(digits.group(1)) if digits else None
+    here, before = number({"aisle": product.get("aisle")}), number(stops[-2])
+    if here is None or before is None or here - before < 3:  # only a real trek: three aisles or more past the last stop
+        return ""
+    return f" That's across the store, so we'll grab {'them' if plural(product) else 'it'} last."
 
 
 def _budget_note(before: dict[str, Any], after: dict[str, Any]) -> str:
@@ -256,7 +275,8 @@ async def _edit_plan(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> di
                                   p_basis=basis, p_meal=None)
     result: dict[str, Any] = {"planned": [product_id] if kind not in ("removed", "absent") else [], "not_in_store": [],
                               "out_of_stock": [], "next_step": after.get("next_step"),
-                              "readback": _readback(kind, product, target, old, in_cart) + _budget_note(cart, after)}
+                              "readback": _readback(kind, product, target, old, in_cart) + _last_stop(kind, product, after, catalog)
+                              + _budget_note(cart, after)}
     if kind == "added":                                      # several adds at once are read back as one line
         result["edit"] = {"kind": "added", "what": _added(target, product), "aisle": product.get("aisle"),
                           "budget_note": _budget_note(cart, after)}

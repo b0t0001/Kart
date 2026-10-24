@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "store": { "name": "Kart Demo Warehouse", "width": 20, "height": 12 },
   "entrance": { "x": 0, "y": 6 },
   "nearby": [
@@ -17,7 +17,7 @@
     { "id": "A6", "name": "Aisle 6 · Pasta & Sauce",    "x": 12, "y": 1,  "w": 1, "h": 8 },
     { "id": "A7", "name": "Aisle 7 · Snacks & Chips",   "x": 14, "y": 1,  "w": 1, "h": 8 },
     { "id": "A8", "name": "Aisle 8 · Bakery & Tortillas", "x": 16, "y": 1,  "w": 1, "h": 8 },
-    { "id": "A9", "name": "Aisle 9 · Household",        "x": 18, "y": 1,  "w": 1, "h": 8 },
+    { "id": "A9", "name": "Aisle 9 · Household & School", "x": 18, "y": 1,  "w": 1, "h": 8 },
     { "id": "CK", "name": "Checkout",                   "x": 6,  "y": 10, "w": 8, "h": 1 }
   ],
   "products": [
@@ -262,6 +262,17 @@
       "tags": ["household"],
       "stock": 20,
       "vision_hint": "clear plastic box or blister pack of silver AA batteries, red and black Kirkland Signature label"
+    },
+    {
+      "id": "kids-scissors",
+      "name": "up&up 6\" Kids' Scissors, Pointed Tip",
+      "short_name": "Kids' Scissors",
+      "price": 2.79,
+      "section": "A9",
+      "category": "school-supplies",
+      "tags": ["school", "kids", "office"],
+      "stock": 20,
+      "vision_hint": "small pair of children's scissors with colorful plastic finger-loop handles and short stainless pointed blades, in or out of blister packaging"
     }
   ],
   "deals": [

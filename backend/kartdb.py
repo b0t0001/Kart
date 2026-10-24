@@ -105,6 +105,17 @@ def sync_catalog(conn: psycopg.Connection, store_path: Path = STORE_JSON, with_s
 
 
 LAYOUTS = REPO / "data" / "layouts"
+JUDGING_STOCK = REPO / "data" / "judging_stock.json"
+
+
+def set_stock_counts(conn: psycopg.Connection, path: Path = JUDGING_STOCK) -> dict:
+    """Set stock for the products in a {product_id: count} file (keys starting with "_" are notes)."""
+    counts = {k: int(v) for k, v in json.loads(path.read_text()).items() if not k.startswith("_")}
+    with conn.transaction():
+        for pid, n in counts.items():
+            if conn.execute("update products set stock = %s where id = %s", [n, pid]).rowcount != 1:
+                raise SystemExit(f"{path.name}: no product {pid!r}")
+    return counts
 
 
 def apply_layout(conn: psycopg.Connection, name: str, request: str = "db.py layout") -> dict:

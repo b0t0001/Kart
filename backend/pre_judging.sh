@@ -8,7 +8,9 @@
 #   1. db.py sync-catalog --with-stock: store.json's names, prices, deals AND stock (= counts bought).
 #   2. db.py reset-demo: re-seeds the catalog (stock included, so step 1 is belt and braces), clears
 #      the merchant change log, and resets cart 7 to idle (iPad on Welcome; the Pi clears its memory).
-#   3. members.py seed, only with --members.
+#   3. db.py judging-stock: stock = the props actually bought (data/judging_stock.json, 1 each). A paid
+#      trip sells them out, so run this script before EACH judge group.
+#   4. members.py seed, only with --members.
 # It affects EVERY team on the database in .env, so run it once, right before judging.
 set -euo pipefail
 
@@ -34,11 +36,12 @@ if [ "$YES" != 1 ]; then
   [ "$answer" = "judging" ] || { echo "Cancelled."; exit 1; }
 fi
 
-echo "── 1/3 sync-catalog --with-stock";  "$PY" "$BACKEND/db.py" sync-catalog --with-stock
-echo "── 2/3 reset-demo";                  "$PY" "$BACKEND/db.py" reset-demo | head -2
+echo "── 1/4 sync-catalog --with-stock";  "$PY" "$BACKEND/db.py" sync-catalog --with-stock
+echo "── 2/4 reset-demo";                  "$PY" "$BACKEND/db.py" reset-demo | head -2
+echo "── 3/4 judging stock (props bought)"; "$PY" "$BACKEND/db.py" judging-stock
 if [ "$MEMBERS" = 1 ]; then
-  echo "── 3/3 members.py seed";           "$PY" "$BACKEND/members.py" seed
+  echo "── 4/4 members.py seed";           "$PY" "$BACKEND/members.py" seed
 else
-  echo "── 3/3 member seed skipped (pass --members if the beta ships)"
+  echo "── 4/4 member seed skipped (pass --members if the beta ships)"
 fi
 echo "Ready for judging."

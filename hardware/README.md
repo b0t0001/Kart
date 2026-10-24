@@ -26,9 +26,13 @@ Two cameras, 1280×720 MJPEG at **15 fps** (`"fps": 15` in `pi/config.json`):
 | cam | camera | where | USB port | path |
 |---|---|---|---|---|
 | cam0 | Logitech Brio 101 (`046d:094d`) | middle of the front end, low, looking back down the basket | 1.1 | `/dev/v4l/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.1:1.0-video-index0` |
-| cam1 | Aoozi QS-WB-202PRO (shows up as "USB Webcam gadget", `1d6b:0102`), **very wide-angle** | high at the top-basket end, looking down | 1.2 | `/dev/v4l/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.2:1.0-video-index0` |
+| cam1 | Aoozi QS-WB-202PRO (shows up as "USB Webcam gadget", `1d6b:0102`), **very wide-angle** | high at the top-basket end, looking down | 1.3 | `/dev/v4l/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.3:1.0-video-index0` |
 
 The cam numbers follow the order of `cameras` in `pi/config.json`; the paths follow the USB port, so keep each camera in its port. A second Brio 101 is the spare (unplugged).
+
+**Don't use USB port 1.2:** its socket is loose. The Aoozi disconnected 9 times in an hour there whenever the cart was handled; on port 1.3, with the cable zip-tied a few cm from the Pi (slack loop before the plug), it stopped. Give every camera cable the same strain relief.
+
+**Floor liner:** a black T-shirt covering the whole floor. Keep it still: if it shifts or gets pulled, reset the cart, and redraw the ROIs if its edges moved.
 
 Each camera's blind zone (the floor right next to it) is the other camera's far view, so together they pass the four-corner test (an item in every corner is seen by at least one camera). The Aoozi's fisheye needs no calibration; corner items look ~25 % smaller in it.
 
