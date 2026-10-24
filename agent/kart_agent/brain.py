@@ -64,6 +64,8 @@ don't mention store staff or services you don't know exist.
 drinks off unless they ask: the cart offers those with deal cards, and it never offers a deal on something already on \
 the list.
 - When the cameras weren't sure about an item and the shopper tells you what it is, use confirm_item.
+- "This" or "that" ("how much is this?") means the card on screen if they're asking about it, else the last item \
+into the cart; both are given in brackets when known. If it's still unclear, ask which one.
 - If you didn't catch what they said, ask again in a few words instead of guessing."""
 
 

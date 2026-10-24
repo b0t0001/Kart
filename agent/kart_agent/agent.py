@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from typing import Any, AsyncIterator
 
@@ -15,6 +16,7 @@ from .lines import (DECLINED_LINE, KEEP_LINE, LIST_KEPT, LIST_TOO, NUDGE_OK_LINE
 from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
+_POINTING = re.compile(r"\b(this|that|these|those)\b|\bis it\b", re.IGNORECASE)   # "how much is this?"
 ADD_THEN_DEAL_SECONDS = 3.0                         # a deal this soon after an add says "Got the X." first
 SPEAKING_EVENTS = {"suggestion", "nudge", "deal_changed", "cart_changed", "ui_action"}
 
@@ -64,6 +66,8 @@ class KartAgent:
         self._last_add: tuple[dict[str, Any], float] | None = None   # the latest "added" event, until it's said
         self._undo: list[dict[str, Any]] = []      # earlier lists, newest last: "undo" puts the last one back
         self._list_too: str | None = None         # the product Kart asked "Take it off the list too?" about
+        self._latest_added: str | None = None     # the last product into the cart: what "this" means
+        self._unknown_open = False                # an "Is this...?" card is on screen
         self._offer: dict[str, Any] | None = None   # the deal Kart just asked about, until it's answered
         self._nudge: dict[str, Any] | None = None   # the quantity nudge Kart just said (v0.12 beta)
         self._last_asked: str | None = None         # "offer" or "nudge": a plain answer goes to the latest question
@@ -82,7 +86,7 @@ class KartAgent:
                 self.cart_id = str(meta.get("cart_id") or self.cart_id)
                 if meta.get("trip_id") and meta.get("trip_id") != self.trip_id:   # a new trip starts fresh
                     self._said, self._meal, self._offer, self._nudge = set(), None, None, None
-                    self._undo = []
+                    self._undo, self._latest_added, self._unknown_open = [], None, False
                     self._digest, self._digest_asked = None, set()
                 self.trip_id = meta.get("trip_id") or self.trip_id
                 self._context.set()
@@ -96,6 +100,11 @@ class KartAgent:
                 return False
             if meta.get("type") == "cart_changed" and meta.get("change") == "added":
                 self._last_add = (meta, time.monotonic())   # a paired deal right behind it says "Got the X" first
+                self._latest_added = meta.get("product_id")
+            if meta.get("type") == "ui_action" and meta.get("action") == "unknown_item":
+                self._unknown_open = True
+            if meta.get("type") == "card_response" and str(meta.get("card_id", "")).startswith("confirm"):
+                self._unknown_open = False
             if meta.get("type") == "suggestion":
                 self._offer = meta                       # "Want it?" can now be answered with a plain yes or no
                 self._last_asked = "offer"
@@ -207,6 +216,8 @@ class KartAgent:
             if self._offer:                              # more than a yes/no: Claude still needs to know what was asked
                 heard = f'(Kart just asked: "{self._offer.get("text", "")}") {text}'
                 self._offer = None
+            elif _POINTING.search(text) and (seen := await self._what_this_is()):
+                heard = f"({seen}) {text}"
             async for out in self._say(self._caption_first(text, self.brain.respond(heard, ctx)), interruptible=self.barge_in):
                 yield out
             self._meal = ctx.get("meal") or self._meal
@@ -358,6 +369,23 @@ class KartAgent:
             await self.backend.rpc("append_transcript", p_cart_id=self.cart_id, p_role=role, p_text=text)
         except Exception:
             pass                                          # captions must never break the conversation
+
+    async def _what_this_is(self) -> str:
+        """What "this" or "that" can mean right now: the card on screen, and the last item into the cart."""
+        if self._unknown_open:                           # still open? the item may have come out by itself
+            try:
+                self._unknown_open = bool(await self.backend.unresolved_events(self.cart_id, self.trip_id))
+            except Exception:
+                pass
+        seen = []
+        if self._unknown_open:
+            seen.append('On screen: an "Is this...?" card for an item the cameras couldn\'t identify.')
+        elif self._nudge and self._nudge.get("text"):
+            seen.append(f'On screen: "{self._nudge["text"]}"')
+        product = next((p for p in self._catalog if p["id"] == self._latest_added), None)
+        if product:
+            seen.append(f"The last item into the cart: {product.get('short_name') or product['name']}.")
+        return " ".join(seen)
 
     def _ctx(self) -> dict[str, Any]:
         """What the tools get: the backend, this cart and trip, and the trip's undo history."""

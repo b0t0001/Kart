@@ -479,3 +479,37 @@ async def test_a_new_list_asks_about_its_own_deals_but_never_the_same_deal_twice
     assert cards(outs) == []                                   # the Parmesan was already asked about
     outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="actually make it nachos")]))
     assert cards(outs) == [{"type": "deal_digest", "count": 1}]  # the new list has its own deal (queso)
+
+
+async def test_this_means_the_last_item_into_the_cart():
+    agent, backend = make([Turn(chunks=["The spaghetti is $1.99."])])
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1, "done": True}]
+    backend.cart["items"] = [{"product_id": "barilla-spaghetti", "qty": 1}]
+    await agent._refresh()
+    agent.run_filter(UserCustomSent(metadata={"type": "cart_changed", "change": "added", "product_id": "barilla-spaghetti"}))
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="How much is this?")]))
+    heard = agent.brain.llm.requests[-1]["messages"][-1]["content"]
+    assert heard == "(The last item into the cart: Spaghetti.) How much is this?"
+
+
+async def test_this_means_the_card_on_screen_when_one_is_open():
+    agent, backend = make([Turn(chunks=["It's $3.99 with the deal."])])
+    backend.unresolved = [{"event_id": "e1"}]
+    agent.run_filter(UserCustomSent(metadata={"type": "ui_action", "action": "unknown_item"}))
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="What is that?")]))
+    heard = agent.brain.llm.requests[-1]["messages"][-1]["content"]
+    assert heard.startswith("(On screen: an \"Is this...?\" card for an item the cameras couldn't identify.)")
+
+
+async def test_a_card_that_closed_by_itself_is_not_what_this_means():
+    agent, backend = make([Turn(chunks=["Which one?"])])
+    agent.run_filter(UserCustomSent(metadata={"type": "ui_action", "action": "unknown_item"}))
+    backend.unresolved = []                                    # the item came out of the cart: the card is gone
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="What is that?")]))
+    assert agent.brain.llm.requests[-1]["messages"][-1]["content"] == "What is that?"
+
+
+async def test_a_plain_question_gets_no_extra_context():
+    agent, backend = make([Turn(chunks=["Aisle 5."])])
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="Where is the salsa?")]))
+    assert agent.brain.llm.requests[-1]["messages"][-1]["content"] == "Where is the salsa?"
