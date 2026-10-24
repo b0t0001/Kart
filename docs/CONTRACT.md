@@ -1,4 +1,4 @@
-# KART integration contract — v0.13 (DRAFT)
+# KART integration contract — v0.14 (DRAFT)
 
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
@@ -144,6 +144,31 @@ Writers **only** use these; nobody writes `carts.items` directly.
   - When it's true, Claude's closed-set answer includes `count` (1–6), and one blob holding N identical items emits **N events**, each with its own `event_id`.
   - A blob much bigger than the product's enrolled crops goes to Claude for the count.
   - The event shape is unchanged.
+
+### Member memory (v0.14): BETA, OFF BY DEFAULT, built by the member chat on branch `member-memory`
+
+Spec: `docs/specs/2026-10-24-member-memory-design.md`. Flag: `member_memory`. Rollback tag: `stable-pre-memory`, created by the manager on `main` right before the merge.
+
+**Stability rule:** with the flag off, every RPC below raises `feature_off: member_memory`, and the agent, iPad and backend behave byte-for-byte as before.
+
+- **DB** (`backend/db/07_members.sql`, additive):
+  - Tables `members`, `member_purchases` (filled from paid receipts by a trigger) and `member_memories` (`event` | `preference` | `note`). RLS is on, with **no anon read and no realtime**; access is only through security-definer RPCs.
+  - `carts.member_id`, `carts.member_rev` (bumped on memory writes, so the iPad refetches), `carts.demo_date` (null = real today); `receipts.member_id`.
+  - A `trip_id` change sets `member_id := null`: every trip starts as a guest.
+- **RPCs** (anon-callable, demo-grade, no auth):
+  - `set_member(p_cart_id, p_member_id)`
+  - `set_demo_date(p_cart_id, p_date)`
+  - `member_profile(p_member_id, p_cart_id?, p_today?) → {member, today, weekday, picks[≤3 with reason], usuals, memories, last_trip}`
+  - `member_remember(...)`
+  - `member_save_for_later(...)`
+  - `member_forget(p_member_id, p_memory_id?)`: null forgets everything.
+- **Seed (CLI):** `backend/members.py seed --member 1029 --name Dylan` rebuilds only that member: ten weeks of history relative to today, plus Leo's soccer party. Run it right before judging.
+- **Agent:**
+  - `trip_context.member_id` (additive). When it's present, Kart fetches the profile before greeting ("Welcome back, Dylan!").
+  - The tools `remember` / `save_for_later` / `forget` are offered only to signed-in members.
+  - A new iPad→agent event `{"type":"lull"}` asks Kart's one question for the trip.
+- **iPad:** reads `member_id`, `member_rev`, `demo_date` and `features.member_memory`. The member UI is shown only when the flag is on.
+- **Privacy** (Visa trust): demo IDs only, guest by default, sign-in lasts one trip, a "What Kart remembers" sheet with a one-tap Forget per memory, and **Forget me** (touch-only, with a confirmation).
 
 ### Shared hosted project rules (v0.11)
 
@@ -308,3 +333,4 @@ All three feature chats work in the **same main checkout**, so stay inside your 
 - v0.11 — Hosted is live (`go_live.sh` PASS). Shared hosted rules: only the demo operator runs `reset-demo`, and tests and rehearsals use throwaway carts. The merchant agent passed its real-Claude smoke test (`merchant/smoke.py`).
 - v0.12 — Quantity nudges (beta, behind the `quantity_nudges` flag, off by default): `carts.nudge`, `plan[].basis`, `dismiss_nudge`, `set_feature`, `carts.features`; CV `claude_count` (off by default). The stable rollback point is tag `stable-pre-nudges`.
 - v0.13 — short_name becomes a natural spoken name (≤ 16 chars). Quantity nudges pass the on-device voice test (beta, still off by default); a combined checkout nudge is in progress.
+- v0.14 — Member memory (beta, flag `member_memory`, off by default) recorded from the member chat's proposal. It's built on branch `member-memory` and merged by the manager.
