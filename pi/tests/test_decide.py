@@ -84,7 +84,7 @@ def test_gain_matching_runs_once_per_camera_not_per_blob(tmp_path, monkeypatch):
     w = world(tmp_path)
     calls = []
     real = dm.match_gain
-    monkeypatch.setattr(dm, "match_gain", lambda img, tgt: calls.append(1) or real(img, tgt))
+    monkeypatch.setattr(dm, "match_gain", lambda *a: calls.append(1) or real(*a))
     items = [RED, BLUE, Item("green-bag", 80, 60, seed=3)]
     decide(settle(Scene(), Scene(items=items), w.cfg), w.empties, w.cart, w.identifier, w.features, w.cfg)
     assert len(calls) <= 2 * 2  # (current, reference) once per camera, however many blobs

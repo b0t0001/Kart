@@ -191,3 +191,32 @@ def test_empty_picture_refreshes_while_cart_is_empty(tmp_path):  # review I2
     assert run(p, sc, n) == []
     after = p.empties[0].astype(float).mean(axis=(0, 1))
     assert abs(after[2] - before[2]) > 5  # the red channel moved with the new light
+
+
+def make_roi(tmp_path):
+    from kartcv.synth import mat_roi
+    p, sink = make(tmp_path)
+    p.cfg.roi = {"0": mat_roi(0), "1": mat_roi(1)}
+    p.apply_roi()
+    return p, sink
+
+
+def test_rolling_cart_bills_nothing_and_never_realigns(tmp_path):  # real-cart bug
+    p, _ = make_roi(tmp_path)
+    sc = Script(Scene()).still(1.0).drop(RED)
+    for dx in (15, 40, 70, 110):  # the room slides past the mesh while the cart is pushed
+        sc.set(room_shift=(dx, dx // 3))
+    sc.take("red-box")
+    assert run(p, sc) == [("added", "red-box"), ("removed", "red-box")] and len(p.cart.instances) == 0
+
+
+def test_big_camera_shift_is_disturbed_and_never_realigns_memory(tmp_path):  # request (b)
+    p, _ = make(tmp_path)
+    sc = Script(Scene()).still(1.0).drop(RED)
+    run(p, sc)
+    boxes = {c: v.box for c, v in next(iter(p.cart.instances.values())).views.items()}
+    n = len(sc.ticks)
+    sc.set(shift={0: (60, 30)})
+    assert run(p, sc, n) == []
+    assert {c: v.box for c, v in next(iter(p.cart.instances.values())).views.items()} == boxes
+    assert 0 in p.status()["camera_moved"]

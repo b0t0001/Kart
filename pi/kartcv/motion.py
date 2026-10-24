@@ -4,6 +4,8 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from kartcv.roi import polygon_mask
+
 _EPS = 1e-6  # tick timestamps are floats; 2.3 - 1.3 must count as a full second
 
 
@@ -14,8 +16,10 @@ class MotionDetector:
     the same brightness, and a grayscale diff would not see the hand at all.
     """
 
-    def __init__(self, size: tuple[int, int] = (320, 180), thresh: int = 25, frac: float = 0.005):
+    def __init__(self, size: tuple[int, int] = (320, 180), thresh: int = 25, frac: float = 0.005, roi=None):
         self.size, self.thresh, self.frac = tuple(size), thresh, frac
+        self._mask = polygon_mask(roi, self.size)  # only the basket floor counts: rolling past the room isn't motion
+        self._area = int(self._mask.sum()) if self._mask is not None else self.size[0] * self.size[1]
         self._prev: np.ndarray | None = None
 
     def update(self, image: np.ndarray) -> bool:
@@ -23,7 +27,10 @@ class MotionDetector:
         prev, self._prev = self._prev, small
         if prev is None:
             return False
-        return float((cv2.absdiff(small, prev).max(axis=2) > self.thresh).mean()) > self.frac
+        moved = cv2.absdiff(small, prev).max(axis=2) > self.thresh
+        if self._mask is not None:
+            moved &= self._mask.astype(bool)
+        return int(moved.sum()) / max(1, self._area) > self.frac
 
     def reset(self) -> None:
         self._prev = None

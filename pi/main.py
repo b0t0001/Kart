@@ -110,7 +110,7 @@ def start_extras(cfg, env, pipeline) -> list:
     extras = []
     try:
         server = ControlServer(cfg.server_port, pipeline.status, pipeline.request_reset,
-                               frames_fn=pipeline.latest_frames, debug_view=cfg.debug_view,
+                               frames_fn=lambda: pipeline.latest_frames(overlay=True), debug_view=cfg.debug_view,
                                crops_dir=pipeline.crops_dir)
         server.start()
         extras.append(server)

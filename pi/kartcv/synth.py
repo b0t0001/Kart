@@ -75,7 +75,14 @@ def _make_mat() -> np.ndarray:
 
 
 def _make_background() -> np.ndarray:
+    """What the cameras see beyond the basket floor: the cart's mesh (grid) and the room through it."""
     bg = np.full((CAM_SIZE[1], CAM_SIZE[0], 3), WALL_BGR, np.uint8)
+    rng = np.random.default_rng(3)
+    for _ in range(60):  # the room through the mesh: shelves, signs, people (colorful, seeded, non-repeating)
+        x, y = int(rng.integers(0, CAM_SIZE[0])), int(rng.integers(0, CAM_SIZE[1]))
+        w, h = int(rng.integers(30, 180)), int(rng.integers(30, 180))
+        color = tuple(int(v) for v in rng.integers(0, 256, 3))
+        cv2.rectangle(bg, (x, y), (x + w, y + h), color, -1)
     bg[:, ::40] = GRID_BGR
     bg[:, 1::40] = GRID_BGR
     bg[::40, :] = GRID_BGR
@@ -113,13 +120,14 @@ def _topdown(items: tuple[Item, ...], hand: tuple[int, int] | None) -> np.ndarra
     return mat
 
 
-def _warped(cam: int, items: tuple[Item, ...], hand: tuple[int, int] | None, arm: bool = True) -> np.ndarray:
-    key = (cam, items, hand, arm)
+def _warped(cam: int, items: tuple[Item, ...], hand: tuple[int, int] | None, arm: bool = True,
+            room_shift: tuple[int, int] = (0, 0)) -> np.ndarray:
+    key = (cam, items, hand, arm, room_shift)
     if key in _CACHE:
         _CACHE.move_to_end(key)
         return _CACHE[key]
     view = cv2.warpPerspective(_topdown(items, hand), _H[cam], CAM_SIZE, flags=cv2.INTER_LINEAR)
-    out = _BG.copy()
+    out = np.roll(_BG, (room_shift[1], room_shift[0]), axis=(0, 1)) if room_shift != (0, 0) else _BG.copy()
     out[_MASK[cam]] = view[_MASK[cam]]
     if hand is not None and arm:
         u, v = project(cam, hand)
@@ -141,6 +149,7 @@ class Scene:
     hidden: dict[int, set[str]] = field(default_factory=dict)        # items a camera can't see
     arm: bool = True                                                 # draw a sleeve from the hand to the frame edge
     edge_object: bool = False                                        # something static over the rim (a strap)
+    room_shift: tuple[int, int] = (0, 0)                             # the room behind the mesh slides (cart rolling)
 
     def copy(self) -> Scene:
         return copy.deepcopy(self)
@@ -149,7 +158,7 @@ class Scene:
         hidden = self.hidden.get(cam, set())
         items = tuple(it for it in self.items if it.item_id not in hidden)
         hand = tuple(int(v) for v in self.hand) if self.hand is not None else None
-        img = _warped(cam, items, hand, self.arm)
+        img = _warped(cam, items, hand, self.arm, tuple(self.room_shift))
         if self.edge_object:
             img = img.copy()
             u, v = project(cam, (MAT_SIZE[0] - 60, MAT_SIZE[1] - 60))
@@ -173,6 +182,14 @@ class Scene:
 
         noise = _NOISE[cam][noise_seed % len(_NOISE[cam])]
         return np.clip(img.astype(np.int16) + noise, 0, 255).astype(np.uint8)
+
+
+def mat_roi(cam: int, inset: float = 0.01) -> list[list[float]]:
+    """The basket floor as camera `cam` sees it, as a normalized polygon (the config's "roi" shape)."""
+    q = _QUADS[cam]
+    c = q.mean(axis=0)
+    q = c + (q - c) * (1.0 - inset)
+    return [[round(float(x) / CAM_SIZE[0], 4), round(float(y) / CAM_SIZE[1], 4)] for x, y in q]
 
 
 def project(cam: int, xy: tuple[float, float]) -> tuple[int, int]:

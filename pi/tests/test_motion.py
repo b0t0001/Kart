@@ -32,3 +32,11 @@ def test_missing_camera_does_not_block():
     st = SettleTracker(1.0)
     st.update(0.0, {0: True})
     assert st.update(1.0, {0: False}) is True
+
+
+def test_motion_outside_the_floor_roi_is_ignored():
+    from kartcv.synth import mat_roi
+    md = MotionDetector(roi=mat_roi(0))
+    md.update(Scene().render(0, 1))
+    assert md.update(Scene(room_shift=(40, 25)).render(0, 2)) is False
+    assert md.update(Scene(room_shift=(40, 25), hand=(400, 250)).render(0, 3)) is True

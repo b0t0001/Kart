@@ -15,6 +15,7 @@ import numpy as np
 
 from kartcv.cart import CartMemory, Instance, View
 from kartcv.changes import Blob, ChangeResult, lab_distance, match_gain
+from kartcv.roi import polygon_mask
 
 log = logging.getLogger(__name__)
 
@@ -58,19 +59,28 @@ def _crop(img: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
     return img[y:y + h, x:x + w]
 
 
-def gain_matched(result: ChangeResult, empty: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """(current, reference) brightness-matched to the empty picture. Full-frame work: once per camera."""
-    return match_gain(result.frame, empty), match_gain(result.reference, empty)
+def gain_matched(result: ChangeResult, empty: np.ndarray, roi=None):
+    """(current, reference, floor mask) brightness-matched to the empty picture, using floor pixels only.
+    Full-frame work: once per camera."""
+    m = polygon_mask(roi, (empty.shape[1], empty.shape[0]))
+    return match_gain(result.frame, empty, m), match_gain(result.reference, empty, m), m
+
+
+def _mean(d: np.ndarray, m: np.ndarray | None) -> float:
+    if m is not None and m.any():
+        return float(d[m.astype(bool)].mean())
+    return float(d.mean())
 
 
 def classify_blob(blob: Blob, result: ChangeResult, empty: np.ndarray, cart: CartMemory, features, cfg,
-                  matched: tuple[np.ndarray, np.ndarray] | None = None) -> str | None:
-    cur, ref = matched if matched is not None else gain_matched(result, empty)
+                  matched: tuple | None = None) -> str | None:
+    cur, ref, m = matched if matched is not None else gain_matched(result, empty, cfg.roi.get(str(blob.cam)))
     empty_crop = _crop(empty, blob.box)
     after = _crop(cur, blob.box)
     before = _crop(ref, blob.box)
-    after_empty = float(lab_distance(after, empty_crop).mean()) < cfg.empty_thresh
-    before_empty = float(lab_distance(before, empty_crop).mean()) < cfg.empty_thresh
+    mc = _crop(m, blob.box) if m is not None else None  # judge the floor only, not the room behind it
+    after_empty = _mean(lab_distance(after, empty_crop), mc) < cfg.empty_thresh
+    before_empty = _mean(lab_distance(before, empty_crop), mc) < cfg.empty_thresh
     if after_empty and before_empty:
         return None
     if after_empty:
@@ -233,7 +243,7 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
             # Without an empty-basket picture a removal looks like an addition; let the other camera decide.
             log.warning("cam%d has no empty-basket picture yet; ignoring its changes (reset with the cart empty)", r.cam)
             continue
-        matched = gain_matched(r, empty)
+        matched = gain_matched(r, empty, cfg.roi.get(str(r.cam)))
         for b in r.blobs:
             kind = classify_blob(b, r, empty, cart, features, cfg, matched)
             if kind == "added":

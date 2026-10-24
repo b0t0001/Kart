@@ -15,10 +15,11 @@ import cv2
 import numpy as np
 
 from kartcv.cart import CartMemory
-from kartcv.changes import detect_changes, touches_edge, translate
+from kartcv.changes import detect_changes
 from kartcv.decide import Decision, apply_decision, decide
 from kartcv.events import Event
 from kartcv.motion import MotionDetector, SettleTracker
+from kartcv.roi import draw_outline
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ class Pipeline:
                 if img is not None:
                     self.empties[c] = img
         self.references: dict[int, np.ndarray] = {}
-        self.motion = {c: MotionDetector(cfg.motion_size, cfg.motion_thresh, cfg.motion_frac) for c in self.cams}
+        self.apply_roi()
         self.settle = SettleTracker(cfg.settle_s)
         self.last_decisions: list[Decision] = []
         self._reset_requested = threading.Event()
@@ -52,6 +53,15 @@ class Pipeline:
         self._first_run = not self.empties
         self._present: set[int] = set()  # cameras that had a frame on the previous tick
         self._resync: set[int] = set()   # cameras back from an outage: re-reference at the next settle
+        self.camera_moved: set[int] = set()  # a big view shift with items in the cart: reset recommended
+
+    def _roi(self, cam: int):
+        return self.cfg.roi.get(str(cam))
+
+    def apply_roi(self) -> None:
+        """(Re)build the per-camera motion detectors from cfg.roi."""
+        self.motion = {c: MotionDetector(self.cfg.motion_size, self.cfg.motion_thresh, self.cfg.motion_frac,
+                                         roi=self._roi(c)) for c in self.cams}
 
     def _empty_path(self, cam: int) -> Path:
         return self.state_dir / f"empty_cam{cam}.jpg"
@@ -65,11 +75,15 @@ class Pipeline:
             cams = {c: {"last_ts": (self._latest[c].ts if c in self._latest else None)} for c in self.cams}
             events = list(self._last_events)
         return {"state": "settling" if self.settle.state == "motion" else "watching",
-                "cameras": cams, "items": len(self.cart.instances), "last_events": events}
+                "cameras": cams, "items": len(self.cart.instances), "last_events": events,
+                "camera_moved": sorted(self.camera_moved)}
 
-    def latest_frames(self) -> dict[int, np.ndarray]:
+    def latest_frames(self, overlay: bool = False) -> dict[int, np.ndarray]:
         with self._lock:
-            return {c: f.image for c, f in self._latest.items()}
+            frames = {c: f.image for c, f in self._latest.items()}
+        if overlay:  # debug page: outline each camera's basket-floor ROI
+            frames = {c: draw_outline(img, self._roi(c)) for c, img in frames.items()}
+        return frames
 
     # --- the loop ---
     def _reset(self, frames: dict) -> None:
@@ -82,6 +96,7 @@ class Pipeline:
             self.motion[c].reset()
         self.settle.reset()
         self.cart.clear()
+        self.camera_moved.clear()
         self._resync.difference_update(frames)
         self._reset_requested.clear()
 
@@ -135,21 +150,23 @@ class Pipeline:
                 self._resync.discard(c)
                 continue
             old_ref = self.references[c]
-            r = detect_changes(c, old_ref, f.image, self.cfg)
+            r = detect_changes(c, old_ref, f.image, self.cfg, roi=self._roi(c))
             scale = f.image.shape[1] / self.cfg.diff_size[0]
             new_ref = f.image
             if r.status == "disturbed" and math.hypot(*r.shift) > self.cfg.max_shift_px * scale:
-                log.warning("cam%d moved by (%.0f, %.0f) px: re-aligning its empty picture and cart memory", c, *r.shift)
-                if c in self.empties:
-                    self._set_empty(c, translate(self.empties[c], *r.shift))
-                self.cart.shift_views(c, *r.shift)
+                # Never re-align memory to an estimated shift: on a real cart the estimate can lock onto
+                # the room. Bill nothing; if a camera was really knocked, an empty-cart reset fixes it.
+                log.warning("cam%d view shifted by (%.0f, %.0f) px (camera knocked?): no events this settle; "
+                            "if it really moved, empty the cart and reset", c, *r.shift)
+                if self.cart.instances:
+                    self.camera_moved.add(c)
             elif r.status == "disturbed":
                 log.warning("cam%d: %.0f%% of the view changed (lighting?); ignoring this settle", c, 100 * r.changed_frac)
             elif r.status == "blobs":
                 # An arm over the rim (or a strap) reaches the frame edge; an item in the basket doesn't.
                 # Ignore it, and keep the old reference under it so that once it leaves, whatever it put
                 # down, took or covered is judged against the true before-picture.
-                edge = [b for b in r.blobs if touches_edge(b, f.image, self.cfg.edge_margin_px)]
+                edge = [b for b in r.blobs if b.edge]
                 if edge:
                     log.info("INTRUSION: cam%d sees something reaching over the edge (an arm?); ignoring it", c)
                     edge_cams.add(c)
@@ -167,9 +184,9 @@ class Pipeline:
             for r in results:
                 if r.cam in edge_cams:
                     continue
-                if r.status == "none" or (r.status == "disturbed" and math.hypot(*r.shift) <= self.cfg.max_shift_px
-                                          * r.frame.shape[1] / self.cfg.diff_size[0]):
+                if r.status in ("none", "disturbed"):
                     self._set_empty(r.cam, r.frame)
+                    self.camera_moved.discard(r.cam)
 
         decisions = decide(results, self.empties, self.cart, self.identifier, self.features, self.cfg)
         self.last_decisions = decisions

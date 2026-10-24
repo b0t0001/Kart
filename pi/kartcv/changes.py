@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
+from kartcv.roi import gray_outside, polygon_mask
+
 _OPEN = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
 _CLOSE = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
 
@@ -18,14 +20,15 @@ def lab_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.sqrt((d * d).sum(axis=2))
 
 
-def match_gain(img: np.ndarray, target: np.ndarray) -> np.ndarray:
+def match_gain(img: np.ndarray, target: np.ndarray, mask: np.ndarray | None = None) -> np.ndarray:
     """Scale each BGR channel of `img` so its median matches `target`'s.
 
     Cancels global brightness and white-balance shifts (the Brio's auto white balance moves when a
     big colored item enters the frame). Medians are dominated by the mat, so items don't skew it.
     """
-    m_img = np.median(img.reshape(-1, 3), axis=0).astype(np.float32)
-    m_tgt = np.median(target.reshape(-1, 3), axis=0).astype(np.float32)
+    sel = mask.astype(bool) if mask is not None and mask.any() else slice(None)
+    m_img = np.median(img[sel].reshape(-1, 3), axis=0).astype(np.float32)
+    m_tgt = np.median(target[sel].reshape(-1, 3), axis=0).astype(np.float32)
     gain = np.where(m_img >= 1.0, m_tgt / np.maximum(m_img, 1.0), 1.0).astype(np.float32)
     return np.clip(img.astype(np.float32) * gain, 0, 255).astype(np.uint8)
 
@@ -47,6 +50,7 @@ class Blob:
     before: np.ndarray
     after: np.ndarray
     core: tuple[int, int, int, int] = (0, 0, 0, 0)  # x, y, w, h inside the crops; zero size = whole crop
+    edge: bool = False  # part of a change that reaches the image edge: an arm over the rim, a strap
 
     def _core(self, crop: np.ndarray) -> np.ndarray:
         x, y, w, h = self.core
@@ -69,13 +73,6 @@ class Blob:
         return self._core(self.after)
 
 
-def touches_edge(blob: Blob, frame: np.ndarray, margin: int) -> bool:
-    """A change reaching the frame edge comes from outside the basket: an arm over the rim, a strap."""
-    x, y, w, h = blob.core_box
-    fh, fw = frame.shape[:2]
-    return x <= margin or y <= margin or x + w >= fw - margin or y + h >= fh - margin
-
-
 @dataclass
 class ChangeResult:
     cam: int
@@ -87,7 +84,8 @@ class ChangeResult:
     reference: np.ndarray | None = None
 
 
-def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg) -> ChangeResult:
+def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg, roi=None) -> ChangeResult:
+    """Compare two still frames. `roi` (normalized floor polygon) limits everything to the basket floor."""
     w, h = cfg.diff_size
     full_h, full_w = current.shape[:2]
     sx, sy = full_w / w, full_h / h
@@ -97,27 +95,46 @@ def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg) ->
     def result(status, blobs=(), frac=0.0, shift=(0.0, 0.0)):
         return ChangeResult(cam, status, list(blobs), frac, shift, current, reference)
 
-    # 1. Did the camera itself move (bumped)? Then nothing can be compared pixel by pixel.
+    m = polygon_mask(roi, (w, h))
+    floor = m.astype(bool) if m is not None else np.ones((h, w), bool)
+
+    # 1. Did the camera itself move (bumped)? Then nothing can be compared pixel by pixel. Only the
+    # floor votes: the room seen through the mesh slides by whenever the cart rolls.
     g_ref = cv2.cvtColor(ref_s, cv2.COLOR_BGR2GRAY).astype(np.float32)
     g_cur = cv2.cvtColor(cur_s, cv2.COLOR_BGR2GRAY).astype(np.float32)
     window = cv2.createHanningWindow((w, h), cv2.CV_32F)
+    if m is not None:
+        window = window * cv2.GaussianBlur(m.astype(np.float32), (31, 31), 0)
     (dx, dy), _ = cv2.phaseCorrelate(g_ref, g_cur, window)
     shift = (dx * sx, dy * sy)
     if math.hypot(dx, dy) > cfg.max_shift_px:
         return result("disturbed", shift=shift)
 
     # 2. Brightness-normalized color difference, cleaned up.
-    cur_s = match_gain(cur_s, ref_s)
+    cur_s = match_gain(cur_s, ref_s, m)
     dist = lab_distance(cv2.GaussianBlur(ref_s, (7, 7), 0), cv2.GaussianBlur(cur_s, (7, 7), 0))
     mask = (dist > cfg.change_thresh).astype(np.uint8) * 255
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, _OPEN)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, _CLOSE)
-    frac = float(mask.mean()) / 255.0
+    full = mask > 0
+    inside = (full & floor).astype(np.uint8)
+    frac = float(inside.sum()) / max(1, int(floor.sum()))
     if frac > cfg.disturbed_frac:
         return result("disturbed", frac=frac, shift=shift)
 
-    # 3. Solid blobs only.
-    n, _, stats, _ = cv2.connectedComponentsWithStats(mask)
+    # An in-floor change that connects, through changed pixels, to the image edge comes from outside
+    # the view: an arm over the rim. A tall item leaning on the wall rises over the mesh but doesn't
+    # reach the image edge, so it stays an item.
+    band = max(2, int(round(cfg.edge_margin_px / sx)))
+    _, full_labels = cv2.connectedComponents(full.astype(np.uint8))
+    border = np.zeros_like(full)
+    border[:band, :] = border[-band:, :] = True
+    border[:, :band] = border[:, -band:] = True
+    reaching_edge = set(np.unique(full_labels[border & full])) - {0}
+    full_mask = polygon_mask(roi, (full_w, full_h))
+
+    # 3. Solid blobs only (inside the floor).
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(inside)
     min_area = cfg.min_blob_frac * w * h
     blobs = []
     for i in range(1, n):
@@ -129,9 +146,11 @@ def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg) ->
         px, py = (cx1 - cx0) * cfg.crop_pad, (cy1 - cy0) * cfg.crop_pad
         x0, y0 = max(0, int(cx0 - px)), max(0, int(cy0 - py))
         x1, y1 = min(full_w, int(math.ceil(cx1 + px))), min(full_h, int(math.ceil(cy1 + py)))
+        mc = full_mask[y0:y1, x0:x1] if full_mask is not None else None
+        edge = bool(reaching_edge) and bool(reaching_edge & set(np.unique(full_labels[labels == i])))
         blobs.append(Blob(cam, (x0, y0, x1 - x0, y1 - y0), area / (w * h),
-                          reference[y0:y1, x0:x1].copy(), current[y0:y1, x0:x1].copy(),
-                          (cx0 - x0, cy0 - y0, cx1 - cx0, cy1 - cy0)))
+                          gray_outside(reference[y0:y1, x0:x1], mc), gray_outside(current[y0:y1, x0:x1], mc),
+                          (cx0 - x0, cy0 - y0, cx1 - cx0, cy1 - cy0), edge))
     if not blobs:
         return result("none", frac=frac, shift=shift)
     return result("blobs", blobs, frac, shift)

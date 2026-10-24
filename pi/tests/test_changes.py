@@ -39,3 +39,37 @@ def test_bump_and_color_cast_are_disturbed():
     assert r.status == "disturbed" and r.blobs == [] and abs(r.shift[0] - 60) <= 3 and abs(r.shift[1] - 30) <= 3
     # a strong color cast is cancelled by per-channel gain matching (or, if not, is "disturbed"): never blobs
     assert run(Scene(), Scene(tint=(0.6, 1.0, 1.5))).status in ("none", "disturbed")
+
+
+
+def roi_cfg():
+    from kartcv.synth import mat_roi
+    return Config(roi={"0": mat_roi(0), "1": mat_roi(1)})
+
+
+def test_room_moving_behind_the_mesh_is_ignored_with_a_floor_roi():  # real-cart bug: rolling
+    after = Scene(room_shift=(40, 25))
+    assert run(Scene(), after).status != "none"  # without a mask the room's motion is a "change"
+    cfg = roi_cfg()
+    r = detect_changes(0, Scene().render(0, 1), after.render(0, 2), cfg, roi=cfg.roi["0"])
+    assert r.status == "none" and abs(r.shift[0]) < 3 and abs(r.shift[1]) < 3
+
+
+def test_crops_are_gray_outside_the_floor():  # privacy: nothing beyond the basket goes to Claude
+    cfg = roi_cfg()
+    edge_item = Item("red-box", 0, 200, seed=1)  # lying against the mat's edge
+    r = detect_changes(0, Scene().render(0, 1), Scene(items=[edge_item]).render(0, 2), cfg, roi=cfg.roi["0"])
+    [b] = r.blobs
+    gray = (b.after == 128).all(axis=2)
+    assert gray.any() and not gray.all()
+
+
+def test_item_against_the_wall_is_an_item_but_an_arm_over_the_rim_is_an_intrusion():
+    cfg = roi_cfg()
+    edge_item = Item("red-box", 0, 200, seed=1)
+    r = detect_changes(0, Scene().render(0, 1), Scene(items=[edge_item]).render(0, 2), cfg, roi=cfg.roi["0"])
+    assert [b.edge for b in r.blobs] == [False]
+    r = detect_changes(0, Scene().render(0, 1), Scene(hand=(400, 250)).render(0, 2), cfg, roi=cfg.roi["0"])
+    assert r.blobs and all(b.edge for b in r.blobs)
+    r = detect_changes(0, Scene().render(0, 1), Scene(hand=(400, 250)).render(0, 2), CFG)  # no ROI: frame edge
+    assert r.blobs and all(b.edge for b in r.blobs)

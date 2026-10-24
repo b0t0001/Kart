@@ -55,6 +55,8 @@ class Config:
     gallery_dir: str = "pi/gallery"
     model_path: str = "pi/models/features.onnx"
 
+    roi: dict = field(default_factory=dict)  # {"0": [[x, y], ...]} normalized basket-floor polygon per camera
+
     server_port: int = 8080
     debug_view: bool = False
 

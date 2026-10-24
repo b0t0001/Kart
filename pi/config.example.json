@@ -35,6 +35,7 @@
   "state_dir": "pi/state",
   "gallery_dir": "pi/gallery",
   "model_path": "pi/models/features.onnx",
+  "roi": {},
   "server_port": 8080,
   "debug_view": false
 }
