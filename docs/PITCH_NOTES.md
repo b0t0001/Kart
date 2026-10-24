@@ -54,6 +54,8 @@ Talking points for the pitch, the Devpost write-up and judge Q&A. Owned by the m
 - **The merchant agent proposes; the owner confirms.** Claude can only stage a change with a plain-English preview. Nothing applies without a click, every change is logged, and any change can be undone in one click.
 - **Every charge is traceable** to a camera event.
 
+**Scope note (Dylan, 2026-10-24):** the merchant console is **internal housekeeping**, used to set aisles, prices and deals for demos and tests. It's not a core product pillar, so pitch the shopper experience. Step 3 below (the live "parmesan $3 off") is **optional staging** that makes the deal appear on cue. Drop it, or call it "the store can push a deal live", as the team prefers.
+
 ## The demo beat (≈2 min)
 1. The judge says "pasta dinner for my family" → Kart plans the trip and routes it.
 2. The judge drops the spaghetti into the cart → the total updates live on the iPad.
