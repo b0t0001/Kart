@@ -5,11 +5,12 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 
 import httpx
 import pytest
-from client import ANON, URL, RpcError
+from client import ANON, URL, RpcError, kartdb
 from psycopg.types.json import Jsonb
 from realtime import Watch
 
@@ -73,7 +74,7 @@ def test_full_trip_with_the_merchant_beat(rest, db, cart_id, merchant_changes):
         spag = cv_event(cart_id, "added", "barilla-spaghetti", "Barilla Spaghetti, 1 lb")
         c = rest.rpc("apply_cart_event", **cv_to_rpc(spag))
         assert c["total"] == 1.99 and c["location"]["section"] == "A6"
-        assert c["suggestion"]["text"] == "Baguette is $1 off in Aisle 2. Want it?"
+        assert c["suggestion"]["text"] == "Garlic Bread is $1 off in Aisle 2. Want it?"
         c = rest.rpc("apply_cart_event", **cv_to_rpc(spag))
         assert qty(c, "barilla-spaghetti") == 1
         assert len(rest.get("/cart_events", event_id=f"eq.{spag['event_id']}", select="id")) == 1
@@ -86,24 +87,24 @@ def test_full_trip_with_the_merchant_beat(rest, db, cart_id, merchant_changes):
 
         # Merchant: "parmesan $3 off" confirmed in the console → the cart's card switches live
         merchant(db, merchant_changes, "create_deal", {"deal_id": parm_deal, "product_id": "kirkland-parmesan",
-                                     "type": "amount_off", "value": 3, "label": "$3 off", "ends_at": None,
+                                     "type": "amount_off", "value": 1, "label": "$1 off", "ends_at": None,
                                      "pairs_with": ["barilla-spaghetti", "rao-marinara"]}, "Parmesan $3 off")
         rec = watch.wait_for(lambda r: (r.get("suggestion") or {}).get("deal_id") == parm_deal)
-        assert rec["suggestion"]["text"] == "Parmesan is $3 off in Aisle 4. Want it?"
+        assert rec["suggestion"]["text"] == "Parmesan is $1 off in Aisle 4. Want it?"
 
         # iPad: "Yes" puts it on the plan, which consumes the card (nothing else is eligible now)
         c = rest.rpc("set_plan", p_cart_id=cart_id,
                      p_plan=PASTA + [{"product_id": "kirkland-parmesan", "reason": "said yes to the deal"}])
         assert c["suggestion"] is None and parm_deal in c["suggested_deals"]
         parm_row = next(p for p in c["plan"] if p["product_id"] == "kirkland-parmesan")
-        assert parm_row["deal_label"] == "$3 off" and parm_row["aisle"] == "Aisle 4"
+        assert parm_row["deal_label"] == "$1 off" and parm_row["aisle"] == "Aisle 4"
 
         # CV: the shopper takes it (cloud match)
         c = rest.rpc("apply_cart_event", **cv_to_rpc(
-            cv_event(cart_id, "added", "kirkland-parmesan", "Kirkland Parmigiano Reggiano", 0.88, "cloud")))
+            cv_event(cart_id, "added", "kirkland-parmesan", "Grated Parmesan, 8 oz shaker", 0.88, "cloud")))
         parm = next(i for i in c["items"] if i["product_id"] == "kirkland-parmesan")
-        assert (parm["price"], parm["list_price"], parm["deal_label"]) == (9.99, 12.99, "$3 off")
-        assert c["savings"] == 3.0 and c["suggestion"] is None
+        assert (parm["price"], parm["list_price"], parm["deal_label"]) == (3.99, 4.99, "$1 off")
+        assert c["savings"] == 1.0 and c["suggestion"] is None
 
         # CV: something it can't identify → confirm card; checkout is blocked until it's answered
         unk = cv_event(cart_id, "added", None, "blue cardboard box, label not visible", 0.31, "none")
@@ -129,8 +130,8 @@ def test_full_trip_with_the_merchant_beat(rest, db, cart_id, merchant_changes):
 
         # iPad: Pay
         receipt = rest.rpc("checkout", p_cart_id=cart_id, p_provider="simulated")
-        assert (receipt["total"], receipt["savings"], receipt["item_count"]) == (c["total"], 3.0, 3)
-        assert receipt["total"] == round(1.99 + 9.99 + 8.49, 2)
+        assert (receipt["total"], receipt["savings"], receipt["item_count"]) == (c["total"], 1.0, 3)
+        assert receipt["total"] == round(1.99 + 3.99 + 3.49, 2)
         assert receipt["trip_id"] == trip and receipt["status"] == "paid" and receipt["duration_s"] >= 0
         assert rest.rpc("checkout", p_cart_id=cart_id, p_provider="simulated")["id"] == receipt["id"]
         assert rest.get("/carts", cart_id=f"eq.{cart_id}", select="status")[0]["status"] == "paid"
@@ -158,8 +159,9 @@ def test_anon_key_cannot_touch_what_it_shouldnt(rest, db, cart_id):
 
 def test_catalog_reads_the_ipad_and_cv_use(rest):
     rows = rest.get("/product_catalog", select="id,short_name,sale_price,deal_label,aisle,in_stock,vision_hint")
-    assert len(rows) == 18 and all(r["vision_hint"] for r in rows)
-    assert len(rest.get("/products", active="is.true", select="id")) == 18
+    n = len(json.loads(kartdb.STORE_JSON.read_text())["products"])
+    assert len(rows) == n and all(r["vision_hint"] for r in rows)
+    assert len(rest.get("/products", active="is.true", select="id")) == n
     assert {d["id"] for d in rest.get("/deals", select="id")} >= {"d-parm-3off", "d-chips-150off"}
 
 

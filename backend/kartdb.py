@@ -60,6 +60,36 @@ def seed(conn: psycopg.Connection, store_path: Path = STORE_JSON) -> dict:
     return row[0]
 
 
+def sync_catalog(conn: psycopg.Connection, store_path: Path = STORE_JSON, with_stock: bool = False) -> dict:
+    """Upsert store.json's products and deals IN PLACE, in one transaction: unlike seed/reset-demo it
+    deletes and delists nothing, leaves carts and the change log alone, and keeps each existing
+    product's live stock unless with_stock (new products always get the file's stock)."""
+    store = json.loads(store_path.read_text())
+    stock = "stock = excluded.stock," if with_stock else ""
+    with conn.transaction():
+        n = conn.execute(f"""
+            insert into products (id, name, short_name, price, section, category, tags, stock, vision_hint, active, sort)
+            select p->>'id', p->>'name', p->>'short_name', (p->>'price')::numeric, p->>'section',
+                   coalesce(p->>'category', ''), coalesce(array(select jsonb_array_elements_text(p->'tags')), '{{}}'),
+                   coalesce((p->>'stock')::int, 0), coalesce(p->>'vision_hint', ''), true, ord::int
+            from jsonb_array_elements(%s::jsonb) with ordinality as t(p, ord)
+            on conflict (id) do update set name = excluded.name, short_name = excluded.short_name,
+              price = excluded.price, section = excluded.section, category = excluded.category,
+              tags = excluded.tags, {stock} vision_hint = excluded.vision_hint, active = true, sort = excluded.sort
+            """, [json.dumps(store["products"])]).rowcount
+        d = conn.execute("""
+            insert into deals (id, product_id, type, value, label, pairs_with, starts_at, ends_at, active)
+            select d->>'id', d->>'product_id', d->>'type', (d->>'value')::numeric, d->>'label',
+                   coalesce(array(select jsonb_array_elements_text(d->'pairs_with')), '{}'),
+                   (d->>'starts_at')::timestamptz, (d->>'ends_at')::timestamptz, true
+            from jsonb_array_elements(%s::jsonb) d
+            on conflict (id) do update set product_id = excluded.product_id, type = excluded.type,
+              value = excluded.value, label = excluded.label, pairs_with = excluded.pairs_with,
+              starts_at = excluded.starts_at, ends_at = excluded.ends_at, active = true
+            """, [json.dumps(store["deals"])]).rowcount
+    return {"products": n, "deals": d, "stock": "from file" if with_stock else "kept (new products: from file)"}
+
+
 def catalog_is_empty(conn: psycopg.Connection) -> bool:
     return conn.execute("select not exists (select 1 from products)").fetchone()[0]
 

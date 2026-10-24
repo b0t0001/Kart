@@ -75,11 +75,11 @@ def test_impulse_buys_are_never_nudged(nudges):
 def test_a_deal_card_goes_first(cart):
     cart("set_feature", p_feature="quantity_nudges", p_on=True)
     cart("set_plan", p_plan=[p for p in TACOS_FOR_4 if p["product_id"] != "tostitos-chips"])
-    add(cart, "avocados")
-    row = add(cart, "avocados")                       # avocados pair with the Chips deal
+    add(cart, "tostitos-salsa")
+    row = add(cart, "tostitos-salsa")                 # salsa pairs with the Chips deal
     assert row["suggestion"]["product_id"] == "tostitos-chips" and row["nudge"] is None
     row = cart("dismiss_suggestion")
-    assert row["nudge"]["kind"] == "over" and row["nudge"]["product_id"] == "avocados"
+    assert row["nudge"]["kind"] == "over" and row["nudge"]["product_id"] == "tostitos-salsa"
 
 
 # ── Under ──

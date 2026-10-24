@@ -2,6 +2,8 @@
 
   python backend/db.py apply [--fresh] [--local]   run backend/db/NN_*.sql in order
   python backend/db.py seed                        load data/store.json into the catalog
+  python backend/db.py sync-catalog [--with-stock] update the catalog from store.json IN PLACE (no deletes,
+                                                   carts and change log untouched; safe on the shared project)
   python backend/db.py reset-demo [--cart 7] [--without-deal d-parm-3off]
                                                    re-seed the catalog, clear the merchant change log,
                                                    reset_cart, status idle (between demo runs)
@@ -21,11 +23,12 @@ import kartdb
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["apply", "seed", "reset-demo", "show"])
+    ap.add_argument("command", choices=["apply", "seed", "sync-catalog", "reset-demo", "show"])
     ap.add_argument("--db-url")
     ap.add_argument("--fresh", action="store_true", help="drop our tables first (loses carts and history)")
     ap.add_argument("--local", action="store_true", help="plain Postgres: create Supabase's roles/publication first")
     ap.add_argument("--cart", default="7")
+    ap.add_argument("--with-stock", action="store_true", help="sync-catalog: also set stock from the file")
     ap.add_argument("--without-deal", action="append", default=[], metavar="DEAL_ID",
                     help="reset-demo: end this seeded deal, e.g. so the owner can create it live in the pitch")
     args = ap.parse_args()
@@ -39,6 +42,8 @@ def main() -> None:
                 print("seeded", kartdb.seed(conn))
         elif args.command == "seed":
             print("seeded", kartdb.seed(conn))
+        elif args.command == "sync-catalog":
+            print("synced", kartdb.sync_catalog(conn, with_stock=args.with_stock))
         elif args.command == "reset-demo":
             print("seeded", kartdb.seed(conn))
             conn.execute("delete from merchant_changes")  # the log described the catalog we just replaced

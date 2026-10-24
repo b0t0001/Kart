@@ -3,11 +3,12 @@
   python backend/cart.py show
   python backend/cart.py add kirkland-parmesan        # as if the cameras saw it (source: manual)
   python backend/cart.py remove rao-marinara
-  python backend/cart.py plan pasta                   # or: tacos, or a list of product ids
+  python backend/cart.py plan pasta                   # or: nachos, tacos, or a list of product ids
   python backend/cart.py reset                        # new trip (the Pi clears its memory too)
   python backend/cart.py status checkout              # idle | shopping | checkout
   python backend/cart.py deal kirkland-parmesan 3     # $3 off; "20%" for percent off
   python backend/cart.py end-deal d-parm-3off
+  python backend/cart.py feature quantity_nudges on   # the nudge beta for this cart (on | off | default)
 
 Every change goes through the same RPCs and merchant_apply as the real clients, so the iPad,
 the console and the change log all update normally. Deals made here are logged as merchant
@@ -30,6 +31,7 @@ import kartdb
 PLANS = {
     "pasta": ["barilla-spaghetti", "rao-marinara", "french-baguette"],
     "tacos": ["mission-tortillas", "ground-beef", "tillamook-mexican-cheese", "tostitos-salsa", "avocados"],
+    "nachos": ["tostitos-chips", "tostitos-salsa", "queso", "black-beans", "jalapenos", "daisy-sour-cream"],
 }
 
 
@@ -52,7 +54,8 @@ def merchant(conn, tool: str, args: dict, summary: str) -> int:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["show", "add", "remove", "plan", "reset", "status", "deal", "end-deal"])
+    ap.add_argument("command", choices=["show", "add", "remove", "plan", "reset", "status", "deal", "end-deal",
+                                        "feature"])
     ap.add_argument("args", nargs="*")
     ap.add_argument("--cart")
     ap.add_argument("--db-url")
@@ -88,6 +91,10 @@ def main() -> None:
         cid = merchant(conn, "create_deal", args, f"New deal: {pid} {label} (cart.py fallback)")
         print(f"applied merchant change #{cid}: {pid} {label}, pairs with {args['pairs_with']}")
         row = None
+    elif a.command == "feature":
+        on = {"on": True, "off": False, "default": None}[a.args[1]]
+        row = rpc("set_feature", p_feature=a.args[0], p_on=on)
+        print(f"{a.args[0]} for cart {cart_id}: {row['features'].get(a.args[0], 'default')}")
     elif a.command == "end-deal":
         cid = merchant(conn, "end_deal", {"deal_id": a.args[0]}, f"End deal {a.args[0]} (cart.py fallback)")
         print(f"applied merchant change #{cid}")

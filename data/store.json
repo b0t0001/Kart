@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "store": { "name": "Kart Demo Warehouse", "width": 20, "height": 12 },
   "entrance": { "x": 0, "y": 6 },
   "sections": [
@@ -17,14 +17,14 @@
   "products": [
     {
       "id": "kirkland-parmesan",
-      "name": "Kirkland Signature Parmigiano Reggiano, 1.5 lb wedge",
+      "name": "Grated Parmesan Cheese, 8 oz shaker",
       "short_name": "Parmesan",
-      "price": 12.99,
+      "price": 4.99,
       "section": "A4",
       "category": "cheese",
       "tags": ["pasta", "italian"],
       "stock": 18,
-      "vision_hint": "wedge of hard pale-yellow cheese with a darker rind edge, in clear shrink wrap, red and white Kirkland Signature label"
+      "vision_hint": "green cylindrical shaker can of grated Parmesan, yellow and red label, plastic shaker-top lid (Kraft style)"
     },
     {
       "id": "barilla-spaghetti",
@@ -35,18 +35,18 @@
       "category": "pasta",
       "tags": ["pasta", "italian", "staple"],
       "stock": 60,
-      "vision_hint": "long narrow dark-blue cardboard box, red oval Barilla logo with white lettering, the word Spaghetti, dry spaghetti strands pictured"
+      "vision_hint": "long narrow blue cardboard box, red oval Barilla logo with white lettering, white word Spaghetti, dry spaghetti strands pictured"
     },
     {
       "id": "rao-marinara",
-      "name": "Rao's Homemade Marinara Sauce, 24 oz",
-      "short_name": "Rao's Sauce",
-      "price": 8.49,
+      "name": "Marinara Sauce, 24 oz plastic jar",
+      "short_name": "Marinara",
+      "price": 3.49,
       "section": "A6",
       "category": "sauce",
       "tags": ["pasta", "italian"],
       "stock": 24,
-      "vision_hint": "tall glass jar of deep-red tomato sauce with a metal lid, black label with white script reading Rao's Homemade, Marinara"
+      "vision_hint": "plastic jar of red tomato marinara sauce, about 24 oz, printed paper label and a screw-on lid (exact brand set after shopping)"
     },
     {
       "id": "ground-beef",
@@ -73,7 +73,7 @@
     {
       "id": "french-baguette",
       "name": "French Baguette",
-      "short_name": "Baguette",
+      "short_name": "Garlic Bread",
       "price": 2.99,
       "section": "A2",
       "category": "bakery",
@@ -105,14 +105,14 @@
     },
     {
       "id": "tostitos-salsa",
-      "name": "Tostitos Chunky Salsa, Medium, 15.5 oz",
+      "name": "Salsa, 16 oz jar",
       "short_name": "Salsa",
-      "price": 4.49,
+      "price": 3.49,
       "section": "A5",
       "category": "salsa",
-      "tags": ["tacos", "mexican", "snack"],
+      "tags": ["tacos", "nachos", "mexican", "snack"],
       "stock": 35,
-      "vision_hint": "squat glass jar of chunky red salsa with visible tomato and pepper pieces, Tostitos label reading Chunky Salsa"
+      "vision_hint": "jar of chunky red salsa, about 15 to 16 oz, printed label and lid, plastic or glass (exact brand set after shopping)"
     },
     {
       "id": "taco-seasoning",
@@ -126,13 +126,46 @@
       "vision_hint": "small flat paper packet, mostly red with the Old El Paso logo and the words Taco Seasoning"
     },
     {
+      "id": "queso",
+      "name": "Salsa con Queso Dip, 15 oz jar",
+      "short_name": "Queso",
+      "price": 3.99,
+      "section": "A5",
+      "category": "dip",
+      "tags": ["nachos", "mexican", "snack", "party"],
+      "stock": 20,
+      "vision_hint": "jar of smooth orange-yellow cheese dip (salsa con queso), about 15 oz, printed label and lid"
+    },
+    {
+      "id": "black-beans",
+      "name": "Black Beans, 15 oz can",
+      "short_name": "Black Beans",
+      "price": 1.29,
+      "section": "A5",
+      "category": "canned",
+      "tags": ["nachos", "tacos", "mexican"],
+      "stock": 20,
+      "vision_hint": "short cylindrical metal can, about 15 oz, paper label with a photo of black beans"
+    },
+    {
+      "id": "jalapenos",
+      "name": "Sliced Jalapeños, 12 oz can",
+      "short_name": "Jalapeños",
+      "price": 1.99,
+      "section": "A5",
+      "category": "canned",
+      "tags": ["nachos", "tacos", "mexican"],
+      "stock": 20,
+      "vision_hint": "small metal can with a green label, sliced green jalapeño peppers pictured"
+    },
+    {
       "id": "tostitos-chips",
-      "name": "Tostitos Restaurant Style Tortilla Chips, 13 oz",
-      "short_name": "Chips",
+      "name": "Tortilla Chips, party size bag",
+      "short_name": "Tortilla Chips",
       "price": 5.49,
       "section": "A7",
       "category": "snacks",
-      "tags": ["tacos", "mexican", "snack", "party"],
+      "tags": ["tacos", "nachos", "mexican", "snack", "party"],
       "stock": 45,
       "vision_hint": "large shiny crinkly chip bag, Tostitos logo, white triangular tortilla chips pictured on the front"
     },
@@ -149,12 +182,12 @@
     },
     {
       "id": "daisy-sour-cream",
-      "name": "Daisy Sour Cream, 16 oz",
+      "name": "Sour Cream, 16 oz",
       "short_name": "Sour Cream",
       "price": 2.99,
       "section": "A8",
       "category": "dairy",
-      "tags": ["tacos", "mexican"],
+      "tags": ["tacos", "nachos", "mexican"],
       "stock": 30,
       "vision_hint": "round white plastic tub with a clear lid, blue and white Daisy label with a daisy flower"
     },
@@ -216,16 +249,16 @@
   ],
   "deals": [
     {
-      "id": "d-parm-3off", "product_id": "kirkland-parmesan", "type": "amount_off", "value": 3.00,
-      "label": "$3 off", "pairs_with": ["barilla-spaghetti", "rao-marinara"], "ends_at": null
+      "id": "d-parm-3off", "product_id": "kirkland-parmesan", "type": "amount_off", "value": 1.00,
+      "label": "$1 off", "pairs_with": ["barilla-spaghetti", "rao-marinara"], "ends_at": null
     },
     {
       "id": "d-baguette-1off", "product_id": "french-baguette", "type": "amount_off", "value": 1.00,
-      "label": "$1 off", "pairs_with": ["rao-marinara", "barilla-spaghetti", "caesar-salad-kit"], "ends_at": null
+      "label": "$1 off", "pairs_with": ["barilla-spaghetti", "rao-marinara"], "ends_at": null
     },
     {
       "id": "d-chips-150off", "product_id": "tostitos-chips", "type": "amount_off", "value": 1.50,
-      "label": "$1.50 off", "pairs_with": ["tostitos-salsa", "avocados"], "ends_at": null
+      "label": "$1.50 off", "pairs_with": ["tostitos-salsa", "queso"], "ends_at": null
     },
     {
       "id": "d-sourcream-20pct", "product_id": "daisy-sour-cream", "type": "percent_off", "value": 20,

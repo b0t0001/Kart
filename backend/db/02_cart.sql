@@ -28,12 +28,13 @@ returns text language sql immutable as $$
     else '' end
 $$;
 
--- "A4 Parmesan -$3": ASCII only, at most 16 chars; the name gets truncated to fit.
+-- "A4 Parmesan -$3": ASCII only (spoken names like "Jalapeños" are transliterated), at most 16
+-- chars; the name gets truncated to fit.
 create or replace function fmt_lcd(p_section text, p_short text, p_suffix text)
 returns text language sql immutable as $$
   select left(trim(concat_ws(' ',
            p_section,
-           left(p_short, greatest(16 - char_length(coalesce(p_section, '')) - 1
+           left(translate(p_short, 'ñÑáéíóúÁÉÍÓÚüÜ', 'nNaeiouAEIOUuU'), greatest(16 - char_length(coalesce(p_section, '')) - 1
                                     - case when coalesce(p_suffix, '') = '' then 0
                                            else char_length(p_suffix) + 1 end, 1)),
            nullif(p_suffix, ''))), 16)
@@ -280,7 +281,10 @@ begin
   if v_sugg is not null then
     -- v_cand now holds the suggested product's catalog row
     v_sugg := v_sugg || jsonb_build_object(
-      'text',       format('%s is %s in %s. Want it?', v_cand.short_name, v_cand.deal_label, v_cand.aisle),
+      -- plural spoken names ("Tortilla Chips", "Black Beans") end in a single s
+      'text',       case when v_cand.short_name ~ '[^s]s$'
+                         then format('%s are %s in %s. Want them?', v_cand.short_name, v_cand.deal_label, v_cand.aisle)
+                         else format('%s is %s in %s. Want it?', v_cand.short_name, v_cand.deal_label, v_cand.aisle) end,
       'deal_label', v_cand.deal_label,
       'aisle',      v_cand.aisle,
       'section',    v_cand.section,

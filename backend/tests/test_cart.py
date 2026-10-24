@@ -41,8 +41,8 @@ def test_add_joins_price_and_suggests_parmesan(cart):
     assert row["total"] == 1.99 and row["item_count"] == 1
     s = row["suggestion"]
     assert s["product_id"] == "kirkland-parmesan" and s["deal_id"] == "d-parm-3off"
-    assert s["text"] == "Parmesan is $3 off in Aisle 4. Want it?"
-    assert row["lcd_line1"] == "A4 Parmesan -$3"
+    assert s["text"] == "Parmesan is $1 off in Aisle 4. Want it?"
+    assert row["lcd_line1"] == "A4 Parmesan -$1"
 
 
 def test_repeated_event_id_is_ignored(cart, conn):
@@ -95,8 +95,8 @@ def test_bad_method_does_not_wedge_cv(cart, conn):
 def test_amount_off_deal_price_and_savings(cart):
     row = add(cart, "kirkland-parmesan")
     item = row["items"][0]
-    assert (item["price"], item["list_price"], item["deal_label"]) == (9.99, 12.99, "$3 off")
-    assert row["savings"] == 3.0
+    assert (item["price"], item["list_price"], item["deal_label"]) == (3.99, 4.99, "$1 off")
+    assert row["savings"] == 1.0
 
 
 def test_percent_off_deal(cart):
@@ -108,7 +108,7 @@ def test_percent_off_deal(cart):
 def test_expired_deal_not_applied(cart, conn):
     conn.execute("update deals set ends_at = now() - interval '1 minute' where id = 'd-parm-3off'")
     row = add(cart, "kirkland-parmesan")
-    assert row["items"][0]["price"] == 12.99 and "deal_label" not in row["items"][0]
+    assert row["items"][0]["price"] == 4.99 and "deal_label" not in row["items"][0]
 
 
 def current(conn):
@@ -147,7 +147,7 @@ def test_ended_deal_is_kept_for_items_already_in_cart(cart, conn):
     add(cart, "kirkland-parmesan")
     conn.execute("update deals set active = false where id = 'd-parm-3off'")
     item = current(conn)["items"][0]
-    assert (item["price"], item["deal_label"]) == (9.99, "$3 off")
+    assert (item["price"], item["deal_label"]) == (3.99, "$1 off")
 
 
 def test_new_deal_reaches_cart_with_a_pairing_item(cart, conn):
@@ -159,7 +159,7 @@ def test_new_deal_reaches_cart_with_a_pairing_item(cart, conn):
                  "values ('d-chips-2off', 'tostitos-chips', 'amount_off', 2, '$2 off', '{tostitos-salsa}')")
     row = current(conn)
     assert row["suggestion"]["deal_id"] == "d-chips-2off"
-    assert row["suggestion"]["text"] == "Chips is $2 off in Aisle 7. Want it?"
+    assert row["suggestion"]["text"] == "Tortilla Chips are $2 off in Aisle 7. Want them?"
 
 
 # ── Suggestions ──
@@ -201,7 +201,7 @@ def test_plan_is_route_ordered_from_the_entrance(cart):
     row = cart("set_plan", p_plan=PASTA)
     assert [p["product_id"] for p in row["plan"]] == [
         "french-baguette", "kirkland-parmesan", "rao-marinara", "barilla-spaghetti"]
-    assert row["next_step"] == "Aisle 2 → Baguette, $1 off"
+    assert row["next_step"] == "Aisle 2 → Garlic Bread, $1 off"
     assert row["plan"][0]["aisle"] == "Aisle 2" and row["plan"][0]["in_stock"] is True
 
 
@@ -238,7 +238,7 @@ def test_moving_a_product_updates_directions(cart, conn):
     cart("set_plan", p_plan=[{"product_id": "kirkland-parmesan", "reason": "topping"}])
     conn.execute("update products set section = 'A6' where id = 'kirkland-parmesan'")
     row = current(conn)
-    assert row["next_step"] == "Aisle 6 → Parmesan, $3 off"
+    assert row["next_step"] == "Aisle 6 → Parmesan, $1 off"
 
 
 def test_set_plan_rejects_non_array(cart):
@@ -280,7 +280,8 @@ def test_every_lcd_line_fits_16_ascii_chars(conn):
 def test_anon_reads_and_calls_rpcs_but_cannot_write_tables(db_url):
     with psycopg.connect(db_url) as c:      # one transaction, rolled back
         c.execute("set local role anon")
-        assert c.execute("select count(*) from product_catalog").fetchone()[0] == 18
+        assert c.execute("select count(*) from product_catalog").fetchone()[0] == len(
+            json.loads(kartdb.STORE_JSON.read_text())["products"])
         kartdb.rpc(c, "apply_cart_event", p_cart_id="7", p_type="added", p_product_id="bananas",
                    p_confidence=0.9, p_source="vision", p_label="bananas")
         for sql in ["update products set price = 0",
