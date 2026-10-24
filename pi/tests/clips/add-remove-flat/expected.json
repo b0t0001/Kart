@@ -1,0 +1,87 @@
+{
+ "what_happened": "empty cart; the same water bottle laid FLAT mid-basket at ~2 s, taken out ~8 s later; afterwards the user handled the cardboard at the far end of cam0's view (an upright creased flap and a white cloth behind the cart moved)",
+ "expected": [
+  {
+   "type": "added"
+  },
+  {
+   "type": "removed"
+  }
+ ],
+ "live": [
+  "INTRUSION: cam1 sees something reaching over the edge (an arm?); ignoring it",
+  "ADDED ? \"clear plastic water bottle with blue Kirkland label\" (none 0.90)",
+  "REMOVED ? \"clear plastic water bottle with blue Kirkland label\" (memory 1.00)",
+  "INTRUSION: cam0 sees something reaching over the edge (an arm?); ignoring it",
+  "ADDED ? \"plain tan cardboard surface, no readable branding\" (none 0.30)"
+ ],
+ "notes": "pipeline e9b45cc, no ROI. The last ADDED (plain tan cardboard surface) is FALSE: the flap/cloth outside the floor.",
+ "roi": {
+  "0": [
+   [
+    0.01,
+    0.44
+   ],
+   [
+    0.46,
+    0.26
+   ],
+   [
+    0.62,
+    0.21
+   ],
+   [
+    0.96,
+    0.34
+   ],
+   [
+    0.95,
+    0.42
+   ],
+   [
+    0.98,
+    0.56
+   ],
+   [
+    0.99,
+    0.99
+   ],
+   [
+    0.01,
+    0.99
+   ]
+  ],
+  "1": [
+   [
+    0.12,
+    0.03
+   ],
+   [
+    0.94,
+    0.03
+   ],
+   [
+    0.99,
+    0.15
+   ],
+   [
+    0.99,
+    0.99
+   ],
+   [
+    0.01,
+    0.99
+   ],
+   [
+    0.02,
+    0.5
+   ],
+   [
+    0.11,
+    0.07
+   ]
+  ]
+ },
+ "setup": "tape mounts: cam0 front-left corner (diagonal), cam1 centered under the top basket looking forward; cardboard floor liner; mesh walls uncovered",
+ "recording": "640x360, 5 Hz, re-encoded JPEG q65; still stretches trimmed by hardware/trim_clip.py (timestamps kept, so trims show as time gaps)"
+}

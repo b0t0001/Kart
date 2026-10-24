@@ -1,0 +1,83 @@
+{
+ "what_happened": "empty cart; dropped one apple (not in the catalog) mid-basket, hand out at once; it stayed in. An upright creased cardboard flap at the far end of cam0's view shifted when the cart was touched.",
+ "expected": [
+  {
+   "type": "added",
+   "product_id": null
+  }
+ ],
+ "live": [
+  "ADDED ? \"pale beige quilted cushion-like panel\" (none 0.20)",
+  "ADDED ? \"red-yellow apple on gray surface\" (none 0.90)",
+  "INTRUSION: cam0 sees something reaching over the edge (an arm?); ignoring it"
+ ],
+ "notes": "pipeline e9b45cc, no ROI at record time. The first ADDED is FALSE (the upright flap); the flap was taped down/removed before later clips.",
+ "roi": {
+  "0": [
+   [
+    0.01,
+    0.44
+   ],
+   [
+    0.46,
+    0.26
+   ],
+   [
+    0.62,
+    0.21
+   ],
+   [
+    0.96,
+    0.34
+   ],
+   [
+    0.95,
+    0.42
+   ],
+   [
+    0.98,
+    0.56
+   ],
+   [
+    0.99,
+    0.99
+   ],
+   [
+    0.01,
+    0.99
+   ]
+  ],
+  "1": [
+   [
+    0.12,
+    0.03
+   ],
+   [
+    0.94,
+    0.03
+   ],
+   [
+    0.99,
+    0.15
+   ],
+   [
+    0.99,
+    0.99
+   ],
+   [
+    0.01,
+    0.99
+   ],
+   [
+    0.02,
+    0.5
+   ],
+   [
+    0.11,
+    0.07
+   ]
+  ]
+ },
+ "setup": "tape mounts: cam0 front-left corner (diagonal), cam1 centered under the top basket looking forward; cardboard floor liner; mesh walls uncovered",
+ "recording": "640x360, 5 Hz, re-encoded JPEG q65; still stretches trimmed by hardware/trim_clip.py (timestamps kept, so trims show as time gaps)"
+}

@@ -1,0 +1,91 @@
+{
+ "what_happened": "empty cart; upright Tide bottle (~30 cm, orange, reaches the top edge of both views) placed mid-basket, held still >5 s, removed, still >5 s",
+ "expected": [
+  {
+   "type": "added"
+  },
+  {
+   "type": "removed"
+  }
+ ],
+ "live": [
+  "cam0 view shifted by (168, 51) px (camera knocked?): no events this settle; if it really moved, empty the cart and reset",
+  "cam1 view shifted by (-1, 9) px (camera knocked?): no events this settle; if it really moved, empty the cart and reset",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "INTRUSION: cam1 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "cam0 view shifted by (-5, 9) px (camera knocked?): no events this settle; if it really moved, empty the cart and reset",
+  "INTRUSION: cam1 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "RECHECK: the edge-touching change stayed still 3 s more: judging it as an item",
+  "ADDED ? \"plain beige fabric with small dark specks\" (none 0.10)",
+  "(the removal was not detected; memory ended with 1 phantom item)"
+ ],
+ "notes": "pipeline 10139d5 WITH this ROI. Frames have the yellow ROI outline burned in (remote_record pulled overlay frames then). Reproduces the false shift -> wrong crop -> missed removal chain.",
+ "roi": {
+  "0": [
+   [
+    0.01,
+    0.44
+   ],
+   [
+    0.46,
+    0.26
+   ],
+   [
+    0.62,
+    0.21
+   ],
+   [
+    0.96,
+    0.34
+   ],
+   [
+    0.95,
+    0.42
+   ],
+   [
+    0.98,
+    0.56
+   ],
+   [
+    0.99,
+    0.99
+   ],
+   [
+    0.01,
+    0.99
+   ]
+  ],
+  "1": [
+   [
+    0.12,
+    0.03
+   ],
+   [
+    0.94,
+    0.03
+   ],
+   [
+    0.99,
+    0.15
+   ],
+   [
+    0.99,
+    0.99
+   ],
+   [
+    0.01,
+    0.99
+   ],
+   [
+    0.02,
+    0.5
+   ],
+   [
+    0.11,
+    0.07
+   ]
+  ]
+ },
+ "setup": "tape mounts: cam0 front-left corner (diagonal), cam1 centered under the top basket looking forward; cardboard floor liner; mesh walls uncovered",
+ "recording": "640x360, 5 Hz, re-encoded JPEG q65; still stretches trimmed by hardware/trim_clip.py (timestamps kept, so trims show as time gaps)"
+}

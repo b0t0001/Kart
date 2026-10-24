@@ -1,0 +1,95 @@
+{
+ "what_happened": "empty for only ~1 s; a clear 0.5 L water bottle stood UPRIGHT mid-basket (cap reaches the top edge of both views), taken out at ~22 s",
+ "expected": [
+  {
+   "type": "added"
+  },
+  {
+   "type": "removed"
+  }
+ ],
+ "live": [
+  "INTRUSION: cam0 sees something reaching over the edge (an arm?); ignoring it",
+  "INTRUSION: cam1 sees something reaching over the edge (an arm?); ignoring it",
+  "ADDED ? \"blurry pale gray surface, no identifiable item\" (none 0.20)",
+  "INTRUSION: cam0 sees something reaching over the edge (an arm?); ignoring it",
+  "INTRUSION: cam1 sees something reaching over the edge (an arm?); ignoring it",
+  "INTRUSION: cam0 sees something reaching over the edge (an arm?); ignoring it",
+  "INTRUSION: cam1 sees something reaching over the edge (an arm?); ignoring it",
+  "INTRUSION: cam0 sees something reaching over the edge (an arm?); ignoring it",
+  "INTRUSION: cam1 sees something reaching over the edge (an arm?); ignoring it",
+  "INTRUSION: cam0 sees something reaching over the edge (an arm?); ignoring it",
+  "REMOVED ? \"blurry pale gray surface, no identifiable item\" (memory 0.80)",
+  "INTRUSION: cam0 sees something reaching over the edge (an arm?); ignoring it",
+  "INTRUSION: cam0 sees something reaching over the edge (an arm?); ignoring it"
+ ],
+ "notes": "pipeline e9b45cc, no ROI. The bottle is not in the catalog (any/unknown product is fine). Only ~1 s of empty cart before it goes in (frame 1 is empty).",
+ "roi": {
+  "0": [
+   [
+    0.01,
+    0.44
+   ],
+   [
+    0.46,
+    0.26
+   ],
+   [
+    0.62,
+    0.21
+   ],
+   [
+    0.96,
+    0.34
+   ],
+   [
+    0.95,
+    0.42
+   ],
+   [
+    0.98,
+    0.56
+   ],
+   [
+    0.99,
+    0.99
+   ],
+   [
+    0.01,
+    0.99
+   ]
+  ],
+  "1": [
+   [
+    0.12,
+    0.03
+   ],
+   [
+    0.94,
+    0.03
+   ],
+   [
+    0.99,
+    0.15
+   ],
+   [
+    0.99,
+    0.99
+   ],
+   [
+    0.01,
+    0.99
+   ],
+   [
+    0.02,
+    0.5
+   ],
+   [
+    0.11,
+    0.07
+   ]
+  ]
+ },
+ "setup": "tape mounts: cam0 front-left corner (diagonal), cam1 centered under the top basket looking forward; cardboard floor liner; mesh walls uncovered",
+ "recording": "640x360, 5 Hz, re-encoded JPEG q65; still stretches trimmed by hardware/trim_clip.py (timestamps kept, so trims show as time gaps)"
+}
