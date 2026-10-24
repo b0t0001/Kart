@@ -17,9 +17,17 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 3. Add `ANTHROPIC_API_KEY` to `.env`.
 4. Cartesia: create an API key and the Line agent, then add `CARTESIA_API_KEY` and `CARTESIA_AGENT_ID` to `.env`. The iPad chat lists the exact steps in `ios/docs/OVERNIGHT.md`.
 5. Run `backend/go_live.sh`; it should print PASS. Then try the merchant console with real Claude (`backend/docs/DEMO.md`). The local stack can be stopped with `supabase stop --workdir backend && colima stop`.
-6. Your teammate pulls `main` and runs the CV code on the Pi (`pi/README.md`, `hardware/README.md`).
+6. Your teammate pulls `main` and runs the CV code on the Pi (`pi/README.md` "Milestone checks", then enrollment of the 10–15 demo props). The Pi needs `.env` at `~/kart/.env` with `ANTHROPIC_API_KEY`.
+7. iPad: run it on the real iPad (`ios/docs/OVERNIGHT.md`). Turn Stage Manager off. Check that chimes and voice play well together once the Cartesia Line agent is deployed. The demo controls are a three-finger long press, including "Use offline demo mode" as a fallback.
+8. Rehearse the demo with `backend/docs/DEMO.md`, including the live Parmesan beat.
 
 ## Log
+
+### 2026-10-24 ~02:50 · check-in: all three chats finished their overnight work
+- **iPad: DONE overnight** (idle). The app, its Supabase backend and the Line voice agent are built. A fresh reviewer found 1 Critical and 7 Important problems, and all are fixed (`e7c30cd`, `f0acd3f`). Tests: iOS logic 100/100, agent 29 passed with 2 skipped, and both automated walkthroughs (offline and local Supabase) pass. **Voice has only run against fakes.** 35 rulings and the deferred minors are in `ios/docs/OVERNIGHT.md`. To check on the real iPad: chimes vs voice audio, turning Stage Manager off, and signing.
+- **One cross-team follow-up was sent to the backend:** after the shopper says Yes to a deal, the next suggestion shouldn't wait until that item is physically in the cart.
+- **CV:** done. **Backend:** done, apart from the follow-up above.
+- Synced: 2 more commits pushed; no secrets.
 
 ### 2026-10-24 ~02:20 · check-in
 - **iPad: milestones 1 and 2 committed.** The app runs on Supabase through `KartSupabase` (REST + realtime), with a debug panel, automated rehearsals, and a Line voice session. `agent/` has a README and a test pinning the iPad custom-event contract. Still running (verification).
