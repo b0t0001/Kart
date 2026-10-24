@@ -455,8 +455,12 @@ public final class AppModel {
 
     /// "Forget me": everything goes, and Kart lets go at once (and says so).
     public func forgetMember() async {
-        try? await backend.forgetMember()
-        voice.send(.memberForgotten)
+        do {
+            try await backend.forgetMember()
+            voice.send(.memberForgotten)
+        } catch {
+            voice.send(.memberForgetFailed)                     // never "I've forgotten everything" when it didn't
+        }
     }
 
     public func forgetMemory(id: Int) async {

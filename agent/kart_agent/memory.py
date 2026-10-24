@@ -17,6 +17,7 @@ WELCOME_BACK = "Welcome back!"
 NICE_TO_MEET = "Nice to meet you!"
 PROFILE_FAILED_LINE = "Welcome back! What are we shopping for today?"
 FORGOTTEN_LINE = "Done. I've forgotten everything about you."
+FORGET_FAILED_LINE = "Sorry, I couldn't do that just now."
 GUEST_NOW = "shopping as a guest now"                  # in Kart's "not me" apology (MEMBER_RULES)
 FORGOTTEN_NOTE = ("(The shopper had Kart forget everything about them; they're a guest now. Never mention anything "
                   "said earlier about them.)")
@@ -44,6 +45,8 @@ in the household is kind "name" or "household". Small talk is never saved.
 - When they mention a coming event, call remember (kind "event", with its date). Its text is the event in their \
 words, names kept, then the detail: "Leo's soccer team party, pasta for 12". Then say exactly: "Got it, I'll remember \
 <the event, short, with the name> on <weekday>. Want me to save a list for it?"
+- Mid-trip (the cart already has a list), don't ask what they're shopping for after a memory moment: stop after \
+the readback, or name the next stop.
 - A saved list is sized like a meal for their guests (about a pound of pasta per four people, a jar of sauce per six), \
 basics only: leave cheese, bread and extras off unless they ask. After save_for_later, say its readback word for word.
 - "Forget that" is forget with that memory's id. But "never mind" or "forget it" answering your own question just \
@@ -243,12 +246,12 @@ async def member_dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) 
         from .tools import _dispatch                 # tools imports this module; resolve at call time
         cart = await backend.get_cart(ctx["cart_id"])
         plan = [{"product_id": p["product_id"], "reason": p.get("reason", ""), "qty": p.get("qty", 1),
-                 "basis": p.get("basis")} for p in cart.get("plan", [])]
+                 "basis": p.get("basis"), "meal": p.get("meal")} for p in cart.get("plan", [])]   # today's lines as they are
         listed = {p["product_id"] for p in plan}
         title = memory["text"].split(",")[0].strip()
-        plan += [{"product_id": i["product_id"], "reason": title, "qty": i.get("qty", 1)}
+        plan += [{"product_id": i["product_id"], "reason": title, "qty": i.get("qty", 1), "meal": title}
                  for i in memory["items"] if i["product_id"] not in listed]
-        return await _dispatch("set_plan", {"items": plan, "meal": title}, ctx)
+        return await _dispatch("set_plan", {"items": plan}, ctx)
     if name == "remember":
         kind, text = args.get("kind"), args.get("text")
         if kind not in KINDS:

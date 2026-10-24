@@ -89,6 +89,8 @@ public enum LineCodec {
             return ["type": "lull"]
         case .memberForgotten:
             return ["type": "member_forgotten"]
+        case .memberForgetFailed:
+            return ["type": "member_forget_failed"]
         case .memberIdle:
             return ["type": "member_idle"]
         case .cartChanged(.added(let productId)):

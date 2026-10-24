@@ -21,6 +21,8 @@ public enum VoiceEvent: Sendable, Equatable {
     case lull
     /// v0.14 beta: "Forget me" on the screen; Kart drops what it knew at once.
     case memberForgotten
+    /// v0.14 beta: "Forget me" didn't go through; Kart says so instead of claiming it forgot.
+    case memberForgetFailed
     /// v0.14 beta: 3 quiet minutes while signed in ("Still shopping, Dylan?").
     case memberIdle
     /// A new call mid-trip (after a drop or a pause); `unanswered`: the shopper's last words never got a reply.
