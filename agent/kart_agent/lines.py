@@ -21,7 +21,7 @@ def _short(catalog: list[dict[str, Any]], product_id: str | None) -> str:
 
 
 def proactive_line(event: dict[str, Any], catalog: list[dict[str, Any]], plan: list[dict[str, Any]],
-                   items: list[dict[str, Any]] | None = None, meal: str | None = None) -> str | None:
+                   items: list[dict[str, Any]] | None = None, meal: str | None = None, nudges: bool = False) -> str | None:
     """What to say for an iPad custom event, or None to stay quiet."""
     kind = event.get("type")
     product_id = event.get("product_id")
@@ -40,6 +40,8 @@ def proactive_line(event: dict[str, Any], catalog: list[dict[str, Any]], plan: l
             return None
         want = line.get("qty") or 1
         have = sum(i.get("qty", 1) for i in (items or []) if i.get("product_id") == product_id)
+        if nudges and have > want:                      # beta: "Keep the extra?" says it; "Got the X" first is noise
+            return None
         if 0 < have < want:
             left = want - have
             return f"Got one {_short(catalog, product_id)}, {'one more' if left == 1 else f'{left} more'} to go."

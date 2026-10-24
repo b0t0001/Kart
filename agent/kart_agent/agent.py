@@ -47,6 +47,7 @@ class KartAgent:
         self._last_asked: str | None = None         # "offer" or "nudge": a plain answer goes to the latest question
         self._said: set[str] = set()                # deals and nudges already said this trip (repeats are dropped)
         self._meal: str | None = None               # "taco night for 4", from Claude's set_plan
+        self._nudges = False                        # the cart's quantity_nudges beta (carts.features)
 
     # Line filters --------------------------------------------------------------------------------
 
@@ -80,7 +81,7 @@ class KartAgent:
                     self._offer = None
             if meta.get("type") not in SPEAKING_EVENTS:
                 return False
-            line = proactive_line(meta, self._catalog, self._plan, self._items, self._meal)
+            line = proactive_line(meta, self._catalog, self._plan, self._items, self._meal, self._nudges)
             if not line:
                 return False
             if self._speaking:                           # never cut Kart off: say it when this turn ends
@@ -154,7 +155,7 @@ class KartAgent:
             if meta.get("type") == "cart_changed" and meta.get("change") == "added":
                 await asyncio.sleep(self.coalesce_seconds)   # a paired deal suggestion arriving now replaces this line
             await self._refresh()
-            line = proactive_line(meta, self._catalog, self._plan, self._items, self._meal)
+            line = proactive_line(meta, self._catalog, self._plan, self._items, self._meal, self._nudges)
             if line:
                 async for out in self._say([line], interruptible=False):
                     yield out
@@ -208,6 +209,7 @@ class KartAgent:
             self.trip_id = self.trip_id or cart.get("trip_id")
             self._plan = cart.get("plan", [])
             self._items = cart.get("items", [])
+            self._nudges = bool((cart.get("features") or {}).get("quantity_nudges"))
             self._catalog = self._catalog or await self.backend.get_catalog()
             self.brain.set_catalog(self._catalog)
         except Exception:

@@ -72,3 +72,13 @@ def test_kart_says_a_nudge_in_words_not_digits():
     assert proactive_line(under, CATALOG, plan, meal="pasta night for 4") == (
         "Before you go: you're two wedges of parmesan short for pasta night for 4. They're in Aisle 4.")
     assert proactive_line({**under, "product_id": "unknown"}, CATALOG, plan) == "Before you go: 2 Parmesan short."
+
+
+def test_an_extra_beyond_the_list_is_left_to_the_nudge_when_the_beta_is_on():
+    from kart_agent.lines import proactive_line
+    from fakes import CATALOG
+    plan = [{"product_id": "barilla-spaghetti", "qty": 1}]
+    added = {"type": "cart_changed", "change": "added", "product_id": "barilla-spaghetti"}
+    extra = [{"product_id": "barilla-spaghetti", "qty": 2}]
+    assert proactive_line(added, CATALOG, plan, items=extra, nudges=True) is None   # "Keep the extra?" comes next
+    assert proactive_line(added, CATALOG, plan, items=extra) == "Got the Spaghetti."  # beta off: as before

@@ -255,3 +255,13 @@ async def test_at_checkout_skip_it_or_go_get_it_by_voice():
     agent.run_filter(UserCustomSent(metadata={**short, "product_id": "rao-marinara"}))
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Skip it.")])) == ["Got it."]
     assert [p["p_action"] for name, p in backend.calls if name == "dismiss_nudge"] == ["ok", "ok"]
+
+
+async def test_the_agent_knows_when_the_cart_has_the_nudge_beta():
+    agent, backend = make()
+    backend.cart["features"] = {"quantity_nudges": True}
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "qty": 1}]
+    backend.cart["items"] = [{"product_id": "barilla-spaghetti", "qty": 2}]
+    agent.coalesce_seconds = 0
+    assert await run(agent, UserCustomSent(metadata={"type": "cart_changed", "change": "added",
+                                                     "product_id": "barilla-spaghetti"})) == []
