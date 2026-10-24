@@ -251,3 +251,24 @@ import Testing
     #expect(t.backend.cart.items.map { ($0.productId, $0.qty) }.first.map { $0 == ("ground-beef", 1) } == true)
     #expect(t.backend.events.allSatisfy { $0.source == .manual })
 }
+
+// MARK: One cart change, one announcement (on-device: realtime bursts, out-of-order refetches, a second screen)
+
+@MainActor @Test func aStaleOrReplayedCartStateAnnouncesNothingTwice() async throws {
+    let t = try make(); await t.model.startTrip(); t.model.ingest(cart: t.backend.cart)
+    let before = t.backend.cart
+    t.clock.now += 1
+    await t.backend.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")   // + parmesan deal
+    let after = t.backend.cart
+    t.model.ingest(cart: after)
+    t.model.ingest(cart: before)                                // an older refetch lands late
+    t.model.ingest(cart: after)
+    var gap = after; gap.suggestion = nil; gap.updatedAt = after.updatedAt?.addingTimeInterval(1)
+    var back = after; back.updatedAt = after.updatedAt?.addingTimeInterval(2)
+    t.model.ingest(cart: gap); t.model.ingest(cart: back)       // the same deal, after a moment without it
+    let sent = t.voice.sent
+    #expect(sent.filter { if case .cartChanged(.added) = $0 { true } else { false } }.count == 1)
+    #expect(sent.filter { if case .cartChanged(.removed) = $0 { true } else { false } }.isEmpty)
+    #expect(sent.filter { if case .suggestion = $0 { true } else { false } }.count == 1)
+    #expect(t.sounds.played.filter { $0 == .added }.count == 1)
+}

@@ -192,6 +192,8 @@ public final class SupabaseKartBackend: KartBackend {
     private func refreshCart(force: Bool = false) async {
         guard let fresh = await fetch("carts?cart_id=eq.\(cartId)", as: CartState.self)?.first else { return }
         let tripChanged = fresh.tripId != cart.tripId
+        // Overlapping refetches (a burst of row updates per event) can finish out of order: never step back in time.
+        if !tripChanged, !force, let shown = cart.updatedAt, let updated = fresh.updatedAt, updated < shown { return }
         cart = fresh
         if tripChanged || force {
             await refreshEvents()

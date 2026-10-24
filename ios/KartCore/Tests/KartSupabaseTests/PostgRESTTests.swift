@@ -78,4 +78,20 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         try await backend.startTrip()
         #expect(backend.lastError?.contains("carts") == true)
     }
+
+    @MainActor @Test func aLateOlderRefetchNeverStepsTheCartBack() async throws {
+        let trip = "6f9619ff-8b86-d011-b42d-00c04fc964ff"
+        func row(_ updated: String, qty: Int) -> String {
+            #"[{"cart_id":"7","trip_id":"\#(trip)","status":"shopping","updated_at":"\#(updated)","#
+                + #""items":[{"product_id":"bananas","name":"Bananas","price":1.49,"qty":\#(qty),"added_at":"2026-10-24T18:00:00Z"}]}]"#
+        }
+        let backend = SupabaseKartBackend(url: URL(string: "http://127.0.0.1:54321")!, anonKey: "anon", cartId: "7",
+                                          layout: try Fixtures.catalog().layout, session: StubProtocol.session())
+        StubProtocol.reply = .init(status: 200, body: row("2026-10-24T18:00:02Z", qty: 2))
+        try await backend.dismissSuggestion()                       // any RPC refetches the cart
+        #expect(backend.cart.items.first?.qty == 2)
+        StubProtocol.reply = .init(status: 200, body: row("2026-10-24T18:00:01Z", qty: 1))   // an older read lands late
+        try await backend.dismissSuggestion()
+        #expect(backend.cart.items.first?.qty == 2)
+    }
 }

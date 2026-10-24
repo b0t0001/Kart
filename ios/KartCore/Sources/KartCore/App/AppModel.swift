@@ -111,6 +111,10 @@ public final class AppModel {
     }
 
     public func ingest(cart: CartState) {
+        if let previous = lastCart, previous.tripId == cart.tripId, let seen = previous.updatedAt,
+           let updated = cart.updatedAt, updated < seen {
+            return              // an older refetch that landed late: replaying it would announce a phantom remove and re-add
+        }
         defer { lastCart = cart }
         guard let previous = lastCart else { return }
         if previous.tripId != cart.tripId {               // a reset from outside the app (laptop, another iPad)
