@@ -344,6 +344,10 @@ class KartAgent:
             self._plan = cart.get("plan", [])
             self._items = cart.get("items", [])
             self._nudges = bool((cart.get("features") or {}).get("quantity_nudges"))
+            live = cart.get("nudge") if "nudge" in cart else self._nudge
+            if self._nudge and not (live and (live.get("product_id"), live.get("kind")) ==
+                                    (self._nudge.get("product_id"), self._nudge.get("kind"))):
+                self._nudge = None                       # cleared or replaced on the cart: nothing left to answer
             self._catalog = self._catalog or await self.backend.get_catalog()
             self.brain.set_catalog(self._catalog)
         except Exception:

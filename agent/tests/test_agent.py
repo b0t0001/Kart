@@ -236,6 +236,21 @@ async def test_keep_it_and_got_it_answer_the_nudge_without_claude():
     assert [p["p_action"] for name, p in backend.calls if name == "dismiss_nudge"] == ["keep", "ok"]
 
 
+async def test_a_nudge_the_cart_already_cleared_is_not_answered():
+    agent, backend = make([Turn(chunks=["Skip what?"])])
+    agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
+    backend.cart["nudge"] = None                             # the extra came out: the backend cleared the nudge
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Skip.")])) == ["Skip what?"]
+    assert not any(name == "dismiss_nudge" for name, _ in backend.calls)
+
+
+async def test_a_nudge_the_cart_still_shows_is_answered():
+    agent, backend = make()
+    agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
+    backend.cart["nudge"] = {"product_id": "ground-beef", "kind": "over", "have": 2, "need": 1}
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Keep it.")])) == ["Okay, keeping it."]
+
+
 async def test_the_last_question_asked_gets_the_answer():
     agent, backend = make()
     agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
