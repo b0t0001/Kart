@@ -15,6 +15,8 @@ All commands run from the repo root. `P=backend/.venv/bin/python` is shorthand b
    - `--without-deal d-parm-3off` starts with no Parmesan deal, so the owner can create it live
      (beat 4). Drop the flag to keep the seeded deal.
 
+**Only the demo operator runs `reset-demo` on the hosted project.** It clears the change log and
+resets the catalog for every team, so a reset during someone else's rehearsal breaks their run.
 Run step 3 between every judge group. Store insights keep accumulating across runs (they're real
 trips), and the reset doesn't clear them.
 
@@ -60,5 +62,6 @@ Optional merchant beats, if a judge asks:
 ```bash
 backend/.venv/bin/python backend/simulate_demo.py     # the whole flow over REST with the anon key
 backend/.venv/bin/python -m pytest -q backend/e2e     # REST + realtime + the merchant beat
+merchant/.venv/bin/python merchant/smoke.py           # real Claude: 4 prompts + live beat (a few cents)
 backend/.venv/bin/python backend/db.py reset-demo     # afterwards: clean slate
 ```

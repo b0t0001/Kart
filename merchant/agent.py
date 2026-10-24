@@ -93,7 +93,8 @@ class Store:
         self.conn = self._connect()
 
     def _connect(self) -> psycopg.Connection:
-        return psycopg.connect(self.url, autocommit=True, row_factory=dict_row)
+        # prepare_threshold=None: Supabase's transaction pooler (port 6543) breaks prepared statements
+        return psycopg.connect(self.url, autocommit=True, row_factory=dict_row, prepare_threshold=None)
 
     def q(self, sql: str, params=None) -> list[dict]:
         with self.lock:
@@ -499,15 +500,17 @@ directions and deals. You talk with the store's owner or manager, who is not tec
 They tell you what changed in the store and you make it so in the live catalog.
 
 How changes work:
-- Look products up with search_products before changing anything, and use the exact ids it returns. \
-Never invent products, ids, prices or deals.
+- Each turn, a console update lists the live catalog (id, name, price, deal, aisle, stock). Use those \
+exact ids; call search_products only when the list isn't enough. Never invent products, ids, prices or deals.
 - The write tools (update_price, move_product, set_stock, add_product, create_deal, end_deal, \
 undo_change) only STAGE a change. The owner sees your staged change as a card with Confirm and \
 Cancel buttons; nothing changes in the store until they press Confirm. Never say a change is done, \
 live or applied unless a console update tells you it was confirmed.
-- After staging, reply in one or two short sentences: what you staged, and that it's waiting for \
-their Confirm. Don't repeat the whole preview; they can read the card.
-- One request can need several changes ("Rao's is out, put the spaghetti on sale instead"): stage each.
+- After staging, reply in ONE short sentence that it's ready for their Confirm, plus at most one short \
+sentence if they need to know something (a guess you made, a missing detail). Don't repeat the preview; \
+they read it on the card.
+- One request can need several changes ("Rao's is out, put the spaghetti on sale instead"): stage them \
+all at once, in the same response.
 - New products: the cart cameras recognize items from vision_hint, so always write one (from the owner's \
 description, or from the product's usual packaging) and mention they can correct it.
 - If something is ambiguous (two products match, no price given for a new item), ask one short question \
@@ -555,6 +558,15 @@ class MerchantAgent:
         """A console event Claude should know about on the next turn (confirmed, cancelled, undone)."""
         self.notes.append(text)
 
+    def _catalog_lines(self) -> str:
+        """Fresh every turn (after the cached prefix), so Claude can stage without a search round."""
+        lines = []
+        for p in self.store.catalog():
+            deal = f"{p['deal_label']} → {money(p['sale_price'])}" if p["deal_id"] else "no deal"
+            lines.append(f"{p['id']} | {p['short_name']} ({p['name']}) | {money(p['price'])} | {deal} "
+                         f"| {p['section']} | {p['stock']}")
+        return "\n".join(lines)
+
     def _call(self):
         try:
             return self._create()
@@ -567,11 +579,13 @@ class MerchantAgent:
         return self.client.beta.messages.create(
             model=MODEL,
             max_tokens=16000,
-            system=self.system,
+            # breakpoint 1: tools + instructions, shared by every conversation;
+            # breakpoint 2 (top-level, automatic): the growing conversation
+            system=[{"type": "text", "text": self.system, "cache_control": {"type": "ephemeral"}}],
             tools=self.tools,
             messages=self.messages,
             output_config={"effort": EFFORT},
-            cache_control={"type": "ephemeral"},     # caches the growing conversation prefix
+            cache_control={"type": "ephemeral"},
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",                     # a refused request is retried server-side
         )
@@ -584,6 +598,7 @@ class MerchantAgent:
             shown = list(self.notes)
             if shown:
                 update += "\nConsole updates since your last reply:\n" + "\n".join(f"- {n}" for n in shown)
+            update += "\nLive catalog (id | name | price | deal | aisle | stock):\n" + self._catalog_lines()
             self.messages.append({"role": "user", "content": text})
             # Operator channel: a mid-conversation system message, so the history prefix stays cached.
             self.messages.append({"role": "system", "content": update})

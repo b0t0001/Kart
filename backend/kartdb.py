@@ -32,7 +32,8 @@ def db_url(override: str | None = None) -> str:
 
 
 def connect(url: str) -> psycopg.Connection:
-    return psycopg.connect(url, autocommit=True)
+    # prepare_threshold=None: Supabase's transaction pooler (port 6543) breaks prepared statements
+    return psycopg.connect(url, autocommit=True, prepare_threshold=None)
 
 
 def migration_files() -> list[Path]:

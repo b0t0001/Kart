@@ -15,7 +15,9 @@ for you.
 3. Run `backend/go_live.sh`. It applies the migrations, seeds the catalog, deploys voice-token and
    its secrets, runs the demo simulation over REST, runs the end-to-end test, and resets the demo.
    Look for **PASS**. It refuses to run while `.env` still holds the local URL.
-4. **The first real-Claude test of the merchant agent.** Run
+4. ✅ **Done 2026-10-24 against hosted: PASS** (`merchant/smoke.py`): four prompts plus the live beat,
+   3.4–6.4 s to the preview card, Confirm reaches the cart in about 0.1 s. Originally: **The first
+   real-Claude test of the merchant agent.** Run
    `merchant/.venv/bin/python merchant/server.py`, open http://localhost:8090, and click the four
    example prompts. **This has never run against the real API**: the agent loop is tested only with a
    scripted fake. If tool choices look sloppy, set `MERCHANT_EFFORT=medium` in `.env` (the default is

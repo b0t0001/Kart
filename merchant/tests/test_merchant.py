@@ -293,6 +293,8 @@ def test_console_notes_reach_the_next_turn(store, tools):
     agent.chat("thanks")
     system_msg = fake.calls[1]["messages"][-1]
     assert system_msg["role"] == "system" and "CONFIRMED change #1" in system_msg["content"]
+    # the live catalog rides along each turn, so Claude can stage without a search round
+    assert "kirkland-parmesan | Parmesan (" in system_msg["content"] and "$3 off → $9.99" in system_msg["content"]
     assert agent.notes == []
 
 

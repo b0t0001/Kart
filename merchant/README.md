@@ -8,6 +8,7 @@ agent.py          Claude (claude-opus-5-5) with typed tools; Store = catalog + c
 server.py         FastAPI: the console page + /api (chat, state, confirm / cancel / undo)
 static/index.html chat · live cart · live catalog · change log (mic button where the browser supports it)
 tests/            pytest: staging, apply/undo, the agent loop with a scripted fake Claude, the API
+smoke.py          real-Claude smoke test: the four example prompts + the live deal beat (a few cents)
 ```
 
 ## Why it's safe to let Claude edit the store
@@ -47,3 +48,10 @@ in the console), and optional `MERCHANT_MODEL`, `MERCHANT_EFFORT` (default `low`
 
 The Claude request uses adaptive thinking (always on for Opus 5.5) and the server-side refusal fallback
 (`fallbacks: "default"`), so a declined request is retried on another model instead of failing.
+
+**Speed.** Each turn's operator note carries the live catalog (id, name, price, deal, aisle, stock),
+so Claude stages a change in one call without searching first. Then it writes a one-sentence reply.
+Measured against the hosted project at effort `low`: about **3.4 to 6.4 s** from the owner's message
+to the preview card, and **about 0.1 s** from Confirm to the carts row. `merchant/smoke.py` re-measures
+it. It's safe while others use the database: it undoes its own changes, never touches cart 7 or the
+change log, and checks that the catalog still matches `store.json`.
