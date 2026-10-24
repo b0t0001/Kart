@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -47,7 +48,7 @@ def _catalog(cfg, env, args):
     return cat
 
 
-def build(cfg, env: dict, args, cams: list[int]):
+def build(cfg, env: dict, args, cams: list[int], send_events: bool = True):
     if env.get("CART_ID"):
         cfg.cart_id = env["CART_ID"]
     state_dir = Path(args.state) if getattr(args, "state", None) else cfg.path("state_dir")
@@ -65,10 +66,10 @@ def build(cfg, env: dict, args, cams: list[int]):
     identifier = HybridIdentifier(gallery, cloud, catalog, cfg)
 
     sinks = [JsonlSink(state_dir / "events.jsonl"), ConsoleSink()]
-    if env.get("SUPABASE_URL") and env.get("SUPABASE_ANON_KEY"):
+    if send_events and env.get("SUPABASE_URL") and env.get("SUPABASE_ANON_KEY"):
         sinks.append(HttpSink(env["SUPABASE_URL"], env["SUPABASE_ANON_KEY"], state_dir / "outbox.jsonl"))
         log.info("events → Supabase apply_cart_event (cart %s)", cfg.cart_id)
-    else:
+    elif send_events:
         log.warning("no Supabase settings: events go to %s only", state_dir / "events.jsonl")
     pipeline = Pipeline(cfg, cams, identifier, features, sinks, state_dir)
     pipeline.catalog = catalog
@@ -134,12 +135,16 @@ def cmd_replay(cfg, env, args) -> int:
     if not sources:
         print(f"no cam*/ folders in {args.dir}")
         return 1
-    pipeline, sinks = build(cfg, env, args, [s.cam for s in sources])
+    # A replay is a rehearsal: its own scratch state (never the live cart's memory or empty pictures)
+    # and no events to the backend (it must not bill the real cart), even on the Pi with its .env.
+    if not args.state:
+        args.state = tempfile.mkdtemp(prefix="kart-replay-")
+    pipeline, sinks = build(cfg, env, args, [s.cam for s in sources], send_events=False)
     n = 0
     for tick in iter_ticks(sources):
         n += len(pipeline.step(tick))
     _close(sinks)
-    print(f"replay done: {n} event(s)")
+    print(f"replay done: {n} event(s); log and crops in {args.state}")
     return 0
 
 
