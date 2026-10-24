@@ -187,3 +187,39 @@ async def test_side_chatter_gets_no_answer_and_no_caption():
 async def test_a_filler_alone_gets_no_answer():
     agent, backend = make()                                  # no scripted Claude turns: calling Claude would fail
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Um.")])) == [] and backend.transcript == []
+
+
+
+BEEF_NUDGE = {"type": "nudge", "product_id": "ground-beef", "kind": "over", "have": 2, "need": 1,
+              "text": "That's your 2nd Ground Beef. Your list says 1. Keep it?"}
+
+
+async def test_a_nudge_is_said_once_and_cant_be_cut_off():
+    agent, backend = make()
+    assert agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
+    said = await said_events(agent, UserCustomSent(metadata=BEEF_NUDGE))
+    assert [(e.text, e.interruptible) for e in said] == [(BEEF_NUDGE["text"], False)]
+
+
+async def test_keep_it_and_got_it_answer_the_nudge_without_claude():
+    agent, backend = make()                                  # no scripted Claude turns: calling Claude would fail
+    agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Uh, keep it.")])) == ["Okay, keeping it."]
+    agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Oh, I'll put it back.")])) == ["Got it."]
+    assert [p["p_action"] for name, p in backend.calls if name == "dismiss_nudge"] == ["keep", "ok"]
+
+
+async def test_the_last_question_asked_gets_the_answer():
+    agent, backend = make()
+    agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
+    agent.run_filter(UserCustomSent(metadata=PARM_OFFER))    # the deal came after: "yeah" answers the deal
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Yeah, sure.")])) == ["Added Parmesan to your list."]
+    assert not any(name == "dismiss_nudge" for name, _ in backend.calls)
+
+
+async def test_a_tap_on_the_nudge_card_ends_the_spoken_question():
+    agent, backend = make([Turn(chunks=["Keep what?"])])
+    agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
+    agent.run_filter(UserCustomSent(metadata={"type": "card_response", "card_id": "nudge-ground-beef|over", "action": "got_it"}))
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Keep it.")])) == ["Keep what?"]

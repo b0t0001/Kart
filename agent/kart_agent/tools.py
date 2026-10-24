@@ -22,6 +22,7 @@ _PLAN_ITEM = {
         "product_id": {"type": "string"},
         "reason": {"type": "string", "description": "why it's on the list, e.g. 'pasta dinner'"},
         "qty": {"type": "integer", "minimum": 1},
+        "basis": {"type": "string", "description": "the math behind the amount, e.g. '8 people x 1/4 lb = 2 lb of beef'"},
     },
     "required": ["product_id", "reason"],
 }
@@ -34,12 +35,14 @@ TOOLS: list[dict[str, Any]] = [
           {"items": {"type": "array", "items": _PLAN_ITEM}}, ["items"]),
     _tool("add_to_plan", "Add one product to the shopping list, keeping the rest; with qty, sets how many (also for a "
           "product already on the list: 'make it three').",
-          {"product_id": {"type": "string"}, "reason": {"type": "string"}, "qty": {"type": "integer", "minimum": 1}},
-          ["product_id", "reason"]),
+          {"product_id": {"type": "string"}, "reason": {"type": "string"}, "qty": {"type": "integer", "minimum": 1},
+           "basis": {"type": "string"}}, ["product_id", "reason"]),
     _tool("remove_from_plan", "Take one product off the shopping list.", {"product_id": {"type": "string"}}, ["product_id"]),
     _tool("get_deals", "Every live deal in the store, with product, label and aisle."),
     _tool("set_location", "The shopper said where they are, e.g. 'aisle 5'.", {"section": {"type": "string"}}, ["section"]),
     _tool("dismiss_suggestion", "The shopper said no to the current deal suggestion."),
+    _tool("dismiss_nudge", "Answer Kart's quantity nudge: 'keep' (keep the extra; the list goes up) or 'ok' (got it).",
+          {"action": {"type": "string", "enum": ["keep", "ok"]}}, ["action"]),
     _tool("confirm_item", "The shopper said what the cameras' unrecognized item is.", {"product_id": {"type": "string"}}, ["product_id"]),
     _tool("start_checkout", "The shopper is done; show the bill."),
 ]
@@ -99,14 +102,17 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
         catalog = {p["id"]: p for p in await backend.get_catalog()}
         if name in ("add_to_plan", "remove_from_plan"):
             cart = await backend.get_cart(cart_id)
-            items = [{"product_id": p["product_id"], "reason": p.get("reason", ""), "qty": p.get("qty", 1)} for p in cart.get("plan", [])]
+            items = [{"product_id": p["product_id"], "reason": p.get("reason", ""), "qty": p.get("qty", 1),
+                      "basis": p.get("basis")} for p in cart.get("plan", [])]
             product_id = _str(args, "product_id")
             if name == "remove_from_plan":
                 items = [i for i in items if i["product_id"] != product_id]
             elif all(i["product_id"] != product_id for i in items):
-                items.append({"product_id": product_id, "reason": _str(args, "reason"), "qty": args.get("qty", 1)})
+                items.append({"product_id": product_id, "reason": _str(args, "reason"), "qty": args.get("qty", 1),
+                              "basis": args.get("basis")})
             elif isinstance(args.get("qty"), int):
-                items = [{**i, "qty": args["qty"]} if i["product_id"] == product_id else i for i in items]
+                items = [{**i, "qty": args["qty"], "basis": args.get("basis") or i.get("basis")}
+                         if i["product_id"] == product_id else i for i in items]
         else:
             items = args.get("items")
             if not isinstance(items, list):
@@ -128,7 +134,9 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
                 if isinstance(stock, int) and 0 < stock < qty:       # never plan more than the shelf has, and say so
                     notes.append(f"Only {stock} {product.get('short_name') or product['name']} in stock: planned {stock}, not {qty}.")
                     qty = stock
-                lines.append({"product_id": item["product_id"], "reason": str(item.get("reason", "")), "qty": qty})
+                basis = item.get("basis")
+                lines.append({"product_id": item["product_id"], "reason": str(item.get("reason", "")), "qty": qty,
+                              **({"basis": basis} if isinstance(basis, str) and basis else {})})
         cart = await backend.rpc("set_plan", p_cart_id=cart_id, p_plan=lines)
         result = {"planned": planned, "not_in_store": missing, "out_of_stock": sold_out, "next_step": cart.get("next_step")}
         return {**result, "notes": notes} if notes else result
@@ -139,6 +147,12 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
         return {"next_step": cart.get("next_step")}
     if name == "dismiss_suggestion":
         await backend.rpc("dismiss_suggestion", p_cart_id=cart_id)
+        return {"ok": True}
+    if name == "dismiss_nudge":
+        action = _str(args, "action")
+        if action not in ("keep", "ok"):
+            raise ValueError("action must be 'keep' or 'ok'")
+        await backend.rpc("dismiss_nudge", p_cart_id=cart_id, p_action=action)
         return {"ok": True}
     if name == "confirm_item":
         product_id = _str(args, "product_id")

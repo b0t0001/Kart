@@ -8,11 +8,11 @@ from typing import Any, AsyncIterator
 from line.events import AgentSendText, CallEnded, CallStarted, UserCustomSent, UserTurnEnded, UserTurnStarted
 
 from .brain import Brain
-from .lines import DECLINED_LINE, accepted_line, only_filler, proactive_line, yes_or_no
+from .lines import DECLINED_LINE, KEEP_LINE, NUDGE_OK_LINE, accepted_line, nudge_answer, only_filler, proactive_line, yes_or_no
 from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
-SPEAKING_EVENTS = {"suggestion", "deal_changed", "cart_changed"}
+SPEAKING_EVENTS = {"suggestion", "nudge", "deal_changed", "cart_changed"}
 
 
 class KartAgent:
@@ -34,6 +34,8 @@ class KartAgent:
         self._speaking = False
         self._pending: str | None = None            # a proactive line that arrived while Kart was talking
         self._offer: dict[str, Any] | None = None   # the deal Kart just asked about, until it's answered
+        self._nudge: dict[str, Any] | None = None   # the quantity nudge Kart just said (v0.12 beta)
+        self._last_asked: str | None = None         # "offer" or "nudge": a plain answer goes to the latest question
 
     # Line filters --------------------------------------------------------------------------------
 
@@ -49,8 +51,15 @@ class KartAgent:
                 return False
             if meta.get("type") == "suggestion":
                 self._offer = meta                       # "Want it?" can now be answered with a plain yes or no
-            elif meta.get("type") == "card_response":
-                self._offer = None                       # answered on the screen
+                self._last_asked = "offer"
+            elif meta.get("type") == "nudge":
+                self._nudge = meta                       # "Keep it?" / "Before you go…" can be answered by voice
+                self._last_asked = "nudge"
+            elif meta.get("type") == "card_response":    # answered on the screen
+                if str(meta.get("card_id", "")).startswith("nudge-"):
+                    self._nudge = None
+                else:
+                    self._offer = None
             if meta.get("type") not in SPEAKING_EVENTS:
                 return False
             line = proactive_line(meta, self._catalog, self._plan, self._items)
@@ -84,6 +93,16 @@ class KartAgent:
                 return
             await self._refresh()
             ctx = {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id}
+            nudge_reply = nudge_answer(text) if self._nudge and (self._last_asked == "nudge" or not self._offer) else None
+            if nudge_reply:                              # "keep it" / "got it": dismiss_nudge, no Claude round
+                await self._caption("user", text)
+                self._nudge = None
+                await run_tool("dismiss_nudge", {"action": nudge_reply}, ctx)
+                line = KEEP_LINE if nudge_reply == "keep" else NUDGE_OK_LINE
+                self.brain.remember(text, line)
+                async for out in self._say([line], interruptible=False):
+                    yield out
+                return
             answer = yes_or_no(text) if self._offer else None
             if answer:                                   # a plain yes/no to the deal: no Claude round, nothing invented
                 await self._caption("user", text)

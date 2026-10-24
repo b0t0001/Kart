@@ -102,3 +102,10 @@ async def test_text_from_two_rounds_is_spoken_with_a_space_between():
     ])
     chunks = await collect(Brain(llm=llm).respond("pasta dinner", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
     assert "".join(chunks) == "Pasta night, nice. One sec. Your list is ready."
+
+
+
+async def test_system_prompt_asks_for_the_math_behind_each_amount():
+    llm = FakeLLM([Turn(chunks=["ok"])])
+    await collect(Brain(llm=llm).respond("hi", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
+    assert "basis" in llm.requests[0]["system"]

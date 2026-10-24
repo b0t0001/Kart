@@ -15,6 +15,8 @@ IPAD = {
     "deal_changed": {"type": "deal_changed", "deal_id": "d-parm-3off", "product_id": "kirkland-parmesan", "label": "$3 off"},
     "card_response": {"type": "card_response", "card_id": "deal-d-parm-3off", "action": "yes"},
     "ui_action": {"type": "ui_action", "action": "checkout_tapped"},
+    "nudge": {"type": "nudge", "product_id": "ground-beef", "kind": "over", "have": 2, "need": 1,
+              "text": "That's your 2nd Ground Beef. Your list says 1. Keep it?"},
 }
 
 
@@ -30,4 +32,5 @@ def test_every_ipad_event_is_understood():
         "deal_changed": "Heads up, Parmesan just went $3 off.",
         "card_response": None,
         "ui_action": None,
+        "nudge": "That's your 2nd Ground Beef. Your list says 1. Keep it?",
     }

@@ -43,7 +43,7 @@ class FakeBackend:
         self.calls.append((name, params))
         if name == "set_plan":
             self.cart["plan"] = [{"product_id": p["product_id"], "reason": p["reason"], "qty": p.get("qty", 1),
-                                  "done": False} for p in params["p_plan"]]
+                                  "done": False, **({"basis": p["basis"]} if p.get("basis") else {})} for p in params["p_plan"]]
             self.cart["next_step"] = "Aisle 6 → Spaghetti"
         if name == "set_cart_status":
             self.cart["status"] = params["p_status"]

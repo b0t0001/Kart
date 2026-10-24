@@ -18,7 +18,7 @@ def ctx(backend):
 
 def test_every_tool_streams_eagerly_and_has_a_schema():
     names = {t["name"] for t in TOOLS}
-    assert names == {"search_catalog", "get_cart", "set_plan", "add_to_plan", "remove_from_plan", "get_deals", "set_location",
+    assert names == {"search_catalog", "get_cart", "set_plan", "add_to_plan", "remove_from_plan", "dismiss_nudge", "get_deals", "set_location",
                      "dismiss_suggestion", "confirm_item", "start_checkout"}
     assert all(t["eager_input_streaming"] and t["input_schema"]["type"] == "object" for t in TOOLS)
 
@@ -93,3 +93,18 @@ async def test_remove_from_plan_takes_one_line_off(backend):
 async def test_search_shows_how_many_are_in_stock(backend):
     found = json.loads(await run_tool("search_catalog", {"query": "parmesan"}, ctx(backend)))
     assert found[0]["stock"] == 2
+
+
+
+async def test_every_planned_line_keeps_its_basis(backend):
+    await run_tool("set_plan", {"items": [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 2,
+                                           "basis": "8 people x 1/4 lb = 2 lb"}]}, ctx(backend))
+    await run_tool("add_to_plan", {"product_id": "rao-marinara", "reason": "pasta", "basis": "one jar for 2 lb"}, ctx(backend))
+    assert [(p["product_id"], p.get("basis")) for p in backend.cart["plan"]] == [
+        ("barilla-spaghetti", "8 people x 1/4 lb = 2 lb"), ("rao-marinara", "one jar for 2 lb")]
+
+
+async def test_dismiss_nudge_passes_keep_or_ok(backend):
+    await run_tool("dismiss_nudge", {"action": "keep"}, ctx(backend))
+    out = json.loads(await run_tool("dismiss_nudge", {"action": "maybe"}, ctx(backend)))
+    assert ("dismiss_nudge", {"p_cart_id": "7", "p_action": "keep"}) in backend.calls and "error" in out

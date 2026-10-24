@@ -25,7 +25,7 @@ def proactive_line(event: dict[str, Any], catalog: list[dict[str, Any]], plan: l
     """What to say for an iPad custom event, or None to stay quiet."""
     kind = event.get("type")
     product_id = event.get("product_id")
-    if kind == "suggestion":
+    if kind in ("suggestion", "nudge"):
         return event.get("text") or None
     if kind == "deal_changed":
         return f"Heads up, {_short(catalog, product_id)} just went {event.get('label', 'on sale')}."
@@ -77,3 +77,27 @@ def accepted_line(catalog: list[dict[str, Any]], product_id: str | None) -> str:
 
 
 DECLINED_LINE = "No problem."
+KEEP_LINE = "Okay, keeping it."
+NUDGE_OK_LINE = "Got it."
+
+_KEEP = {"keep it", "keep", "keep them", "keep both", "keeping it", "i'll keep it", "i'll keep them", "yes keep it",
+         "yeah keep it", "i want it", "i want them"}
+_NUDGE_OK = {"ok", "okay", "got it", "gotcha", "i'll put it back", "put it back", "putting it back", "no",
+             "nope", "nah", "fine", "right", "my bad", "oops"}
+
+
+def nudge_answer(text: str) -> str | None:
+    """A plain spoken answer to a quantity nudge: 'keep' or 'ok' (dismiss_nudge), else None for Claude."""
+    if "?" in text:
+        return None
+    words = re.sub(r"[^a-z' ]", " ", text.lower()).split()
+    while words and words[0] in _FILLERS:
+        words = words[1:]
+    phrase = " ".join(words)
+    if not words or len(words) > 6:
+        return None
+    if phrase in _KEEP or "keep" in words:
+        return "keep"
+    if phrase in _NUDGE_OK or phrase.startswith(("okay", "ok ", "got it", "i'll put", "put it back")):
+        return "ok"
+    return None
