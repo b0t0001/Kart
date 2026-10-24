@@ -24,6 +24,9 @@ struct AvatarView: View {
         .onChange(of: reaction?.id) { _, _ in
             if let reaction { play(reaction.reaction) }
         }
+        .onAppear {
+            if let reaction, Date.now.timeIntervalSince(reaction.at) < 1.5 { play(reaction.reaction) }
+        }
         .accessibilityLabel("Kart")
     }
 

@@ -9,10 +9,13 @@ public enum PaymentState: Sendable, Equatable {
 public struct ReactionEvent: Sendable, Equatable, Identifiable {
     public let id: UUID
     public let reaction: AvatarReaction
+    /// Lets a view that appears just after (Greeting after the wave) still play it.
+    public let at: Date
 
-    public init(id: UUID = UUID(), reaction: AvatarReaction) {
+    public init(id: UUID = UUID(), reaction: AvatarReaction, at: Date = .now) {
         self.id = id
         self.reaction = reaction
+        self.at = at
     }
 }
 

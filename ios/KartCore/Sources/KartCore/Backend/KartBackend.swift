@@ -22,6 +22,8 @@ public enum KartBackendError: Error, Equatable {
     /// This trip's transcript, oldest first.
     var transcript: [TranscriptLine] { get }
     var connection: ConnectionState { get }
+    /// This trip's receipt once `checkout` has run (the `receipts` row).
+    var receipt: Receipt? { get }
 
     /// `reset_cart`: a new trip.
     func startTrip() async throws

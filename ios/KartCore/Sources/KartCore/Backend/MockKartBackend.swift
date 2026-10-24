@@ -10,11 +10,11 @@ public final class MockKartBackend: KartBackend {
     public private(set) var catalog: Catalog
     public private(set) var transcript: [TranscriptLine] = []
     public private(set) var connection: ConnectionState = .online
+    public private(set) var receipt: Receipt?
 
     @ObservationIgnored private let clock: @MainActor () -> Date
     @ObservationIgnored private var nextEventId: Int64 = 1
     @ObservationIgnored private var nextTranscriptId: Int64 = 1
-    @ObservationIgnored private var receipt: Receipt?
 
     public init(catalog: Catalog, cartId: String = "7", clock: @escaping @MainActor () -> Date = { .now }) {
         self.catalog = catalog

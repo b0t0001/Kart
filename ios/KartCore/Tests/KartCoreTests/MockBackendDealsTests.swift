@@ -87,3 +87,18 @@ import Testing
         try await b.endTrip(); #expect(b.cart.status == .idle)
     }
 }
+
+@MainActor @Test func receiptIsExposedForTheTripOnly() async throws {
+    let b = MockKartBackend(catalog: try Fixtures.catalog()); try await b.startTrip()
+    #expect(b.receipt == nil)
+    await b.simulateVision(.added, productId: "bananas", confidence: 0.9, label: "b")
+    let r = try await b.checkout(provider: "simulated")
+    #expect(b.receipt == r)
+    try await b.startTrip()
+    #expect(b.receipt == nil)
+}
+
+@Test func reactionEventsRememberWhenTheyHappened() {
+    let at = Date(timeIntervalSince1970: 1_800_000_000)
+    #expect(ReactionEvent(reaction: .wave, at: at).at == at)
+}
