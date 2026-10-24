@@ -22,5 +22,9 @@ Also already supported, for the agent's question list:
 - **"No thanks"**: `dismiss_suggestion`.
 - **"Keep it" / "ok"** on a nudge: `dismiss_nudge`.
 
+**Built (v0.16):** all three. Duplicate products merge into one line, with `plan[].meal` / `meals`.
+`add_to_plan` / `remove_from_plan` make atomic list edits. `set_budget` fills `budget_left` and
+`plan_estimate`. See the RPC table in `backend/README.md`.
+
 **Recommended RPC work, in order:** (1) merge duplicate products + `plan[].meal`, (2) atomic
 add/remove plan items, (3) budget. All three are small, and nothing else in this list needs RPC changes.

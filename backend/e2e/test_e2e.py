@@ -262,3 +262,20 @@ def test_thats_mine_over_rest(rest, cart_id):
     ev = rest.get("/cart_events", event_id=f"eq.{phone['event_id']}", select="resolution")[0]
     assert ev["resolution"] == "personal"
     assert rest.rpc("checkout", p_cart_id=cart_id, p_provider="simulated")["total"] == 1.99
+
+
+def test_two_meals_voice_edits_and_a_budget_over_rest(rest, cart_id):
+    """SHOPPER_INTERACTIONS.md: '…and nachos for Saturday', 'add a queso', 'skip the beans', 'under $30'."""
+    rest.rpc("reset_cart", p_cart_id=cart_id)
+    c = rest.rpc("set_plan", p_cart_id=cart_id, p_plan=[
+        {"product_id": "barilla-spaghetti", "qty": 1, "meal": "Pasta night"},
+        {"product_id": "daisy-sour-cream", "qty": 1, "meal": "Taco night"},
+        {"product_id": "daisy-sour-cream", "qty": 1, "meal": "Nachos"}])
+    sc = next(p for p in c["plan"] if p["product_id"] == "daisy-sour-cream")
+    assert (sc["qty"], sc["meals"]) == (2, ["Taco night", "Nachos"])
+    c = rest.rpc("add_to_plan", p_cart_id=cart_id, p_product_id="queso", p_qty=1, p_meal="Nachos")
+    c = rest.rpc("add_to_plan", p_cart_id=cart_id, p_product_id="black-beans", p_qty=1, p_meal="Nachos")
+    c = rest.rpc("remove_from_plan", p_cart_id=cart_id, p_product_id="black-beans")
+    assert {p["product_id"] for p in c["plan"]} == {"barilla-spaghetti", "daisy-sour-cream", "queso"}
+    c = rest.rpc("set_budget", p_cart_id=cart_id, p_amount=30)
+    assert c["budget_left"] == 30 and c["plan_estimate"] == round(1.99 + 2 * 2.39 + 3.99, 2)
