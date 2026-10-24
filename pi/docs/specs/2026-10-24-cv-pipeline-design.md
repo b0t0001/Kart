@@ -111,7 +111,9 @@ Outcomes per camera:
 - **No blobs:** the reference becomes the new frame (absorbs slow lighting drift). No events.
 - **Disturbed:** more than `disturbed_frac` (default **60 %**) of the frame changed (the cart rolled, a camera got bumped, a big lighting change). The reference becomes the new frame, a warning is logged, and **no events**.
 - **Blobs:** passed to `decide.py` with before/after crops cut from the full-resolution frames (box padded 10 %; fingerprints use the unpadded core).
-- **A blob touching the frame edge** is an arm over the rim (or a strap), not an item: it is ignored, and the old reference is kept under it, so once it leaves, whatever it placed, took or covered is judged against the true before-picture.
+- **Only the basket floor counts** (built after the real-cart test): each camera has a floor polygon (`roi` in `pi/config.json`). Motion, change detection, the bump estimate and the empty test ignore everything outside it (mesh walls, the room, passers-by), and crops are gray outside it.
+- **A change connected to the image edge** is an arm over the rim, or a tall item poking up past it (an upright bottle reaches the top edge when cameras sit near rim height). It is deferred, with the old reference kept under it. If nothing moves for `intrusion_recheck_s` (3 s), it is re-judged as an item; any motion cancels the recheck. An arm moves on, a bottle stays.
+- **A view shift above `max_shift_px`** only means "disturbed": no events, and memory is never re-aligned (on a real cart the estimate can lock onto the room through the mesh).
 - **Cart empty and nothing changed:** the frame becomes the new empty-basket picture (absorbs slow light drift).
 
 ### 5.3 Added or removed? (`decide.py`)

@@ -93,7 +93,7 @@ Logs from the service: `journalctl -u kart-cv -f`.
 | # | Do this | You should see |
 |---|---|---|
 | 1 | `~/venv/bin/python tools/snap.py` | `cam0: OK (720, 1280, 3) …` and `cam1: OK …`; open `tools/out/cam0.jpg` and `cam1.jpg`: both look into the basket |
-| 2 | `pi/main.py live`, wave a hand over the basket, then hold it still inside the basket | `MOTION` when you wave, `SETTLED` about 1 s after you stop, `INTRUSION … ignoring it` while your arm is in, and **no** `ADDED` |
+| 2 | `pi/main.py live`, wave a hand over the basket, then hold it still inside the basket | `MOTION` when you wave, `SETTLED` about 1 s after you stop, `INTRUSION … waiting` while your arm is in, and **no** `ADDED` |
 | 3 | Drop one item in, wait, take it out | `ADDED …` then `REMOVED …` (before enrollment and without a key the name is `? "…"`); crops in `pi/state/crops/` |
 | 4 | Put `ANTHROPIC_API_KEY` in `~/kart/.env`, restart, drop 5 different props | each prints `ADDED <product-id> (cloud 0.xx)` with the right id |
 | 5 | Enroll the props (below), then drop them again | `ADDED <product-id> (local 0.xx)`, instantly, no network needed |
@@ -150,6 +150,7 @@ Half-size clips are about 4–6 MB per 15 s and replay the same for detection. C
 | Symptom | Likely cause → fix |
 |---|---|
 | Items added when nothing happened | Floor visible through the cart, or strong flicker → mat on the floor; raise `change_thresh` (30 → 40) |
+| A tall item (upright bottle) is billed ~4 s after it goes in | Expected: anything reaching the edge of the picture is first treated like an arm, then billed once it has stayed still for 3 s (`intrusion_recheck_s`) |
 | Real items missed | Item very small or same color as the mat → lower `min_blob_frac` (0.004 → 0.002) or use a contrasting mat |
 | Removed items show as added | The empty-basket picture is stale (cart wasn't empty at reset) → empty it, `pi/main.py reset` |
 | Wrong product, method `local` | Look-alike props → enroll more poses, run `tools/gallery_check.py`, or raise `local_min_margin` (0.08 → 0.12) so Claude decides |
