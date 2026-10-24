@@ -50,6 +50,8 @@ class Pipeline:
         self._latest: dict[int, object] = {}
         self._last_events: deque = deque(maxlen=10)
         self._first_run = not self.empties
+        self._present: set[int] = set()  # cameras that had a frame on the previous tick
+        self._resync: set[int] = set()   # cameras back from an outage: re-reference at the next settle
 
     def _empty_path(self, cam: int) -> Path:
         return self.state_dir / f"empty_cam{cam}.jpg"
@@ -80,6 +82,7 @@ class Pipeline:
             self.motion[c].reset()
         self.settle.reset()
         self.cart.clear()
+        self._resync.difference_update(frames)
         self._reset_requested.clear()
 
     def _set_empty(self, cam: int, image: np.ndarray) -> None:
@@ -89,6 +92,14 @@ class Pipeline:
     def step(self, tick: dict) -> list[Event]:
         self.last_decisions = []
         frames = {c: f for c, f in tick.items() if c in self.cams and f is not None}
+        # A camera back from an outage has a stale reference: whatever happened meanwhile would be
+        # billed again. It sits out one settle and takes that still frame as its new reference.
+        for c in frames.keys() - self._present:
+            if c in self.references:
+                log.warning("cam%d is back: re-syncing it at the next settle", c)
+                self._resync.add(c)
+                self.motion[c].reset()
+        self._present = set(frames)
         if not frames:
             return []
         with self._lock:
@@ -118,6 +129,10 @@ class Pipeline:
 
         results = []
         for c, f in frames.items():
+            if c in self._resync:
+                self.references[c] = f.image
+                self._resync.discard(c)
+                continue
             r = detect_changes(c, self.references[c], f.image, self.cfg)
             scale = f.image.shape[1] / self.cfg.diff_size[0]
             if r.status == "disturbed" and math.hypot(*r.shift) > self.cfg.max_shift_px * scale:

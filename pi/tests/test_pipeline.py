@@ -126,3 +126,15 @@ def test_event_reaches_sinks_before_cart_memory_changes(tmp_path):  # review I6:
     sc = Script(Scene()).still(1.0).drop(RED).take("red-box")
     run(p, sc)
     assert seen == [("added", 0), ("removed", 1)]  # memory changes only after the event is safely queued
+
+
+def test_camera_dropout_does_not_rebill(tmp_path):  # review C2
+    p, _ = make(tmp_path)
+    sc = Script(Scene()).still(1.0)
+    n0 = len(sc.ticks)
+    sc.drop(RED)
+    for t in sc.ticks[n0:]:
+        t[1] = None  # cam1 out while RED goes in
+    sc.still(1.0).drop(BLUE)
+    assert sorted(run(p, sc)) == [("added", "blue-can"), ("added", "red-box")]
+    assert p.cart.count("red-box") == 1
