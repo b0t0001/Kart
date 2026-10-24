@@ -20,6 +20,7 @@ def _short(catalog: list[dict[str, Any]], product_id: str | None) -> str:
     return "that"
 
 
+RECONNECT_LINE = "Sorry, I lost you for a second. What was that?"   # the call dropped before Kart answered
 LIST_TOO = "Take it off the list too?"                # a planned item came out of the cart
 LIST_KEPT = "Okay, it stays on your list."
 
@@ -33,6 +34,8 @@ def proactive_line(event: dict[str, Any], catalog: list[dict[str, Any]], plan: l
         return event.get("text") or None
     if kind == "nudge":
         return _nudge_line(event, catalog, meal)
+    if kind == "reconnected":                             # a new call mid-trip; the shopper's last turn went unanswered
+        return RECONNECT_LINE if event.get("unanswered") else None
     if kind == "ui_action":                               # the iPad tells Kart what just happened on screen
         if event.get("action") == "paid":
             dish = _dish(meal)

@@ -6,6 +6,7 @@ import asyncio
 import json
 import re
 import time
+from collections import Counter
 from typing import Any, AsyncIterator
 
 from line.events import AgentSendCustom, AgentSendText, CallEnded, CallStarted, UserCustomSent, UserTurnEnded, UserTurnStarted
@@ -18,7 +19,7 @@ from .tools import run_tool
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
 _POINTING = re.compile(r"\b(this|that|these|those)\b|\bis it\b", re.IGNORECASE)   # "how much is this?"
 ADD_THEN_DEAL_SECONDS = 3.0                         # a deal this soon after an add says "Got the X." first
-SPEAKING_EVENTS = {"suggestion", "nudge", "deal_changed", "cart_changed", "ui_action"}
+SPEAKING_EVENTS = {"suggestion", "nudge", "deal_changed", "cart_changed", "ui_action", "reconnected"}
 
 
 def _count_word(n: int) -> str:
@@ -142,6 +143,7 @@ class KartAgent:
                 pass
             await self._refresh()
             if self._plan or self._items:                # rejoining a trip in progress (app relaunch, reconnect)
+                await self._rejoin()
                 return
             async for out in self._say([GREETING], interruptible=False):   # chatter can't wipe the greeting
                 yield out
@@ -386,6 +388,19 @@ class KartAgent:
         if product:
             seen.append(f"The last item into the cart: {product.get('short_name') or product['name']}.")
         return " ".join(seen)
+
+    async def _rejoin(self) -> None:
+        """A new call on a trip in progress (a dropped call, a paused one, an app relaunch): pick up the meal, the
+        conversation so far and the deals already asked about, so Kart carries on instead of starting over."""
+        reasons = [line.get("reason") for line in self._plan if line.get("reason") not in (None, "", "deal")]
+        if reasons and not self._meal:
+            self._meal = Counter(reasons).most_common(1)[0][0]
+        try:
+            lines = await self.backend.get_transcript(self.cart_id, self.trip_id)
+        except Exception:
+            lines = []
+        self.brain.seed([(line.get("role", ""), line.get("text", "")) for line in lines])
+        self._digest_asked |= {entry["deal"]["id"] for entry in await self._relevant_deals()}
 
     def _ctx(self) -> dict[str, Any]:
         """What the tools get: the backend, this cart and trip, and the trip's undo history."""

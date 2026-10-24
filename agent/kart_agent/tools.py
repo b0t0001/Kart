@@ -256,6 +256,7 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
             if isinstance(args.get("meal"), str) and args["meal"].strip():
                 ctx["meal"] = args["meal"].strip()           # Kart names the trip's meal in nudges
         planned, missing, sold_out, lines, notes = [], [], [], [], []
+        meal = ctx.get("meal") if name == "set_plan" else None   # each meal line remembers the meal (for a rejoin)
         for item in items:
             if not isinstance(item, dict) or not isinstance(item.get("product_id"), str):
                 raise ValueError("each item needs a product_id")
@@ -273,7 +274,7 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
                     notes.append(f"Only {stock} {product.get('short_name') or product['name']} in stock: planned {stock}, not {qty}.")
                     qty = stock
                 basis = item.get("basis")
-                lines.append({"product_id": item["product_id"], "reason": str(item.get("reason", "")), "qty": qty,
+                lines.append({"product_id": item["product_id"], "reason": meal or str(item.get("reason", "")), "qty": qty,
                               **({"basis": basis} if isinstance(basis, str) and basis else {})})
         cart = await backend.rpc("set_plan", p_cart_id=cart_id, p_plan=lines)
         result: dict[str, Any] = {"planned": planned, "not_in_store": missing, "out_of_stock": sold_out,

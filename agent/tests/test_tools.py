@@ -287,3 +287,9 @@ async def test_a_new_list_names_what_is_already_in_the_cart_but_off_the_list(bac
     out = json.loads(await run_tool("set_plan", {"meal": "nachos", "items": [
         {"product_id": "tostitos-salsa", "reason": "nachos"}, {"product_id": "queso", "reason": "nachos"}]}, ctx(backend)))
     assert out["in_cart_not_on_list"] == [{"product_id": "barilla-spaghetti", "short_name": "Spaghetti", "qty": 1}]
+
+
+async def test_a_meal_list_remembers_the_meal_on_every_line(backend):
+    await run_tool("set_plan", {"meal": "pasta night for 4", "items": [
+        {"product_id": "barilla-spaghetti", "reason": "pasta"}, {"product_id": "rao-marinara", "reason": "sauce"}]}, ctx(backend))
+    assert [p["reason"] for p in backend.cart["plan"]] == ["pasta night for 4", "pasta night for 4"]

@@ -55,6 +55,9 @@ class FakeBackend:
     async def get_catalog(self) -> list[dict[str, Any]]:
         return copy.deepcopy(self.catalog)
 
+    async def get_transcript(self, cart_id: str, trip_id: str | None) -> list[dict[str, Any]]:
+        return [{"role": role, "text": text} for role, text in self.transcript]
+
     async def get_nearby_stores(self) -> list[dict[str, Any]]:
         if self.nearby is None:
             raise RuntimeError("store_info.nearby is not there yet")

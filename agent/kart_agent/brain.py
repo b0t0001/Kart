@@ -104,6 +104,22 @@ class Brain:
         self.messages.append({"role": "user", "content": user_text})
         self.messages.append({"role": "assistant", "content": [{"type": "text", "text": said}]})
 
+    def seed(self, lines: list[tuple[str, str]]) -> None:
+        """A call rejoining a trip: the conversation so far, from the captions. A last shopper line nobody answered
+        (the call dropped) is left out: Kart asks for it again."""
+        messages: list[dict[str, Any]] = []
+        for role, text in lines:
+            role = "user" if role == "user" else "assistant"
+            if not text or (not messages and role == "assistant"):   # the history starts with the shopper
+                continue
+            if messages and messages[-1]["role"] == role:
+                messages[-1]["content"] += " " + text
+            else:
+                messages.append({"role": role, "content": text})
+        if messages and messages[-1]["role"] == "user":
+            messages.pop()
+        self.messages = messages
+
     def set_catalog(self, products: list[dict[str, Any]]) -> None:
         """Product ids and names only (no prices, deals or stock: those change), so a plan needs no search round."""
         lines = [f"- {p['id']}: {p.get('short_name') or p['name']}, {p['name']} ({p.get('category') or 'other'})"

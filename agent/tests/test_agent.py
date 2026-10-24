@@ -513,3 +513,25 @@ async def test_a_plain_question_gets_no_extra_context():
     agent, backend = make([Turn(chunks=["Aisle 5."])])
     await run(agent, UserTurnEnded(content=[UserTextSent(content="Where is the salsa?")]))
     assert agent.brain.llm.requests[-1]["messages"][-1]["content"] == "Where is the salsa?"
+
+
+async def test_after_a_dropped_call_kart_asks_what_was_said():
+    agent, backend = make()
+    lost = UserCustomSent(metadata={"type": "reconnected", "unanswered": True})
+    assert agent.run_filter(lost)
+    assert await run(agent, lost) == ["Sorry, I lost you for a second. What was that?"]
+    assert not agent.run_filter(UserCustomSent(metadata={"type": "reconnected", "unanswered": False}))
+
+
+async def test_a_rejoined_call_remembers_the_meal_and_the_conversation():
+    agent, backend = make([Turn(chunks=["Aisle 6."])])
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta night for 4", "qty": 1, "done": False},
+                            {"product_id": "kirkland-parmesan", "reason": "deal", "qty": 1, "done": False}]
+    backend.transcript = [("agent", GREETING), ("user", "Pasta night for 4."), ("agent", "You're set with spaghetti."),
+                          ("user", "Where's the")]                  # cut off by the drop: never answered
+    assert await run(agent, CallStarted()) == []                     # a trip in progress: no greeting
+    assert await run(agent, UserCustomSent(metadata={"type": "ui_action", "action": "paid"})) == ["Paid. Enjoy pasta night!"]
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="Where's the spaghetti?")]))
+    assert agent.brain.llm.requests[-1]["messages"][:3] == [
+        {"role": "user", "content": "Pasta night for 4."}, {"role": "assistant", "content": "You're set with spaghetti."},
+        {"role": "user", "content": "Where's the spaghetti?"}]
