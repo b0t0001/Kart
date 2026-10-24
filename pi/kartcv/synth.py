@@ -58,7 +58,8 @@ def item_sprite(seed: int, w: int, h: int) -> np.ndarray:
     stripe_w = max(2, w // 12)
     for k in range(3):
         x0 = int((k + 1) * w / 4) - stripe_w // 2
-        hsv[:, x0:x0 + stripe_w] = ((hue + 90) % 180, 200, 200)
+        # darker stripes of the same hue: a hue+90 stripe would make seed 1 and seed 3 share a palette
+        hsv[:, x0:x0 + stripe_w] = (hue, 200, 90)
     sprite = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
     cv2.rectangle(sprite, (0, 0), (w - 1, h - 1), (30, 30, 30), 4)
     return sprite
@@ -180,8 +181,8 @@ def item_box(cam: int, item: Item, pad: float = 0.10) -> tuple[int, int, int, in
     return x0, y0, x1 - x0, y1 - y0
 
 
-def crop_item(cam: int, item: Item) -> np.ndarray:
-    x, y, w, h = item_box(cam, item)
+def crop_item(cam: int, item: Item, pad: float = 0.10) -> np.ndarray:
+    x, y, w, h = item_box(cam, item, pad)
     return Scene(items=[item]).render(cam)[y:y + h, x:x + w].copy()
 
 

@@ -18,7 +18,8 @@ class HybridIdentifier:
     def __init__(self, gallery, cloud, catalog, cfg):
         self.gallery, self.cloud, self.catalog, self.cfg = gallery, cloud, catalog, cfg
 
-    def identify(self, crops: list[np.ndarray]) -> Identification:
+    def identify(self, crops: list[np.ndarray], cloud_crops: list[np.ndarray] | None = None) -> Identification:
+        """`crops` are tight (what the gallery holds); `cloud_crops` may be padded for Claude's context."""
         ranked = self.gallery.score(crops) if self.gallery is not None else []
         # A gallery product the merchant removed must never be billed.
         ranked = [(pid, s) for pid, s in ranked if self.catalog.get(pid) is not None]
@@ -31,8 +32,8 @@ class HybridIdentifier:
                 return Identification(top_pid, top, "local", self.catalog.name(top_pid))
 
         cloud_label = None
-        if self.cloud is not None and crops:
-            a = self.cloud.identify(crops)
+        if self.cloud is not None and (cloud_crops or crops):
+            a = self.cloud.identify(cloud_crops or crops)
             if a.product_id is not None and self.catalog.get(a.product_id) and a.confidence >= self.cfg.cloud_min_conf:
                 return Identification(a.product_id, a.confidence, "cloud", self.catalog.name(a.product_id))
             best_conf = max(best_conf, a.confidence)

@@ -34,11 +34,28 @@ def translate(img: np.ndarray, dx: float, dy: float) -> np.ndarray:
 
 @dataclass
 class Blob:
+    """A changed region. `before`/`after` are padded crops (context for Claude and for people);
+    `core` is the unpadded changed box inside them, which is what fingerprints are taken from,
+    so whatever surrounds the item (mat, or another grocery under it) doesn't skew the match."""
+
     cam: int
     box: tuple[int, int, int, int]  # x, y, w, h in full-res pixels, padded and clipped
     area_frac: float
     before: np.ndarray
     after: np.ndarray
+    core: tuple[int, int, int, int] = (0, 0, 0, 0)  # x, y, w, h inside the crops; zero size = whole crop
+
+    def _core(self, crop: np.ndarray) -> np.ndarray:
+        x, y, w, h = self.core
+        return crop[y:y + h, x:x + w] if w > 0 and h > 0 else crop
+
+    @property
+    def before_core(self) -> np.ndarray:
+        return self._core(self.before)
+
+    @property
+    def after_core(self) -> np.ndarray:
+        return self._core(self.after)
 
 
 @dataclass
@@ -89,12 +106,14 @@ def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg) ->
         bx, by, bw, bh, area = stats[i]
         if area < min_area:
             continue
-        x0, y0, x1, y1 = bx * sx, by * sy, (bx + bw) * sx, (by + bh) * sy
-        px, py = (x1 - x0) * cfg.crop_pad, (y1 - y0) * cfg.crop_pad
-        x0, y0 = max(0, int(x0 - px)), max(0, int(y0 - py))
-        x1, y1 = min(full_w, int(math.ceil(x1 + px))), min(full_h, int(math.ceil(y1 + py)))
+        cx0, cy0 = int(bx * sx), int(by * sy)
+        cx1, cy1 = min(full_w, int(math.ceil((bx + bw) * sx))), min(full_h, int(math.ceil((by + bh) * sy)))
+        px, py = (cx1 - cx0) * cfg.crop_pad, (cy1 - cy0) * cfg.crop_pad
+        x0, y0 = max(0, int(cx0 - px)), max(0, int(cy0 - py))
+        x1, y1 = min(full_w, int(math.ceil(cx1 + px))), min(full_h, int(math.ceil(cy1 + py)))
         blobs.append(Blob(cam, (x0, y0, x1 - x0, y1 - y0), area / (w * h),
-                          reference[y0:y1, x0:x1].copy(), current[y0:y1, x0:x1].copy()))
+                          reference[y0:y1, x0:x1].copy(), current[y0:y1, x0:x1].copy(),
+                          (cx0 - x0, cy0 - y0, cx1 - cx0, cy1 - cy0)))
     if not blobs:
         return result("none", frac=frac, shift=shift)
     return result("blobs", blobs, frac, shift)
