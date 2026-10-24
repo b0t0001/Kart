@@ -163,3 +163,11 @@ async def test_no_i_said_x_undoes_the_last_edit_and_makes_the_right_one():
     said = await collect(brain.respond("no, I said salsa", c))
     assert "".join(said) == "Sorry. Took sour cream back off your list. Added salsa, Aisle 5."
     assert [p["product_id"] for p in backend.cart["plan"]] == ["tostitos-salsa"]
+
+
+async def test_the_prompt_never_lets_kart_imply_a_product_is_safe_for_a_diet():
+    llm = FakeLLM([Turn(chunks=["ok"])])
+    await collect(Brain(llm=llm).respond("hi", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
+    system = llm.requests[0]["system"]
+    assert "I can't confirm that's gluten-free. Please check the label." in system
+    assert "Never promise what the cart will offer later" in system
