@@ -76,6 +76,7 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 | # | Action | Item | What the cameras do | iPad / bill | Kart says |
 |---|---|---|---|---|---|
 | 1 | Tap start, say *"Pasta night for my family of 4"* | — | — | List: Spaghetti, Marinara, Garlic Bread; next stop A6 | "Pasta night for four… spaghetti, marinara and garlic bread. Head to Aisle 6." |
+| 1b | Kart asks *"By the way, one deal goes with your list. Want to hear it?"* → say **"Not now"** | — | — | — | Skips the deal walk-through. **The deal is still spoken at the shelf** (step 3) — Dylan's rule: "not now" = tell me at the shelf |
 | 2 | Drop **spaghetti box 1** | `barilla-spaghetti` | settle → identify (local match, ~1.5 s) → 1 add | Bill: Spaghetti $x; list row ✓ | "Got the spaghetti." |
 | 3 | Drop **marinara** | `rao-marinara` | 1 add | Bill +marinara; **Parmesan deal card** | **"Parmesan is $1 off in Aisle 4. Want it?"** |
 | 4 | Say *"Yes"*, drop the **Parmesan shaker** | `kirkland-parmesan` | 1 add at the deal price | Bill shows the struck-through price and "saved $1" | "Added the Parmesan." |
@@ -92,6 +93,7 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 | # | Action | Item | Result |
 |---|---|---|---|
 | 1 | *"Game-night nachos for 6"* | — | List: chips, salsa, queso, black beans, jalapeños, sour cream |
+| 1b | Deal offer → **"Not now"** | — | The chips deal is spoken when the salsa goes in (step 2) |
 | 2 | Drop **salsa** | `tostitos-salsa` | **"Chips are $1.50 off in Aisle 7. Want it?"** |
 | 3 | "Yes", drop **chips** | `tostitos-chips` | Deal price on the bill |
 | 4 | Drop **queso, black beans, jalapeños** one at a time | `queso`, `black-beans`, `jalapenos` | Each one billed and ticked off |
