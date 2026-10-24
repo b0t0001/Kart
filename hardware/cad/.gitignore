@@ -1,2 +1,4 @@
 # STLs and previews are generated (Fusion run or check/check.py)
 stl/
+# Fusion creates this when you add or edit the script
+.vscode/
