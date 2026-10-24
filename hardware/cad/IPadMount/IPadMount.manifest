@@ -1,0 +1,10 @@
+{
+	"autodeskProduct":	"Fusion360",
+	"type":	"script",
+	"author":	"KART team",
+	"description":	{
+		"":	"Parametric zip-tie mount for the KART cart iPad (iPad Pro 11, landscape)"
+	},
+	"supportedOS":	"windows|mac",
+	"editEnabled":	true
+}
