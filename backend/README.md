@@ -116,5 +116,6 @@ Feature `quantity_nudges` (CONTRACT v0.12). The global default lives in `feature
 LC_ALL=en_US.UTF-8 pg_ctl -D /tmp/kartpg -o "-p 54329" start   # after: initdb -D /tmp/kartpg -U postgres --auth=trust
 backend/.venv/bin/python -m pytest backend/tests
 deno test backend/supabase/functions/voice-token/
-backend/.venv/bin/python -m pytest backend/e2e      # needs a running Supabase (local or hosted) + .env
+backend/.venv/bin/python -m pytest backend/e2e      # needs a running LOCAL Supabase + .env; refuses hosted
+                                                    # unless --allow-hosted (its checkouts drain shared stock)
 ```

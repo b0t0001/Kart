@@ -106,10 +106,12 @@ claims their stock. The same list applies in both layouts.
 | Hosted is down or the Wi-Fi is bad | Local stack: `colima start`, then `supabase start --workdir backend`, then `$P backend/db.py apply`. Put the local values in `.env` (see `backend/docs/LOCAL_SUPABASE.md`) and point the iPad and Pi at `http://<laptop LAN IP>:54321` |
 | The voice token fails (502) | Check the `CARTESIA_API_KEY` function secret (`backend/deploy_functions.sh`). The iPad's mock voice is the fallback |
 
-## Health check (safe on the shared hosted project)
+## Health check
 
 ```bash
-backend/.venv/bin/python -m pytest -q backend/e2e     # REST + realtime + merchant beat + nudges, on throwaway carts
-merchant/.venv/bin/python merchant/smoke.py           # real Claude: 4 prompts + the live deal beat (a few cents)
+merchant/.venv/bin/python merchant/smoke.py           # real Claude: 4 prompts + the live deal beat (a few cents); safe on hosted
+backend/.venv/bin/python -m pytest -q backend/e2e     # REST + realtime + merchant beat + nudges, LOCAL stack only
 ```
-`simulate_demo.py` drives cart `7`, so on hosted run it only as the operator, or pass `--cart <test id>`.
+**Automated runs on hosted never check out** (that takes items off shared stock). `backend/e2e` and
+`simulate_demo.py` refuse a non-local database unless you pass `--allow-hosted`. Only `go_live.sh`
+does that, and it ends with `sync-catalog --with-stock` to put the stock back.

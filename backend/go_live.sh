@@ -55,9 +55,11 @@ if [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] && [ -n "${SUPABASE_PROJECT_REF:-}" ] && 
 else
   results+=("SKIP  voice-token (needs SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF, CARTESIA_API_KEY)")
 fi
-step "demo simulation over REST"    "$PY" "$BACKEND/simulate_demo.py" --via rest
-step "end-to-end test (REST + realtime + merchant)" "$PY" -m pytest -q "$BACKEND/e2e"
+# these two check out carts on purpose (that's the flow being verified); stock is restored below
+step "demo simulation over REST"    "$PY" "$BACKEND/simulate_demo.py" --via rest --allow-hosted
+step "end-to-end test (REST + realtime + merchant)" "$PY" -m pytest -q "$BACKEND/e2e" --allow-hosted
 step "demo reset (catalog, cart ${CART_ID:-7} idle)" "$PY" "$BACKEND/db.py" reset-demo
+step "stock restored from store.json"  "$PY" "$BACKEND/db.py" sync-catalog --with-stock
 
 echo; echo "════ go-live summary"
 fail=0
