@@ -23,6 +23,12 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 morning · HOSTED SUPABASE IS LIVE
+- Project **kart** (org KART, West US, free plan, ref `gbwcrsqxtoppwzckedry`). Dylan pasted the keys into `.env`; the manager checked their format without reading them out (anon and service_role roles match the project, the DB URL uses the session pooler, the token is a valid PAT, and the Anthropic key returns HTTP 200).
+- **`backend/go_live.sh`: PASS.** Migrations, seed, demo simulation over REST, end-to-end (4 passed, 1 skipped), reset-demo. Cart 7 is idle. The voice-token deploy waits for a Cartesia key.
+- Now running: the backend's real-Claude smoke test of the merchant agent; CV's identifier tested against real Claude plus its end-to-end test against hosted; the iPad switching Dylan's real iPad over to hosted.
+- **Teammate's Pi:** needs `~/kart/.env` with `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `CART_ID=7` and `ANTHROPIC_API_KEY`, sent privately by Dylan. **Not** the service-role key, DB URL or access token.
+
 ### 2026-10-24 ~08:00 · morning: merged and tested
 - **Merge:** nothing to merge. Everything is on `main`, which is synced with GitHub, and the stale `claude/*` branches are deleted.
 - **All automated suites rerun on `main`: 316 tests green** (CV 80 + 2 end-to-end, backend 53 + 5 end-to-end, merchant 42, Edge Function 5, agent 29, iPad 100).
