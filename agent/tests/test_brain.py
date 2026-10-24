@@ -126,6 +126,7 @@ async def test_the_prompt_says_how_to_edit_the_list_and_what_to_do_when_the_stor
     system = llm.requests[0]["system"]
     assert "say its readback" in system and "change_by" in system and "replaces" in system
     assert "undo_last_edit" in system
+    assert "in_cart_not_on_list" in system and "Keep it?" in system
     assert "call not_sold_here" in system and "Never say another store has it" in system
 
 

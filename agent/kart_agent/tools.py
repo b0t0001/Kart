@@ -247,7 +247,8 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
             else:
                 edit = ("already", product_id, None, in_cart)
         else:
-            before = _plan_lines((await backend.get_cart(cart_id)).get("plan", [])) if "undo" in ctx else []
+            prior = await backend.get_cart(cart_id)
+            before = _plan_lines(prior.get("plan", []))
             items = args.get("items")
             if not isinstance(items, list):
                 raise ValueError("'items' must be a list")
@@ -286,8 +287,14 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
             if kind in ("added", "removed", "swapped", "amount") and isinstance(ctx.get("undo"), list):
                 was = next((line["qty"] for line in before if line["product_id"] == pid), 1)
                 ctx["undo"].append({"plan": before, "readback": _undo_line(kind, catalog[pid], was, old)})
-        elif name == "set_plan" and isinstance(ctx.get("undo"), list):
-            ctx["undo"].append({"plan": before, "readback": "Back to your last list."})
+        elif name == "set_plan":
+            if isinstance(ctx.get("undo"), list):
+                ctx["undo"].append({"plan": before, "readback": "Back to your last list."})
+            off = [{"product_id": i["product_id"], "short_name": (catalog.get(i["product_id"]) or {}).get("short_name")
+                    or i.get("name"), "qty": i.get("qty", 1)}
+                   for i in prior.get("items", []) if i.get("product_id") not in planned]
+            if off:                                          # a new list: Kart asks about these ("Keep it?")
+                result["in_cart_not_on_list"] = off
         return {**result, "notes": notes} if notes else result
     if name == "undo_last_edit":
         stack = ctx.get("undo")

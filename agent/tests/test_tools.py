@@ -279,3 +279,11 @@ async def test_undo_reverts_a_swap(backend):
 async def test_undo_with_nothing_to_undo_changes_nothing(backend):
     out = json.loads(await run_tool("undo_last_edit", {}, trip_ctx(backend)))
     assert out["readback"] == "There's nothing to undo." and backend.calls == []
+
+
+async def test_a_new_list_names_what_is_already_in_the_cart_but_off_the_list(backend):
+    backend.cart["items"] = [{"product_id": "barilla-spaghetti", "name": "Spaghetti", "qty": 1, "price": 1.99},
+                             {"product_id": "tostitos-salsa", "name": "Salsa", "qty": 1, "price": 3.49}]
+    out = json.loads(await run_tool("set_plan", {"meal": "nachos", "items": [
+        {"product_id": "tostitos-salsa", "reason": "nachos"}, {"product_id": "queso", "reason": "nachos"}]}, ctx(backend)))
+    assert out["in_cart_not_on_list"] == [{"product_id": "barilla-spaghetti", "short_name": "Spaghetti", "qty": 1}]

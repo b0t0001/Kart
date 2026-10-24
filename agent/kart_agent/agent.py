@@ -54,7 +54,7 @@ class KartAgent:
         self.barge_in = barge_in                    # off (KART_BARGE_IN=off) for a loud floor: nothing cuts Kart off
         self.digest_delay_seconds = digest_delay_seconds   # the pause after reading the list before asking about deals
         self._digest: dict[str, Any] | None = None  # "N deals go with your list": asked, then walked one at a time
-        self._digest_offered = False
+        self._digest_asked: set[str] = set()       # deals already asked about in a walk-through this trip
         self._context = asyncio.Event()
         self._plan: list[dict[str, Any]] = []
         self._items: list[dict[str, Any]] = []
@@ -83,7 +83,7 @@ class KartAgent:
                 if meta.get("trip_id") and meta.get("trip_id") != self.trip_id:   # a new trip starts fresh
                     self._said, self._meal, self._offer, self._nudge = set(), None, None, None
                     self._undo = []
-                    self._digest, self._digest_offered = None, False
+                    self._digest, self._digest_asked = None, set()
                 self.trip_id = meta.get("trip_id") or self.trip_id
                 self._context.set()
                 return False
@@ -211,7 +211,7 @@ class KartAgent:
                 yield out
             self._meal = ctx.get("meal") or self._meal
             await self._refresh()                        # Claude's tools may have changed the list
-            if ctx.get("planned") and not self._digest_offered:     # a new list: ask about the deals, after a beat
+            if ctx.get("planned"):                       # a new list: ask about its deals (new ones only), after a beat
                 async for out in self._offer_digest():
                     yield out
         elif isinstance(event, UserCustomSent):
@@ -255,7 +255,8 @@ class KartAgent:
         for deal in deals:
             product = catalog.get(deal.get("product_id"))
             pairs = [plan.index(p) for p in deal.get("pairs_with") or [] if p in plan]
-            if product is None or product.get("in_stock") is False or deal["product_id"] in taken or not pairs:
+            asked = deal.get("id") in self._digest_asked or f"suggestion|{deal.get('id')}" in self._said
+            if product is None or product.get("in_stock") is False or deal["product_id"] in taken or not pairs or asked:
                 continue
             found.append((min(pairs), deal, product))
         return [{"deal": d, "product": p} for _, d, p in sorted(found, key=lambda x: x[0])][:3]
@@ -265,7 +266,7 @@ class KartAgent:
         deals = await self._relevant_deals()
         if not deals:
             return
-        self._digest_offered = True
+        self._digest_asked |= {d["deal"]["id"] for d in deals}
         await asyncio.sleep(self.digest_delay_seconds)
         self._digest, self._last_asked = {"deals": deals, "i": -1}, "digest"
         n = len(deals)

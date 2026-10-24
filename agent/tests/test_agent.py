@@ -461,3 +461,21 @@ async def test_taking_out_an_extra_box_asks_nothing():
     backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1, "done": True}]
     backend.cart["items"] = [{"product_id": "barilla-spaghetti", "qty": 1}]   # box 2 came out; box 1 is still in
     assert await run(agent, UserCustomSent(metadata=SPAG_OUT)) == ["Took the Spaghetti off your bill."]
+
+
+async def test_a_new_list_asks_about_its_own_deals_but_never_the_same_deal_twice():
+    pasta = ToolUse("t1", "set_plan", {"meal": "pasta night for 4", "items": [{"product_id": "barilla-spaghetti", "reason": "pasta"}]})
+    again = ToolUse("t2", "set_plan", {"meal": "pasta night for 6", "items": [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 2}]})
+    nachos = ToolUse("t3", "set_plan", {"meal": "nachos", "items": [{"product_id": "tostitos-salsa", "reason": "nachos"}]})
+    agent, backend = make([Turn(chunks=["One sec."], tools=[pasta]), Turn(chunks=["Spaghetti's on."]),
+                           Turn(chunks=["One sec."], tools=[again]), Turn(chunks=["Two boxes."]),
+                           Turn(chunks=["One sec."], tools=[nachos]), Turn(chunks=["Salsa's on."])])
+    backend.deals.append({"id": "d-queso", "product_id": "queso", "label": "$1 off", "pairs_with": ["tostitos-salsa"],
+                          "ends_at": None})
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    assert cards(outs) == [{"type": "deal_digest", "count": 1}]
+    await outputs(agent, UserTurnEnded(content=[UserTextSent(content="Not now.")]))
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="it's six people now")]))
+    assert cards(outs) == []                                   # the Parmesan was already asked about
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="actually make it nachos")]))
+    assert cards(outs) == [{"type": "deal_digest", "count": 1}]  # the new list has its own deal (queso)
