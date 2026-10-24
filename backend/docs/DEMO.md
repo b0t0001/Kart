@@ -12,15 +12,25 @@ commands run from the repo root. `P=backend/.venv/bin/python` is shorthand below
    http://localhost:8090.
 3. **The nudge beta** (if it's on for the demo): `$P backend/cart.py feature quantity_nudges on` (cart
    7), or use the iPad's demo switch.
-4. **Reset, demo operator only, right before judging:** `$P backend/db.py reset-demo`.
-   - It restores the catalog from `data/store.json`, **stock included**. It also clears the merchant
-     change log and sets cart 7 to idle. The iPad goes to Welcome, and the Pi clears its memory.
-   - It affects every team, so nobody else runs it on hosted. Rehearsals reset only their own cart:
-     `$P backend/cart.py reset --cart <id>`.
+4. **Pre-judging, demo operator only, once, right before judging:** `backend/pre_judging.sh`
+   (add `--members` if the member-memory beta ships). It asks you to type `judging`, then runs, in
+   order:
+   1. `db.py sync-catalog --with-stock`: the real stock counts from `store.json`;
+   2. `db.py reset-demo`: re-seeds the catalog (stock included, so step 1 is belt and braces), clears
+      the merchant change log, and sets cart 7 to idle. The iPad goes to Welcome, and the Pi clears
+      its memory;
+   3. `members.py seed`, with `--members` only.
 
-Catalog edits that must not reset anything (for example, after shopping): edit `data/store.json`, then
-run `$P backend/db.py sync-catalog`. It changes names, prices, descriptions and deals in place. Add
-`--with-stock` to set stock to the counts in the file.
+   It affects every team, so nobody else runs it or `reset-demo` on hosted. Rehearsals reset only
+   their own cart: `$P backend/cart.py reset --cart <id>`.
+
+## After the receipt (Dylan's actual purchases)
+
+Edit `data/store.json` with the exact names, sizes, shelf prices and camera descriptions, and set
+`stock` to the counts bought. Then apply the names and prices **without** the counts:
+`$P backend/db.py sync-catalog`. Through rehearsals, live stock stays at the placeholder 20, because
+every paid rehearsal checkout takes items off stock. The real counts go in at pre-judging (step 4).
+`sync-catalog` changes things in place: no deletes, and carts and the change log are untouched.
 
 ## Meal A: pasta night for 4 (headline)
 
@@ -30,7 +40,7 @@ on purpose: **cards only show for items not on the list.**
 | # | Step | What the backend does | Cart row the iPad shows |
 |---|---|---|---|
 | 1 | "Pasta night for my family of 4" | `reset_cart`, then `set_plan` (with `basis`) | plan in walking order; `next_step` "Aisle 2 → Garlic Bread, $1 off" from the entrance |
-| 2 | Drop **spaghetti** | `apply_cart_event` (vision) | Spaghetti $1.99 · **suggestion "Parmesan is $1 off in Aisle 4. Want it?"** ⚠ see note 1 |
+| 2 | Drop **spaghetti** | `apply_cart_event` (vision) | Spaghetti $1.99 · **suggestion "Parmesan is $1 off in Aisle 4. Want it?"** (pairs with spaghetti *or* marinara, so it doesn't matter which is dropped first) |
 | 3 | Drop **marinara** | add | Marinara on the bill; the Parmesan card stays until it's answered |
 | 4 | "Yes", drop the **Parmesan** | add at the deal price | $4.99 struck through, now $3.99; `savings` $1.00 |
 | 5 | Drop the **apple** | add with `product_id` null, `applied=false` | "Is this…?" card. `checkout` would raise `unresolved_items: 1` |
@@ -44,23 +54,11 @@ on purpose: **cards only show for items not on the list.**
 
 | # | Step | Result |
 |---|---|---|
-| 1 | "Game-night nachos for 6" | list (see note 2) |
-| 2 | Drop **salsa** | **"Tortilla Chips are $1.50 off in Aisle 7. Want them?"** (only if the chips aren't on the list) |
+| 1 | "Game-night nachos for 6" | list: **Salsa, Queso, Black Beans, Jalapeños, Sour Cream**. The chips are left to the deal card (`cart.py plan nachos` matches) |
+| 2 | Drop **salsa** (or queso) | **"Tortilla Chips are $1.50 off in Aisle 7. Want them?"** |
 | 3 | "Yes", drop the **chips** | deal price on the bill |
 | 4 | Drop **queso, black beans, jalapeños** | each billed and ticked off |
 | 5 | *(beta)* Check out | "Before you go: you still need Sour Cream." |
-
-## ⚠ Two timing notes for the manager and the iPad
-
-1. **The Parmesan card appears after the spaghetti, not after the marinara.** `d-parm-3off` pairs
-   with spaghetti **and** marinara, as decided, so the card shows as soon as the first one goes in.
-   If the card must arrive at step 3, pair it with marinara only (a one-line change in
-   `data/store.json`, then run `sync-catalog`).
-2. **The nachos list in DEMO_PLAN §2 includes the chips,** but cards never show for items already on
-   the list. So in step 2 the chips would get a "$1.50 off" badge on their list row, not a card. For
-   the card moment, the agent should list **salsa, queso, black beans, jalapeños, sour cream** and let
-   the card offer the chips, the same pattern as Parmesan in Meal A. `cart.py plan nachos` still
-   matches §2 as written, so it includes the chips.
 
 ## Optional moments
 

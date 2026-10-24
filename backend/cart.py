@@ -31,7 +31,8 @@ import kartdb
 PLANS = {
     "pasta": ["barilla-spaghetti", "rao-marinara", "french-baguette"],
     "tacos": ["mission-tortillas", "ground-beef", "tillamook-mexican-cheese", "tostitos-salsa", "avocados"],
-    "nachos": ["tostitos-chips", "tostitos-salsa", "queso", "black-beans", "jalapenos", "daisy-sour-cream"],
+    # the chips are left to the deal card, which fires on salsa or queso (docs/DEMO_PLAN.md Meal B)
+    "nachos": ["tostitos-salsa", "queso", "black-beans", "jalapenos", "daisy-sour-cream"],
 }
 
 
