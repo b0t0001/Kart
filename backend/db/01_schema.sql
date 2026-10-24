@@ -26,7 +26,7 @@ create table if not exists sections (
 create table if not exists products (
   id           text primary key,       -- kebab-case slug, THE join key everywhere
   name         text not null,
-  short_name   text not null check (char_length(short_name) <= 11),
+  short_name   text not null,          -- spoken + on-screen name, ≤ 16 chars (constraint below)
   price        numeric(10,2) not null check (price >= 0),   -- list price, USD
   section      text not null references sections(id),
   category     text not null default '',
@@ -77,6 +77,11 @@ create table if not exists carts (
   nudged           text[] not null default '{}',      -- "over:<id>" / "under:<id>" already nudged this trip
   updated_at       timestamptz not null default now()
 );
+-- short_name: spoken names like "Taco Seasoning" (v0.13; was ≤ 11 for the deferred LCD, which
+-- now truncates on its own in fmt_lcd)
+alter table products drop constraint if exists products_short_name_check;
+alter table products add constraint products_short_name_check check (char_length(short_name) <= 16);
+
 -- added after first deploy (v0.12): keep existing databases in step
 alter table carts add column if not exists features jsonb not null default '{}';
 alter table carts add column if not exists nudge jsonb;

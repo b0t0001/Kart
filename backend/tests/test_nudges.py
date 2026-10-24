@@ -125,7 +125,7 @@ def test_global_default_and_overrides(cart, conn):
 def test_unknown_feature_and_bad_action_are_refused(cart):
     with pytest.raises(psycopg.errors.RaiseException, match="unknown feature"):
         cart("set_feature", p_feature="time_travel", p_on=True)
-    with pytest.raises(psycopg.errors.RaiseException, match="keep or ok"):
+    with pytest.raises(psycopg.errors.RaiseException, match="keep, ok, skip or shop"):
         cart("dismiss_nudge", p_action="maybe")
 
 
@@ -143,3 +143,80 @@ def test_anon_can_flip_its_cart_and_answer_nudges(db_url):
         c.execute("select dismiss_nudge('7', 'ok')")
         assert c.execute("select enabled_default from feature_flags").fetchone()[0] is False
         c.rollback()
+
+
+# ── Checkout: ONE combined under nudge ──
+
+TACOS_FOR_8 = [
+    {"product_id": "mission-tortillas", "qty": 2, "basis": "8 people × 2 tacos ≈ 16 tortillas → 2 packs of 10"},
+    {"product_id": "ground-beef", "qty": 2},
+    {"product_id": "tillamook-mexican-cheese", "qty": 1},
+    {"product_id": "taco-seasoning", "qty": 1},
+    {"product_id": "tostitos-salsa", "qty": 1},
+    {"product_id": "tostitos-chips", "qty": 1},
+]
+
+
+@pytest.fixture
+def at_checkout(cart):
+    """Flag on, taco plan for 8, one tortilla pack, the chips and the salsa in the cart, then checkout."""
+    cart("set_feature", p_feature="quantity_nudges", p_on=True)
+    cart("set_plan", p_plan=TACOS_FOR_8)
+    for pid in ["mission-tortillas", "tostitos-chips", "tostitos-salsa"]:
+        add(cart, pid)
+    cart("dismiss_suggestion")                        # Sour Cream pairs with the tortillas
+    return cart
+
+
+def test_checkout_gathers_every_short_item_into_one_nudge(at_checkout):
+    n = at_checkout("set_cart_status", p_status="checkout")["nudge"]
+    assert n["kind"] == "under"
+    # walking order from where the shopper is (Aisle 5): ahead first, then back toward the entrance
+    assert [(i["product_id"], i["have"], i["need"]) for i in n["items"]] == [
+        ("taco-seasoning", 0, 1), ("tillamook-mexican-cheese", 0, 1), ("ground-beef", 0, 2), ("mission-tortillas", 1, 2)]
+    assert n["items"][0] == {"product_id": "taco-seasoning", "name": "Taco Seasoning", "have": 0, "need": 1,
+                             "aisle": "Aisle 5"}
+    assert (n["product_id"], n["have"], n["need"], n["aisle"]) == ("taco-seasoning", 0, 1, "Aisle 5")  # compat
+    assert n["text"] == "Before you go: you still need Taco Seasoning, Mexican Cheese, Ground Beef and Tortillas."
+
+
+def test_the_checkout_list_shrinks_as_items_are_fixed(at_checkout):
+    at_checkout("set_cart_status", p_status="checkout")
+    n = add(at_checkout, "taco-seasoning")["nudge"]
+    assert [i["product_id"] for i in n["items"]] == ["tillamook-mexican-cheese", "ground-beef", "mission-tortillas"]
+    assert n["text"] == "Before you go: you still need Mexican Cheese, Ground Beef and Tortillas."
+
+
+def test_skip_answers_the_whole_list_once(at_checkout):
+    at_checkout("set_cart_status", p_status="checkout")
+    row = at_checkout("dismiss_nudge", p_action="skip")
+    assert row["nudge"] is None and row["status"] == "checkout"
+    assert {"under:ground-beef", "under:taco-seasoning", "under:mission-tortillas"} <= set(row["nudged"])
+    assert at_checkout("set_location", p_section="A9")["nudge"] is None    # none of them comes back
+
+
+def test_go_get_them_returns_to_shopping(at_checkout):
+    at_checkout("set_cart_status", p_status="checkout")
+    row = at_checkout("dismiss_nudge", p_action="shop")
+    assert row["nudge"] is None and row["status"] == "shopping"
+    assert row["next_step"].startswith("Aisle ")                         # the route picks them up again
+
+
+def test_one_short_item_at_checkout_reads_naturally(nudges):
+    for pid in ["avocados", "tostitos-salsa", "tostitos-chips"]:
+        add(nudges, pid)
+    n = nudges("set_cart_status", p_status="checkout")["nudge"]
+    assert n["text"] == "Before you go: you still need Tortillas." and len(n["items"]) == 1
+
+
+def test_short_names_fit_and_the_lcd_still_truncates(conn):
+    longest = conn.execute("select max(char_length(short_name)) from products").fetchone()[0]
+    assert longest <= 16
+    assert conn.execute("select fmt_lcd('A5', 'Taco Seasoning', '-20%')").fetchone()[0] == "A5 Taco Sea -20%"
+
+
+def test_checkout_upgrades_a_mid_trip_nudge_to_the_full_list(at_checkout):
+    row = at_checkout("set_location", p_section="A9")          # walked past everything
+    assert row["nudge"]["kind"] == "under" and "items" not in row["nudge"]   # mid-trip: one at a time
+    n = at_checkout("set_cart_status", p_status="checkout")["nudge"]
+    assert len(n["items"]) == 4                                  # including the one already showing

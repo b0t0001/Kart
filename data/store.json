@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "store": { "name": "Kart Demo Warehouse", "width": 20, "height": 12 },
   "entrance": { "x": 0, "y": 6 },
   "sections": [
@@ -62,7 +62,7 @@
     {
       "id": "caesar-salad-kit",
       "name": "Taylor Farms Caesar Chopped Salad Kit, 11 oz",
-      "short_name": "Caesar Kit",
+      "short_name": "Caesar Salad Kit",
       "price": 4.49,
       "section": "A1",
       "category": "produce",
@@ -95,7 +95,7 @@
     {
       "id": "tillamook-mexican-cheese",
       "name": "Tillamook Shredded Mexican 4-Cheese Blend, 2 lb",
-      "short_name": "Mex Cheese",
+      "short_name": "Mexican Cheese",
       "price": 7.99,
       "section": "A4",
       "category": "cheese",
@@ -117,7 +117,7 @@
     {
       "id": "taco-seasoning",
       "name": "Old El Paso Original Taco Seasoning Mix, 1 oz",
-      "short_name": "Taco Season",
+      "short_name": "Taco Seasoning",
       "price": 1.29,
       "section": "A5",
       "category": "spices",
@@ -194,7 +194,7 @@
     {
       "id": "kirkland-paper-towels",
       "name": "Kirkland Signature Paper Towels, 12 rolls",
-      "short_name": "Paper Towel",
+      "short_name": "Paper Towels",
       "price": 23.99,
       "section": "A9",
       "category": "household",
@@ -205,7 +205,7 @@
     {
       "id": "kirkland-batteries",
       "name": "Kirkland Signature AA Alkaline Batteries, 48 ct",
-      "short_name": "AA Battery",
+      "short_name": "AA Batteries",
       "price": 15.99,
       "section": "A9",
       "category": "household",

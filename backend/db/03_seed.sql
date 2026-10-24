@@ -22,7 +22,7 @@ begin
 
   insert into products (id, name, short_name, price, section, category, tags, stock,
                         vision_hint, active, sort)
-  select p->>'id', p->>'name', coalesce(p->>'short_name', left(p->>'name', 11)),
+  select p->>'id', p->>'name', coalesce(p->>'short_name', left(p->>'name', 16)),
          (p->>'price')::numeric, p->>'section', coalesce(p->>'category', ''),
          coalesce(array(select jsonb_array_elements_text(p->'tags')), '{}'),
          coalesce((p->>'stock')::int, 0), coalesce(p->>'vision_hint', ''), true, ord::int

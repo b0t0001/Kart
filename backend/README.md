@@ -48,7 +48,7 @@ Between demo runs: `backend/.venv/bin/python backend/db.py reset-demo` restores 
 | `append_transcript(p_cart_id, p_role, p_text)` | agent | Captions; `reset_cart` deletes the cart's lines. |
 | `checkout(p_cart_id, p_provider)` | iPad Pay | Returns the `receipts` row (same one if called twice). Refuses while an unrecognized item is unresolved; resolve with `apply_cart_event(..., p_resolves_event_id)`. |
 | `set_feature(p_cart_id, p_feature, p_on)` | iPad demo switch | Per-cart override of a feature flag (`p_on` null = back to the default). |
-| `dismiss_nudge(p_cart_id, p_action)` | iPad, agent | `keep` (over: plan qty := what's in the cart) or `ok` (acknowledged). |
+| `dismiss_nudge(p_cart_id, p_action)` | iPad, agent | `keep` (over: plan qty := what's in the cart), `ok` / `skip` (acknowledged), or `shop` ("go get them": checkout → shopping). |
 | `POST /functions/v1/voice-token {cart_id}` | iPad | `{token, expires_at, agent_id, ws_url, cartesia_version}`; 400 unknown cart, 502 upstream. |
 
 Read with the anon key (realtime on `carts`, `cart_events`, `products`, `deals`, `sections`,
@@ -73,6 +73,9 @@ Feature `quantity_nudges` (CONTRACT v0.12). The global default lives in `feature
 - It only nudges plan items. It's `over` when the cart has more than the plan's qty (with `savings`
   = price × extra), and `under` when the shopper is short and has walked past the item's aisle or
   gone to checkout.
+- At checkout, every short item goes into **one** nudge with an `items` list, in walking order from
+  the shopper; the first item's fields fill `product_id`/`have`/`need` for compatibility. The list
+  shrinks as items are fixed. Going to checkout upgrades a mid-trip under nudge to the full list.
 - One nudge shows at a time, and only when no deal card is up. Each product is nudged at most once
   per direction per trip (`carts.nudged`), and a nudge clears itself when the counts match.
 - Plan lines carry the agent's `basis` either way.

@@ -78,6 +78,16 @@ returns boolean language sql stable as $$
                   false)
 $$;
 
+-- "A", "A and B", "A, B and C"
+create or replace function fmt_list(p_items text[])
+returns text language sql immutable as $$
+  select case coalesce(array_length(p_items, 1), 0)
+    when 0 then ''
+    when 1 then p_items[1]
+    else array_to_string(p_items[1:array_length(p_items, 1) - 1], ', ') || ' and ' || p_items[array_length(p_items, 1)]
+  end
+$$;
+
 -- Quantity nudges (BETA): one row per plan line with what the cart has against what the plan needs.
 create or replace function nudge_lines(p_items jsonb, p_plan jsonb)
 returns table (pid text, need int, have int, basis text, price numeric, got_at timestamptz,
@@ -115,6 +125,7 @@ declare
   v_pos    int;
   v_nudge  jsonb;
   v_nudged text[];
+  v_batch  jsonb;
   v_offered timestamptz;
   v_suggested text[];
 begin
@@ -280,7 +291,30 @@ begin
   if feature_enabled(c.features, 'quantity_nudges') then
     select x into v_pos from sections where id = c.location->>'section';
     v_kind := null;
-    if c.nudge is not null then
+    if c.nudge ? 'items' then
+      select jsonb_agg(jsonb_build_object('product_id', l.pid, 'name', l.short_name, 'have', l.have,
+                                          'need', l.need, 'aisle', l.aisle, 'basis', l.basis) order by l.ord)
+        into v_batch
+      from nudge_lines(v_items, v_plan) l
+      where l.have < l.need
+        and l.pid in (select x->>'product_id' from jsonb_array_elements(c.nudge->'items') x);
+      if v_batch is not null then
+        v_kind := 'checkout';
+        v_at := (c.nudge->>'at')::timestamptz;
+      end if;
+    elsif c.nudge->>'kind' = 'under' and c.status = 'checkout' then
+      -- going to checkout upgrades a mid-trip under nudge to the full list
+      select jsonb_agg(jsonb_build_object('product_id', l.pid, 'name', l.short_name, 'have', l.have,
+                                          'need', l.need, 'aisle', l.aisle, 'basis', l.basis) order by l.ord)
+        into v_batch
+      from nudge_lines(v_items, v_plan) l
+      where l.have < l.need and l.in_stock
+        and (not ('under:' || l.pid = any(c.nudged)) or l.pid = c.nudge->>'product_id');
+      if v_batch is not null then
+        v_kind := 'checkout';
+        v_at := now();
+      end if;
+    elsif c.nudge is not null then
       select * into v_line from nudge_lines(v_items, v_plan) l
       where l.pid = c.nudge->>'product_id'
         and ((c.nudge->>'kind' = 'over' and l.have > l.need)
@@ -297,17 +331,29 @@ begin
       order by l.got_at desc nulls last limit 1;
       if found then
         v_kind := 'over';
+      elsif c.status = 'checkout' then
+        -- under at checkout: every short plan item in ONE nudge, answered once
+        select jsonb_agg(jsonb_build_object('product_id', l.pid, 'name', l.short_name, 'have', l.have,
+                                            'need', l.need, 'aisle', l.aisle, 'basis', l.basis) order by l.ord)
+          into v_batch
+        from nudge_lines(v_items, v_plan) l
+        where l.have < l.need and l.in_stock and not ('under:' || l.pid = any(c.nudged));
+        if v_batch is not null then
+          v_kind := 'checkout';
+        end if;
       else
-        -- under: short, and the shopper has moved past its aisle or is checking out
+        -- under mid-trip: short, and the shopper has moved past its aisle (one at a time)
         select * into v_line from nudge_lines(v_items, v_plan) l
         where l.have < l.need and l.in_stock and not ('under:' || l.pid = any(c.nudged))
-          and (c.status = 'checkout' or (v_pos is not null and v_pos > l.section_x))
+          and v_pos is not null and v_pos > l.section_x
         order by l.ord limit 1;
         if found then
           v_kind := 'under';
         end if;
       end if;
-      if v_kind is not null then
+      if v_kind = 'checkout' then
+        v_at := now();
+      elsif v_kind is not null then
         v_at := now();
         v_nudged := array_append(v_nudged, v_kind || ':' || v_line.pid);
       end if;
@@ -329,6 +375,17 @@ begin
                        v_line.need - v_line.have, v_line.short_name,
                        coalesce(' (' || v_line.basis || ')', ''), v_line.aisle),
         'aisle', v_line.aisle, 'at', v_at));
+    elsif v_kind = 'checkout' then
+      v_nudged := v_nudged || array(select 'under:' || (x->>'product_id') from jsonb_array_elements(v_batch) x
+                                    where not ('under:' || (x->>'product_id') = any(v_nudged)));
+      v_nudge := jsonb_strip_nulls(jsonb_build_object(
+        'product_id', v_batch->0->>'product_id', 'name', v_batch->0->>'name', 'kind', 'under',
+        'have', (v_batch->0->>'have')::int, 'need', (v_batch->0->>'need')::int,
+        'basis', v_batch->0->>'basis', 'aisle', v_batch->0->>'aisle',
+        'items', (select jsonb_agg(x - 'basis') from jsonb_array_elements(v_batch) x),
+        'text', format('Before you go: you still need %s.',
+                       fmt_list(array(select x->>'name' from jsonb_array_elements(v_batch) x))),
+        'at', v_at));
     end if;
   end if;
   c.nudge := v_nudge;
@@ -536,13 +593,14 @@ begin
 end $$;
 
 -- The shopper answers a quantity nudge. keep (over): the plan now wants what's in the cart.
--- ok: acknowledged; that product/direction isn't nudged again this trip either way.
+-- ok / skip: acknowledged. shop ("go get them", checkout nudge): back to shopping.
+-- Either way, those products/directions aren't nudged again this trip.
 create or replace function dismiss_nudge(p_cart_id text, p_action text)
 returns carts language plpgsql security definer set search_path = public as $$
 declare c carts;
 begin
-  if p_action not in ('keep', 'ok') then
-    raise exception 'action must be keep or ok, got %', p_action;
+  if p_action not in ('keep', 'ok', 'skip', 'shop') then
+    raise exception 'action must be keep, ok, skip or shop, got %', p_action;
   end if;
   select * into c from carts where cart_id = p_cart_id for update;
   if not found then
@@ -556,7 +614,9 @@ begin
       from jsonb_array_elements(c.plan) with ordinality as t(e, ord))
     where cart_id = p_cart_id;
   end if;
-  update carts set nudge = null where cart_id = p_cart_id;
+  update carts set nudge = null,
+                   status = case when p_action = 'shop' and status = 'checkout' then 'shopping' else status end
+  where cart_id = p_cart_id;
   return recompute_cart(p_cart_id);
 end $$;
 

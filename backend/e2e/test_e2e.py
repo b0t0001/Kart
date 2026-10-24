@@ -221,6 +221,14 @@ def test_quantity_nudges_beta_on_a_throwaway_cart(rest, cart_id):
         assert c["nudged"] == ["over:avocados", "under:mission-tortillas"]
         c = rest.rpc("dismiss_nudge", p_cart_id=cart_id, p_action="ok")
         assert c["nudge"] is None
+
+        # Checkout: everything still short arrives as ONE nudge, answered once
+        c = rest.rpc("set_cart_status", p_cart_id=cart_id, p_status="checkout")
+        n = c["nudge"]
+        assert n["kind"] == "under" and {i["product_id"] for i in n["items"]} == {"tostitos-salsa", "tostitos-chips"}
+        assert n["text"].startswith("Before you go: you still need ") and n["product_id"] == n["items"][0]["product_id"]
+        c = rest.rpc("dismiss_nudge", p_cart_id=cart_id, p_action="shop")       # "go get them"
+        assert c["nudge"] is None and c["status"] == "shopping"
     finally:
         watch.close()
 
