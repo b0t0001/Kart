@@ -40,9 +40,11 @@ def test_state_events_are_silent():
 
 def test_short_spoken_answers_to_a_deal():
     from kart_agent.lines import yes_or_no
-    for text in ["Yes.", "Yeah, sure.", "Okay!", "Yes please", "Sounds good", "Sure, add it"]:
+    for text in ["Yes.", "Yeah, sure.", "Okay!", "Yes please", "Sounds good", "Sure, add it",
+                 "Uh, yeah, sure.", "Um, yes, I want the sour cream deal.", "Oh yeah add the sour cream"]:
         assert yes_or_no(text) == "yes", text
-    for text in ["No.", "No thanks.", "Nah", "Nope, I'm good", "Not today"]:
+    for text in ["No.", "No thanks.", "Nah", "Nope, I'm good", "Not today", "Um, no thanks."]:
         assert yes_or_no(text) == "no", text
-    for text in ["", "Yes, but how big is the parmesan?", "What aisle is the salsa in?", "Maybe later"]:
+    for text in ["", "Yes, but how big is the parmesan?", "What aisle is the salsa in?", "Maybe later",
+                 "Yeah, how much is it", "Uh", "Yes, and can you also find me some limes for the tacos tonight"]:
         assert yes_or_no(text) is None, text

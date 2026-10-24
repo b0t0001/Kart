@@ -97,6 +97,9 @@ class KartAgent:
                 async for out in self._say([line]):
                     yield out
                 return
+            if self._offer:                              # more than a yes/no: Claude still needs to know what was asked
+                text = f'(Kart just asked: "{self._offer.get("text", "")}") {text}'
+                self._offer = None
             async for out in self._say(self.brain.respond(text, ctx)):
                 yield out
         elif isinstance(event, UserCustomSent):

@@ -9,6 +9,8 @@ _YES_FIRST = {"yes", "yeah", "yep", "yup", "sure", "ok", "okay", "absolutely", "
 _NO_FIRST = {"no", "nope", "nah"}
 _YES = {"please", "yes please", "sounds good", "add it", "do it", "why not", "go for it", "i'll take it", "let's do it"}
 _NO = {"no thanks", "no thank you", "not today", "not now", "skip it", "pass", "i'm good", "im good", "i'm okay"}
+_FILLERS = {"uh", "uhh", "um", "umm", "oh", "ah", "hmm", "well", "so", "like", "hey", "kart"}
+_MORE_THAN_AN_ANSWER = {"but", "how", "what", "which", "where", "why", "when", "if", "and", "also"}
 
 
 def _short(catalog: list[dict[str, Any]], product_id: str | None) -> str:
@@ -40,9 +42,14 @@ def proactive_line(event: dict[str, Any], catalog: list[dict[str, Any]], plan: l
 
 
 def yes_or_no(text: str) -> str | None:
-    """A short spoken answer to Kart's deal question ("Yeah, sure." / "No thanks."), or None for anything longer."""
+    """A plain spoken answer to Kart's deal question ("Uh, yeah, sure." / "No thanks."), or None when it's more than
+    that (a question, a "but", a new request), which Claude should hear."""
+    if "?" in text:
+        return None
     words = re.sub(r"[^a-z' ]", " ", text.lower()).split()
-    if not words or len(words) > 4:
+    while words and words[0] in _FILLERS:
+        words = words[1:]
+    if not words or len(words) > 8 or _MORE_THAN_AN_ANSWER & set(words):
         return None
     phrase = " ".join(words)
     if phrase in _NO or words[0] in _NO_FIRST:

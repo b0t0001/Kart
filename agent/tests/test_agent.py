@@ -146,3 +146,11 @@ async def test_a_tap_on_the_card_ends_the_spoken_offer():
     agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
     agent.run_filter(UserCustomSent(metadata={"type": "card_response", "card_id": "deal-d-parm-3off", "action": "yes"}))
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Yes.")])) == ["Yes to what?"]
+
+
+async def test_claude_hears_the_offer_when_it_gets_the_answer():
+    agent, backend = make([Turn(chunks=["It's the 1.5 pound wedge."])])
+    agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="Yes, but how big is the parmesan?")]))
+    sent = agent.brain.llm.requests[0]["messages"][-1]["content"]
+    assert "Parmesan is $3 off in Aisle 4. Want it?" in sent and sent.endswith("Yes, but how big is the parmesan?")
