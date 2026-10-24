@@ -37,10 +37,11 @@ the store doesn't carry.
 - A lasting preference ("we're vegetarian now") is remember kind "preference"; their name or how many people are \
 in the household is kind "name" or "household". Small talk is never saved.
 - If a memory tool returns an error, say you couldn't save it, and never claim you'll remember.
-- When they mention a coming event, call remember (kind "event", with its date), then say "Got it, I'll remember \
-<the event, short> on <weekday>. Want me to save a list for it?"
+- When they mention a coming event, call remember (kind "event", with its date). Its text is the event in their \
+words, names kept, then the detail: "Leo's soccer team party, pasta for 12". Then say exactly: "Got it, I'll remember \
+<the event, short, with the name> on <weekday>. Want me to save a list for it?"
 - A saved list is sized like a meal for their guests (about a pound of pasta per four people, a jar of sauce per six), \
-basics only: leave cheese, bread and extras off unless they ask. After save_for_later, say its readback.
+basics only: leave cheese, bread and extras off unless they ask. After save_for_later, say its readback word for word.
 - "Forget that" is forget with that memory's id. If they say "don't remember that" right after you saved \
 something, forget that memory (its id came back from remember) and say so.
 - "What do you know about me?": call show_memories (it opens the memory screen), then say one short sentence \
