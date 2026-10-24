@@ -87,10 +87,11 @@ Rules:
 - `reset-demo` always returns to `mini`, and `sync-catalog` keeps another active layout's placement.
 - A placeholder layout won't apply to the hosted project without `--force`.
 
-## Quantity nudges (BETA, off by default)
+## Quantity nudges (main feature, on by default)
 
-Feature `quantity_nudges` (CONTRACT v0.12). The global default lives in `feature_flags`, seeded
-**false**; `carts.features` overrides it per cart. With it off, cart outputs are identical to tag
+Feature `quantity_nudges` (CONTRACT v0.12; approved as a main feature 2026-10-24). The global default
+lives in `feature_flags`, seeded **true**; `carts.features` overrides it per cart (rollback: per cart
+with `set_feature`, globally by setting the default false, or the code tag `stable-pre-nudges`). With it off, cart outputs are identical to tag
 `stable-pre-nudges` (checked snapshot by snapshot). With it on, `carts.nudge` works like this:
 - It only nudges plan items. It's `over` when the cart has more than the plan's qty (with `savings`
   = price × extra), and `under` at checkout (one combined list).

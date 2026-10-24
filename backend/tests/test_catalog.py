@@ -72,5 +72,5 @@ def test_kids_scissors_in_the_far_aisle(conn):
 
 def test_judging_stock_counts(conn):
     counts = kartdb.set_stock_counts(conn)
-    assert counts == {"barilla-spaghetti": 1, "rao-marinara": 1, "kirkland-parmesan": 1, "kids-scissors": 1}
+    assert counts == {"barilla-spaghetti": 3, "rao-marinara": 1, "kirkland-parmesan": 1, "kids-scissors": 1}
     assert dict(conn.execute("select id, stock from products where id = any(%s)", [list(counts)]).fetchall()) == counts

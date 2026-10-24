@@ -44,6 +44,8 @@ def conn(db_url):
     with kartdb.connect(db_url) as c:
         kartdb.seed(c)
         c.execute("update carts set features = '{}' where cart_id = '7'")   # reset_cart keeps switches on purpose
+        # shipped defaults: quantity nudges on (main feature), the mid-trip sub-option off
+        c.execute("update feature_flags set enabled_default = (name = 'quantity_nudges')")
         kartdb.rpc(c, "reset_cart", p_cart_id="7")
         yield c
 

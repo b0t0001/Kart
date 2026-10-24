@@ -1,6 +1,6 @@
 {
-  "_note": "Stock = props Dylan bought, set by backend/pre_judging.sh right before judging (live stock stays at store.json's placeholders until then). A paid trip sells these out, so run pre_judging.sh before EACH judge group.",
-  "barilla-spaghetti": 1,
+  "_note": "Stock = props Dylan bought (3 spaghetti boxes: one to start the bill, one for the 'too much for your meal' nudge, one spare; 1 each of the rest). Set by backend/pre_judging.sh right before judging (live stock stays at store.json's placeholders until then). A paid trip sells these out, so run pre_judging.sh before EACH judge group.",
+  "barilla-spaghetti": 3,
   "rao-marinara": 1,
   "kirkland-parmesan": 1,
   "kids-scissors": 1

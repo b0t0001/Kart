@@ -243,12 +243,17 @@ def test_quantity_nudges_beta_on_a_throwaway_cart(rest, cart_id):
         watch.close()
 
 
-def test_quantity_nudges_are_off_by_default(rest, cart_id):
+def test_quantity_nudges_are_on_by_default(rest, cart_id):
+    """Main feature since 2026-10-24: no switch needed; a cart can still opt out (rollback)."""
     rest.rpc("reset_cart", p_cart_id=cart_id)
-    rest.rpc("set_plan", p_cart_id=cart_id, p_plan=[{"product_id": "avocados", "qty": 1}])
-    for _ in range(3):
-        c = rest.rpc("apply_cart_event", **cv_to_rpc(cv_event(cart_id, "added", "avocados", "Hass Avocados")))
-    assert (c["nudge"], c["nudged"], c["features"]) == (None, [], {})
+    rest.rpc("set_plan", p_cart_id=cart_id, p_plan=[      # as in the demo: the Parmesan is already on the list,
+        {"product_id": "barilla-spaghetti", "qty": 1, "basis": "1 lb serves 4"},   # so no deal card goes first
+        {"product_id": "kirkland-parmesan", "qty": 1}, {"product_id": "french-baguette", "qty": 1}])
+    for _ in range(2):
+        c = rest.rpc("apply_cart_event", **cv_to_rpc(cv_event(cart_id, "added", "barilla-spaghetti", "Spaghetti")))
+    assert c["nudge"]["kind"] == "over" and c["nudge"]["have"] == 2 and c["features"] == {}
+    c = rest.rpc("set_feature", p_cart_id=cart_id, p_feature="quantity_nudges", p_on=False)
+    assert c["nudge"] is None
 
 
 def test_two_meals_voice_edits_and_a_budget_over_rest(rest, cart_id):

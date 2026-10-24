@@ -25,8 +25,11 @@ def nudges(cart):
 
 # ── Off (the default): nothing changes ──
 
-def test_off_by_default_no_nudge_no_side_effects(cart, conn):
-    assert conn.execute("select enabled_default from feature_flags where name = 'quantity_nudges'").fetchone()[0] is False
+def test_rolled_back_no_nudge_no_side_effects(cart, conn):
+    """The rollback path: with the flag off (globally here), nothing nudges and nothing extra is kept."""
+    flags = dict(conn.execute("select name, enabled_default from feature_flags").fetchall())
+    assert flags == {"quantity_nudges": True, "quantity_nudges_midtrip": False}      # shipped defaults
+    conn.execute("update feature_flags set enabled_default = false where name = 'quantity_nudges'")
     cart("set_plan", p_plan=TACOS_FOR_4)
     for _ in range(3):
         row = add(cart, "avocados")
@@ -116,17 +119,14 @@ def test_under_at_checkout_and_it_clears_when_fixed(nudges):
 # ── Flag plumbing ──
 
 def test_global_default_and_overrides(cart, conn):
-    try:
-        conn.execute("update feature_flags set enabled_default = true where name = 'quantity_nudges'")
-        cart("set_plan", p_plan=TACOS_FOR_4)
-        add(cart, "avocados")
-        assert add(cart, "avocados")["nudge"]["kind"] == "over"           # on for everyone
-        row = cart("set_feature", p_feature="quantity_nudges", p_on=False)
-        assert row["nudge"] is None and row["features"] == {"quantity_nudges": False}   # this cart opts out
-        row = cart("set_feature", p_feature="quantity_nudges", p_on=None)
-        assert row["features"] == {}                                    # back to the default
-    finally:
-        conn.execute("update feature_flags set enabled_default = false where name = 'quantity_nudges'")
+    """Main feature since 2026-10-24: on for every cart unless a cart opts out."""
+    cart("set_plan", p_plan=TACOS_FOR_4)
+    add(cart, "avocados")
+    assert add(cart, "avocados")["nudge"]["kind"] == "over"               # on by default
+    row = cart("set_feature", p_feature="quantity_nudges", p_on=False)
+    assert row["nudge"] is None and row["features"] == {"quantity_nudges": False}   # this cart opts out
+    row = cart("set_feature", p_feature="quantity_nudges", p_on=None)
+    assert row["features"] == {} and row["nudge"] is None                # back on, but already said this trip
 
 
 def test_unknown_feature_and_bad_action_are_refused(cart):
@@ -323,5 +323,6 @@ def test_with_the_sub_option_an_item_must_be_passed_after_it_joined(pasta):
 
 
 def test_join_times_are_only_kept_with_nudges_on(cart):
+    cart("set_feature", p_feature="quantity_nudges", p_on=False)
     row = cart("set_plan", p_plan=PASTA_FOR_4)
     assert row["plan_joined"] == {}

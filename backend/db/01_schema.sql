@@ -107,9 +107,11 @@ create table if not exists feature_flags (
   enabled_default  boolean not null,
   description      text not null default ''
 );
--- on conflict do nothing: re-running migrations never flips a default someone already changed
+-- on conflict do nothing: re-running migrations never flips a default someone already changed (so an
+-- existing database is switched with an explicit update, and a deliberate rollback stays rolled back)
 insert into feature_flags (name, enabled_default, description)
-values ('quantity_nudges', false, 'BETA: "right amount for the meal" nudges (CONTRACT: Quantity nudges)'),
+values ('quantity_nudges', true, 'MAIN FEATURE (approved 2026-10-24): "right amount for the meal" nudges. '
+                                  'Rollback: set false here or per cart with set_feature; tag stable-pre-nudges'),
        ('quantity_nudges_midtrip', false, 'BETA sub-option: one-at-a-time "short" nudges mid-trip, as the '
                                          'shopper moves past an aisle. Off: only over nudges + the checkout list')
 on conflict (name) do nothing;

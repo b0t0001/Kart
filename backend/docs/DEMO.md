@@ -10,15 +10,20 @@ commands run from the repo root. `P=backend/.venv/bin/python` is shorthand below
    (see "If something fails" below).
 2. **The merchant console** on the laptop: `merchant/.venv/bin/python merchant/server.py`, then open
    http://localhost:8090.
-3. **The nudge beta** (if it's on for the demo): `$P backend/cart.py feature quantity_nudges on` (cart
-   7), or use the iPad's demo switch.
+3. **Quantity nudges are a MAIN feature** (on by default since 2026-10-24): dropping a 2nd spaghetti
+   box on a "pasta night for 4" list gets "That's 2 Spaghetti in the cart, and your list needs 1…
+   Keep the extra 1?"; checkout gets the one "Before you go" list. The mid-trip sub-option stays
+   off. **Rollback:** a cart opts out with `$P backend/cart.py feature quantity_nudges off` (or the
+   iPad switch); everyone with `update feature_flags set enabled_default = false where name =
+   'quantity_nudges'`; the code with tag `stable-pre-nudges`.
 4. **Pre-judging, demo operator only, before EACH judge group:** `backend/pre_judging.sh` (add
    `--members` if the member-memory beta ships). It asks you to type `judging`, then runs, in order:
    1. `db.py sync-catalog --with-stock`;
    2. `db.py reset-demo`: re-seeds the catalog, clears the merchant change log, and sets cart 7 to
       idle. The iPad goes to Welcome, and the Pi clears its memory;
-   3. `db.py judging-stock`: stock = the props Dylan bought, **1 each** of spaghetti, marinara,
-      Parmesan and kids' scissors (`data/judging_stock.json`). A paid trip sells those out, and a
+   3. `db.py judging-stock`: stock = the props Dylan bought (`data/judging_stock.json`): **3
+      spaghetti boxes** (one starts the bill, one triggers the "too much for your meal" nudge, one
+      spare), and **1 each** of marinara, Parmesan and kids' scissors. A paid trip sells those out, and a
       sold-out Parmesan gets no deal card, so this runs **before every group**. Until pre-judging,
       live stock stays at `store.json`'s placeholders (20);
    4. `members.py seed`, with `--members` only.
