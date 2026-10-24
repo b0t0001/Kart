@@ -1,5 +1,22 @@
 # KART end-to-end demo plan
 
+> **FINAL SCRIPT (2026-10-24): one natural trip. This supersedes §3 Meal A below.**
+>
+> **Props:** spaghetti ×3, marinara, Parmesan shaker, Hershey's XL ([TARGET_SHOPPING_CHECKLIST.md](TARGET_SHOPPING_CHECKLIST.md)). Not bought: garlic bread (removed by voice) and olive oil (not sold at Target Berkeley Central, and not in our catalog).
+>
+> | # | Shopper | Kart / cart | Shows |
+> |---|---|---|---|
+> | 0 | *(if the member beta is ready)* sign in as Dylan → "Yes, but it's 6 of us now." | "Welcome back, Dylan! Leo's team pasta dinner is tomorrow. Want that list?" → rescales the list | Personalization + editing quantities by voice |
+> | 1 | *(otherwise)* "Pasta night for my family of 4." → "Not now." | Lists spaghetti, marinara, garlic bread → "One deal goes with your list. Want to hear it?" → "I'll tell you at the shelf." | Voice planning |
+> | 2 | "We've got garlic bread at home, take it off." | "Took garlic bread off your list." | Remove by voice |
+> | 3 | "Add something chocolate for dessert." | "Added Hershey's XL, Aisle 7 (A3 at Target)." | Add by voice from the store's catalog |
+> | 4 | Drop **spaghetti** → "Yes" → drop the **Parmesan** | "Got the Spaghetti. Parmesan is $1 off in Aisle 4. Want it?" → bill shows "saved $1" | Live bill + deal at the moment of decision |
+> | 5 | Drop the **marinara**. "Add olive oil too." | "Got the Marinara." → "We don't carry olive oil here. Safeway, about 1.5 miles away, might have it." | Honest "not sold here" |
+> | 6 | Drop the **chocolate**. "Actually, skip the chocolate." → take it out | "Took the chocolate off your bill." (+ "take it off the list too?" → "yes") | Changing your mind |
+> | 7 | Tap **Check out** → **Pay** | Receipt with savings and time in store → "Paid. Enjoy pasta night!" | Uniqlo-style checkout |
+>
+> **Q&A only:** drop a water bottle → the "Is this…?" card (what happens if the camera is unsure).
+
 > **2026-10-24 — ONE end-to-end demo: Meal A (pasta night for 4) only.** Meal B (nachos) is **dropped from the demo**. Kart still plans it if a judge asks, but we don't buy or rehearse it. Shopping list = spaghetti ×3, marinara ×1, Parmesan shaker ×1 (~$12 at Target, all in Aisle A12). See [TARGET_SHOPPING_CHECKLIST.md](TARGET_SHOPPING_CHECKLIST.md).
 
 
