@@ -22,8 +22,8 @@ import Testing
         let b = try backend(); try await b.startTrip()
         await b.simulateVision(.added, productId: "kirkland-parmesan", confidence: 0.9, label: "parmesan")
         let line = try #require(b.cart.items.first)
-        #expect(line.price == Decimal(string: "9.99") && line.listPrice == Decimal(string: "12.99"))
-        #expect(line.dealLabel == "$3 off" && b.cart.savings == 3)
+        #expect(line.price == Decimal(string: "3.99") && line.listPrice == Decimal(string: "4.99"))
+        #expect(line.dealLabel == "$1 off" && b.cart.savings == 1)
     }
     @Test func percentDealRoundsToCents() async throws {
         let b = try backend(); try await b.startTrip()
@@ -58,13 +58,13 @@ import Testing
         try await b.setPlan(["barilla-spaghetti", "rao-marinara", "kirkland-parmesan"].map { PlanItem(productId: $0, reason: "pasta dinner") })
         // From the entrance (x 0): Aisle 4 (8.5) is nearest, then Aisle 6 (12.5) in sent order.
         #expect(b.cart.plan.map(\.productId) == ["kirkland-parmesan", "barilla-spaghetti", "rao-marinara"])
-        #expect(b.cart.plan[0].aisle == "Aisle 4" && b.cart.plan[0].inStock == true && b.cart.plan[0].dealLabel == "$3 off")
-        #expect(b.cart.nextStep == "Aisle 4 → Parmesan, $3 off")
+        #expect(b.cart.plan[0].aisle == "Aisle 4" && b.cart.plan[0].inStock == true && b.cart.plan[0].dealLabel == "$1 off")
+        #expect(b.cart.nextStep == "Aisle 4 → Parmesan, $1 off")
         await b.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")
         #expect(b.cart.plan.map(\.productId) == ["barilla-spaghetti", "rao-marinara", "kirkland-parmesan"])
-        #expect(b.cart.plan[0].done && b.cart.nextStep == "Aisle 6 → Rao's Sauce")
+        #expect(b.cart.plan[0].done && b.cart.nextStep == "Aisle 6 → Marinara")
         await b.simulateVision(.added, productId: "rao-marinara", confidence: 0.9, label: "r")
-        #expect(b.cart.nextStep == "Aisle 4 → Parmesan, $3 off")
+        #expect(b.cart.nextStep == "Aisle 4 → Parmesan, $1 off")
         await b.simulateVision(.added, productId: "kirkland-parmesan", confidence: 0.9, label: "p")
         #expect(b.cart.nextStep == "All done → Checkout")
     }

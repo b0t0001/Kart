@@ -79,7 +79,8 @@ public final class AppModel {
     private func context(catalog: Catalog) -> CardContext {
         CardContext(cart: backend.cart, events: backend.events, catalog: catalog, now: clock(),
                     voiceOnline: voice.state != .offline, locallyResolved: locallyResolved,
-                    baselineDeals: baselineDeals, acknowledgedNewDeals: acknowledgedNewDeals)
+                    baselineDeals: baselineDeals, acknowledgedNewDeals: acknowledgedNewDeals,
+                    agentPrompt: voice.agentPrompt)
     }
 
     // MARK: Live updates
@@ -163,6 +164,7 @@ public final class AppModel {
             seenEvents.insert(event.eventId)
             sounds.play(.card)
             react(.curiousTilt)
+            voice.send(.uiAction("unknown_item"))   // Kart asks the shopper to look at the card
         }
     }
 
@@ -268,6 +270,8 @@ public final class AppModel {
         case .newDeal(let deal):
             if action == .addIt { await addToPlan(deal.productId) }
             acknowledgedNewDeals.insert("\(deal.id)|\(deal.label)")
+        case .dealDigest, .digestDeal:                          // Kart hears the tap (above) and sends the next card
+            voice.clearAgentPrompt()
         case .offline:
             if action == .retry { await retryVoice() }
         }
@@ -305,6 +309,7 @@ public final class AppModel {
             paymentState = .done(receipt)
             sounds.play(.success)
             react(.celebrate)
+            voice.send(.uiAction("paid"))   // Kart says goodbye
         } catch {
             paymentState = .failed(Self.paymentFailedMessage)
         }

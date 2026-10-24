@@ -9,6 +9,7 @@ import Testing
     var isMuted = false
     var holdToTalk = false
     var isHeld = false
+    var agentPrompt: AgentPrompt?
     var sent: [VoiceEvent] = []
     var startCount = 0
     var stopCount = 0
@@ -17,6 +18,7 @@ import Testing
     func stop() { stopCount += 1 }
     func setMuted(_ muted: Bool) { isMuted = muted }
     func setHeld(_ held: Bool) { isHeld = held }
+    func clearAgentPrompt() { agentPrompt = nil }
     func send(_ event: VoiceEvent) { sent.append(event) }
 }
 
@@ -85,7 +87,7 @@ import Testing
     await t.backend.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")
     await t.model.respond(to: try #require(t.model.visibleCard), with: .yes)
     #expect(t.backend.cart.plan.contains { $0.productId == "kirkland-parmesan" && $0.reason == "deal" })
-    #expect(t.model.visibleCard?.title == "Baguette is $1 off in Aisle 2. Want it?")   // the Yes consumed it; the next pairing pops
+    #expect(t.model.visibleCard?.title == "Garlic Bread is $1 off in Aisle 2. Want it?")   // the Yes consumed it; the next pairing pops
 
     await t.model.startTrip()                                // "No thanks" on a fresh trip
     await t.backend.simulateVision(.added, productId: "tostitos-salsa", confidence: 0.9, label: "salsa")   // suggests chips
@@ -137,6 +139,23 @@ import Testing
     guard case .done(let r) = t.model.paymentState else { Issue.record("not done"); return }
     #expect(r.total == Decimal(string: "1.49") && t.model.screen == .receipt && t.sounds.played.last == .success)
     #expect(t.model.reaction?.reaction == .celebrate)
+}
+@MainActor @Test func paidTellsKartSoItCanSayGoodbye() async throws {
+    let t = try make(); await t.model.startTrip()
+    await t.backend.simulateVision(.added, productId: "bananas", confidence: 0.9, label: "b"); await t.model.beginCheckout()
+    await t.model.pay()
+    #expect(t.voice.sent.last == .uiAction("paid"))
+}
+@MainActor @Test func declinedPaymentDoesNotTellKartItsPaid() async throws {
+    let t = try make(); t.payment.result = .failure(PaymentError.declined); await t.model.startTrip()
+    await t.model.beginCheckout(); await t.model.pay()
+    #expect(!t.voice.sent.contains(.uiAction("paid")))
+}
+@MainActor @Test func unsureItemTellsKartOnce() async throws {
+    let t = try make(); await t.model.startTrip()
+    await t.backend.simulateVision(.added, productId: nil, confidence: 0.3, label: "umbrella")
+    t.model.ingest(events: t.backend.events); t.model.ingest(events: t.backend.events)
+    #expect(t.voice.sent.filter { $0 == .uiAction("unknown_item") }.count == 1)
 }
 @MainActor @Test func failedPaymentStaysInCheckout() async throws {
     let t = try make(); t.payment.result = .failure(PaymentError.declined); await t.model.startTrip()

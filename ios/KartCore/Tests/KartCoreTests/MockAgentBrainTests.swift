@@ -8,7 +8,7 @@ import Testing
     }
     @Test func pastaBuildsPlan() async throws {
         let (b, brain) = try await setup()
-        #expect(await brain.respond(to: "Pasta dinner for my family, four people.") == "Love it. Spaghetti, Rao's sauce, a baguette, and a Caesar kit. I'll walk you through it.")
+        #expect(await brain.respond(to: "Pasta dinner for my family, four people.") == "Love it. Spaghetti, marinara, garlic bread, and a Caesar kit. I'll walk you through it.")
         #expect(Set(b.cart.plan.map(\.productId)) == ["barilla-spaghetti", "rao-marinara", "french-baguette", "caesar-salad-kit"])   // the mock reorders by route
     }
     @Test func yesAcceptsSuggestion() async throws {
@@ -20,7 +20,7 @@ import Testing
     @Test func yesConfirmsPendingItemFirst() async throws {
         let (b, brain) = try await setup()
         await b.simulateVision(.added, productId: nil, confidence: 0.4, label: "jar of rao's marinara")
-        #expect(await brain.respond(to: "yeah") == "Got it, Rao's Sauce.")
+        #expect(await brain.respond(to: "yeah") == "Got it, Marinara.")
         #expect(b.cart.items.map(\.productId) == ["rao-marinara"] && b.events[0].resolvedAt != nil)
     }
     @Test func noDismissesSuggestion() async throws {
@@ -40,7 +40,7 @@ import Testing
     @Test func reactions() async throws {
         let (b, brain) = try await setup()
         try await b.setPlan(DemoScript.pastaPlan)
-        #expect(brain.react(to: .cartChanged(.added(productId: "barilla-spaghetti"))) == "Nice. Rao's is right beside it.")
+        #expect(brain.react(to: .cartChanged(.added(productId: "barilla-spaghetti"))) == "Nice. The marinara is right beside it.")
         #expect(brain.react(to: .cartChanged(.added(productId: "caesar-salad-kit"))) == "Got the Caesar Salad Kit.")
         #expect(brain.react(to: .cartChanged(.added(productId: "bananas"))) == nil)
         #expect(brain.react(to: .cartChanged(.removed(productId: "barilla-spaghetti"))) == "Took the Spaghetti off your bill.")

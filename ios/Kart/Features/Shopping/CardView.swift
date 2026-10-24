@@ -70,7 +70,7 @@ struct CardView: View {
 
     private func popIfDeal() {
         switch card.kind {
-        case .deal, .newDeal:
+        case .deal, .newDeal, .dealDigest, .digestDeal:
             burst = UUID()
             withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { pulse = true }
             Task { @MainActor in
@@ -88,6 +88,8 @@ struct CardView: View {
         case .deal(let suggestion): catalog.product(suggestion.productId)?.category
         case .newDeal(let deal): catalog.product(deal.productId)?.category
         case .nudge(let nudge): catalog.product(nudge.productId)?.category
+        case .digestDeal(_, let productId): catalog.product(productId)?.category
+        case .dealDigest: nil
         case .offline: nil
         }
     }
@@ -95,7 +97,7 @@ struct CardView: View {
     private var fill: Color {
         switch card.kind {
         case .confirmItem: Theme.amberSoft
-        case .deal, .newDeal, .nudge: Theme.brandSoft
+        case .deal, .newDeal, .nudge, .dealDigest, .digestDeal: Theme.brandSoft
         case .offline: Theme.surface
         }
     }
@@ -103,7 +105,7 @@ struct CardView: View {
     private var border: Color {
         switch card.kind {
         case .confirmItem: Theme.amber
-        case .deal, .newDeal, .nudge: Theme.brand.opacity(0.35)
+        case .deal, .newDeal, .nudge, .dealDigest, .digestDeal: Theme.brand.opacity(0.35)
         case .offline: Theme.hairline
         }
     }
@@ -111,7 +113,7 @@ struct CardView: View {
     private var titleInk: Color {
         switch card.kind {
         case .confirmItem: Theme.amberInk
-        case .deal, .newDeal, .nudge: Theme.brandDeep
+        case .deal, .newDeal, .nudge, .dealDigest, .digestDeal: Theme.brandDeep
         case .offline: Theme.ink
         }
     }

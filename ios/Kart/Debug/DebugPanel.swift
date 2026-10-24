@@ -65,11 +65,11 @@ struct DebugPanel: View {
                 Section("Merchant") {
                     if let mock = world.mock {
                         row("Remove Parmesan deal", id: "debug.removeParmDeal") { await mock.removeDeal(id: DemoScript.parmesanDeal.id) }
-                        row("Create Parmesan $3 off", id: "debug.createParmDeal") { await mock.pushDeal(DemoScript.parmesanDeal) }
+                        row("Create Parmesan $1 off", id: "debug.createParmDeal") { await mock.pushDeal(DemoScript.parmesanDeal) }
                         row("Push Bananas 50¢ off", id: "debug.pushBananas") { await mock.pushDeal(DemoScript.bananaDeal) }
                         row("Remove Bananas deal", id: "debug.removeBananas") { await mock.removeDeal(id: DemoScript.bananaDeal.id) }
                     } else {
-                        Text("On the live backend, deals come from the merchant console (or `backend/cart.py deal kirkland-parmesan 3`).")
+                        Text("On the live backend, deals come from the merchant console (or `backend/cart.py deal kirkland-parmesan 1`).")
                             .foregroundStyle(.secondary)
                     }
                 }

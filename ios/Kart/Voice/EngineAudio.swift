@@ -24,6 +24,10 @@ import KartCore
         try session.setActive(true)
         let input = engine.inputNode
         try input.setVoiceProcessingEnabled(true)
+        // Voice processing ducks every other sound the app plays, so the cart's chimes went near-silent once Kart's
+        // real voice was on (on device). Keep that ducking at its minimum.
+        input.voiceProcessingOtherAudioDuckingConfiguration =
+            AVAudioVoiceProcessingOtherAudioDuckingConfiguration(enableAdvancedDucking: false, duckingLevel: .min)
         let micFormat = input.outputFormat(forBus: 0)
         let playFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: outputSampleRate, channels: 1, interleaved: false)!
         engine.attach(player)

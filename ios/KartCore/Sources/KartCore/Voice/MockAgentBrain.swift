@@ -20,7 +20,7 @@ import Foundation
         }
         if words.contains("pasta") {
             try? await backend.setPlan(DemoScript.pastaPlan)
-            return "Love it. Spaghetti, Rao's sauce, a baguette, and a Caesar kit. I'll walk you through it."
+            return "Love it. Spaghetti, marinara, garlic bread, and a Caesar kit. I'll walk you through it."
         }
         if words.contains("taco") || words.contains("tacos") {
             try? await backend.setPlan(DemoScript.tacoPlan)
@@ -52,7 +52,7 @@ import Foundation
     public func react(to event: VoiceEvent) -> String? {
         switch event {
         case .cartChanged(.added(let productId)):
-            if productId == "barilla-spaghetti" { return "Nice. Rao's is right beside it." }
+            if productId == "barilla-spaghetti" { return "Nice. The marinara is right beside it." }
             guard backend.cart.plan.contains(where: { $0.productId == productId }) else { return nil }
             return "Got the \(shortName(productId))."
         case .cartChanged(.removed(let productId)):

@@ -1,7 +1,7 @@
 import Foundation
 
 public enum CardAction: Sendable, Equatable, Hashable {
-    case yes, no, somethingElse, remove, addIt, gotIt, keepIt, goGetIt, skipIt, goGetThem, skip, retry
+    case yes, no, somethingElse, remove, addIt, gotIt, keepIt, goGetIt, skipIt, goGetThem, skip, notNow, retry
     case choose(productId: String)
 
     public var title: String {
@@ -17,6 +17,7 @@ public enum CardAction: Sendable, Equatable, Hashable {
         case .skipIt: "Skip it"
         case .goGetThem: "Go get them"
         case .skip: "Skip"
+        case .notNow: "Not now"
         case .retry: "Retry"
         case .choose: ""
         }
@@ -31,6 +32,8 @@ public struct Card: Identifiable, Sendable, Equatable {
         case deal(Suggestion)
         case nudge(Nudge)
         case newDeal(Deal)
+        case dealDigest(count: Int)
+        case digestDeal(dealId: String, productId: String)
     }
 
     public let id: String
@@ -58,9 +61,12 @@ public struct CardContext: Sendable {
     public var baselineDeals: [String: String]
     /// "\(deal.id)|\(deal.label)"
     public var acknowledgedNewDeals: Set<String>
+    /// What Kart is asking right now (deals walk-through), from the agent.
+    public var agentPrompt: AgentPrompt?
 
     public init(cart: CartState, events: [CartEvent], catalog: Catalog, now: Date, voiceOnline: Bool,
-                locallyResolved: Set<UUID>, baselineDeals: [String: String], acknowledgedNewDeals: Set<String>) {
+                locallyResolved: Set<UUID>, baselineDeals: [String: String], acknowledgedNewDeals: Set<String>,
+                agentPrompt: AgentPrompt? = nil) {
         self.cart = cart
         self.events = events
         self.catalog = catalog
@@ -69,6 +75,7 @@ public struct CardContext: Sendable {
         self.locallyResolved = locallyResolved
         self.baselineDeals = baselineDeals
         self.acknowledgedNewDeals = acknowledgedNewDeals
+        self.agentPrompt = agentPrompt
     }
 }
 
@@ -78,7 +85,22 @@ public enum CardDeriver {
     /// Cards in priority order: confirm items, offline, the deal suggestion, a quantity nudge (beta), then new store
     /// deals.
     public static func cards(_ ctx: CardContext) -> [Card] {
-        confirmCards(ctx) + offlineCards(ctx) + dealCards(ctx) + nudgeCards(ctx) + newDealCards(ctx)
+        confirmCards(ctx) + offlineCards(ctx) + promptCards(ctx) + dealCards(ctx) + nudgeCards(ctx) + newDealCards(ctx)
+    }
+
+    /// Kart walking the deals that go with the list: "want to hear them?", then one deal at a time.
+    private static func promptCards(_ ctx: CardContext) -> [Card] {
+        switch ctx.agentPrompt {
+        case .dealDigest(let count):
+            let title = count == 1 ? "One deal goes with your list. Want to hear it?"
+                                   : "\(count) deals go with your list. Want to hear them?"
+            return [Card(id: "digest", kind: .dealDigest(count: count), title: title, actions: [.yes, .notNow])]
+        case .digestDeal(let dealId, let productId, let text):
+            return [Card(id: "digest-deal-\(dealId)", kind: .digestDeal(dealId: dealId, productId: productId),
+                         title: text, actions: [.yes, .no])]
+        case nil:
+            return []
+        }
     }
 
     /// Only with the cart's `quantity_nudges` flag on; with it off nothing changes.

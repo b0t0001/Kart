@@ -54,7 +54,7 @@ struct FakeTokens: VoiceTokenProviding {
     }
 }
 
-@MainActor private func settle() async { for _ in 0..<5 { await Task.yield() } }
+@MainActor func settle() async { for _ in 0..<5 { await Task.yield() } }
 
 // MARK: Tests
 

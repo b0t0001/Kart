@@ -27,8 +27,8 @@ public enum DemoScript {
 
 extension DemoScript {
     /// The live merchant beat: the pitch starts without it, then the owner creates it (contract v0.9).
-    public static let parmesanDeal = Deal(id: "d-parm-3off", productId: "kirkland-parmesan", type: .amountOff, value: 3,
-                                          label: "$3 off", pairsWith: ["barilla-spaghetti", "rao-marinara"])
+    public static let parmesanDeal = Deal(id: "d-parm-3off", productId: "kirkland-parmesan", type: .amountOff, value: 1,
+                                          label: "$1 off", pairsWith: ["barilla-spaghetti", "rao-marinara"])
     /// A price drop on something already in the cart (P10).
     public static let bananaDeal = Deal(id: "d-bananas-50c", productId: "bananas", type: .amountOff,
                                         value: Decimal(string: "0.5")!, label: "50¢ off", pairsWith: [])

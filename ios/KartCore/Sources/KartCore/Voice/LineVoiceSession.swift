@@ -44,12 +44,26 @@ public enum LineServerEvent: Equatable, Sendable {
     case ack(streamId: String)
     case media(Data)
     case clear
+    case prompt(AgentPrompt?)
     case other
 }
 
 /// The Cartesia Line agent WebSocket protocol, and the iPad → agent `custom` event contract.
 public enum LineCodec {
     public static let inputFormat = "pcm_16000"
+
+    /// The agent's card messages (contract between agent/kart_agent/agent.py and the iPad).
+    static func prompt(_ meta: [String: Any]) -> LineServerEvent {
+        switch meta["type"] as? String {
+        case "deal_digest": return .prompt(.dealDigest(count: meta["count"] as? Int ?? 1))
+        case "digest_deal":
+            guard let dealId = meta["deal_id"] as? String, let productId = meta["product_id"] as? String,
+                  let text = meta["text"] as? String else { return .other }
+            return .prompt(.digestDeal(dealId: dealId, productId: productId, text: text))
+        case "digest_done": return .prompt(nil)
+        default: return .other
+        }
+    }
 
     public static func start(streamId: String) -> String {
         encode(["event": "start", "stream_id": streamId, "config": ["input_format": inputFormat]])
@@ -108,6 +122,7 @@ public enum LineCodec {
                   let pcm = Data(base64Encoded: payload) else { return .other }
             return .media(pcm)
         case "clear": return .clear
+        case "custom": return prompt(message["metadata"] as? [String: Any] ?? [:])
         default: return .other
         }
     }
@@ -121,6 +136,7 @@ public enum LineCodec {
         case .addIt: "add_it"
         case .gotIt: "got_it"
         case .keepIt: "keep_it"
+        case .notNow: "not_now"
         case .goGetIt: "go_get_it"
         case .skipIt: "skip_it"
         case .goGetThem: "go_get_them"
@@ -144,6 +160,9 @@ public final class LineVoiceSession: VoiceSession {
     public private(set) var isMuted = false
     public var holdToTalk = false
     public private(set) var isHeld = false
+    public private(set) var agentPrompt: AgentPrompt?
+
+    public func clearAgentPrompt() { agentPrompt = nil }
 
     @ObservationIgnored private let tokens: any VoiceTokenProviding
     @ObservationIgnored private let transport: any LineTransport
@@ -284,6 +303,8 @@ public final class LineVoiceSession: VoiceSession {
             audio.play(pcm)
             outputLevel = audio.level(of: pcm)
             state = .agentSpeaking
+        case .prompt(let prompt):
+            agentPrompt = prompt
         case .clear:
             audio.flush()
             playbackIdle()

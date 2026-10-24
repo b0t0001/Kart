@@ -44,7 +44,7 @@ private func waitUntil(_ timeout: Duration = .seconds(5), _ condition: () -> Boo
         #expect(b.cart.items.map(\.productId) == ["barilla-spaghetti"])
         #expect(b.cart.suggestion != nil)
 
-        await b.simulateVision(.added, productId: nil, confidence: 0.3, label: "red jar of Rao's marinara")
+        await b.simulateVision(.added, productId: nil, confidence: 0.3, label: "red jar of marinara sauce")
         #expect(b.events.contains { $0.needsConfirmation })
         await #expect(throws: KartBackendError.unresolvedItems(count: 1)) { _ = try await b.checkout(provider: "simulated") }
 

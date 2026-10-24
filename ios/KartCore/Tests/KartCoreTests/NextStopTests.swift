@@ -8,9 +8,9 @@ import Testing
     var soldOut = PlanItem(productId: "french-baguette", reason: ""); soldOut.inStock = false
     c.plan = [done, soldOut, PlanItem(productId: "added-after-build", reason: ""), PlanItem(productId: "rao-marinara", reason: "")]
     let s = try #require(NextStop.from(cart: c, catalog: try Fixtures.catalog()))
-    #expect(s.sectionId == "A6" && s.aisleLabel == "Aisle 6" && s.shortName == "Rao's Sauce" && s.text == "Aisle 6 → Rao's Sauce")
-    c.nextStep = "Aisle 6 → Rao's Sauce, $1 off"
-    #expect(NextStop.from(cart: c, catalog: try Fixtures.catalog())?.text == "Aisle 6 → Rao's Sauce, $1 off")
+    #expect(s.sectionId == "A6" && s.aisleLabel == "Aisle 6" && s.shortName == "Marinara" && s.text == "Aisle 6 → Marinara")
+    c.nextStep = "Aisle 6 → Marinara, $1 off"
+    #expect(NextStop.from(cart: c, catalog: try Fixtures.catalog())?.text == "Aisle 6 → Marinara, $1 off")
 }
 
 @Test func hereText() throws {

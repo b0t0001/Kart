@@ -21,7 +21,7 @@ final class LiveRehearsalTests: XCTestCase {
         expectText("Hi, I'm Kart. What are we shopping for today?")
 
         debug("debug.say.0")                               // the scripted brain writes the plan through set_plan
-        expectText("Love it. Spaghetti, Rao's sauce, a baguette, and a Caesar kit. I'll walk you through it.")
+        expectText("Love it. Spaghetti, marinara, garlic bread, and a Caesar kit. I'll walk you through it.")
         debug("debug.add.barilla-spaghetti")               // apply_cart_event, as the Pi would
         expectText("$1.99")
         shot("live-1-before-deal")
@@ -33,7 +33,7 @@ final class LiveRehearsalTests: XCTestCase {
         XCTAssertTrue(app.buttons["card.No thanks"].waitForNonExistence(timeout: 5))
 
         debug("debug.unsure.rao-marinara")
-        expectText("Is this the Rao's Sauce?")
+        expectText("Is this the Marinara?")
         shot("live-3-confirm")
         app.buttons["card.Yes"].tap()
         XCTAssertTrue(app.buttons["card.Not this"].waitForNonExistence(timeout: 5))

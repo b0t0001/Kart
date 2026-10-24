@@ -22,7 +22,7 @@ private func unknown(id: Int64, label: String) -> CartEvent {
 @Test func unknownEventBecomesConfirmCardWithBestGuess() throws {
     let cards = CardDeriver.cards(try ctx(events: [unknown(id: 12, label: "jar of rao's marinara")]))
     #expect(cards.first?.id == "confirm-12")
-    #expect(cards.first?.title == "Is this the Rao's Sauce?")
+    #expect(cards.first?.title == "Is this the Marinara?")
     #expect(cards.first?.actions == [.yes, .somethingElse, .remove])
 }
 @Test func poorMatchAsksOpenQuestion() throws {

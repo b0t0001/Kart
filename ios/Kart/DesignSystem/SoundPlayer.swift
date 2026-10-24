@@ -11,11 +11,13 @@ import KartCore
     init() {
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: format)
+        // Small bells: each note rings over the next. Added rises ("bloop-ding"), removed falls back down softly,
+        // a card is a gentle two-note "hey", paid is a little arpeggio.
         buffers = [
-            .added: tones([(880, 0.07), (1320, 0.07)]),
-            .removed: tones([(660, 0.07), (440, 0.07)]),
-            .card: tones([(740, 0.12), (988, 0.12)]),
-            .success: tones([(523, 0.10), (659, 0.10), (784, 0.16)]),
+            .added: chime([(784, 0, 0.18), (1175, 0.07, 0.40)]),
+            .removed: chime([(1175, 0, 0.14), (784, 0.07, 0.30)], level: 0.6),
+            .card: chime([(659, 0, 0.20), (988, 0.10, 0.45)], level: 0.8),
+            .success: chime([(523, 0, 0.25), (659, 0.08, 0.25), (784, 0.16, 0.30), (1047, 0.24, 0.70)]),
         ].compactMapValues { $0 }
     }
 
@@ -34,22 +36,26 @@ import KartCore
         player.play()
     }
 
-    /// Sine tones in sequence, each with an 8 ms attack and an exponential decay.
-    private func tones(_ notes: [(frequency: Double, seconds: Double)]) -> AVAudioPCMBuffer? {
+    /// Bell-like notes (a fundamental plus soft 2nd and 3rd partials), each with a 4 ms attack and an exponential
+    /// ring: (frequency, start, ring seconds). Notes overlap, so it sounds like one little phrase, not beeps.
+    private func chime(_ notes: [(frequency: Double, start: Double, ring: Double)], level: Double = 1) -> AVAudioPCMBuffer? {
         let rate = format.sampleRate
-        let total = AVAudioFrameCount(notes.reduce(0) { $0 + $1.seconds } * rate)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: total), let data = buffer.floatChannelData?[0] else { return nil }
+        let end = notes.map { $0.start + $0.ring }.max() ?? 0
+        let total = AVAudioFrameCount(end * rate)
+        guard total > 0, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: total),
+              let data = buffer.floatChannelData?[0] else { return nil }
         buffer.frameLength = total
-        var frame = 0
+        for i in 0..<Int(total) { data[i] = 0 }
+        let partials: [(ratio: Double, gain: Double)] = [(1, 1), (2, 0.32), (3, 0.1)]
         for note in notes {
-            let count = Int(note.seconds * rate)
-            for i in 0..<count {
+            let first = Int(note.start * rate)
+            let count = min(Int(note.ring * rate), Int(total) - first)
+            for i in 0..<max(0, count) {
                 let t = Double(i) / rate
-                let attack = min(1, t / 0.008)
-                let decay = exp(-t * 18)
-                data[frame + i] = Float(0.25 * attack * decay * sin(2 * .pi * note.frequency * t))
+                let envelope = min(1, t / 0.004) * exp(-t * 4.5 / note.ring)
+                let tone = partials.reduce(0) { $0 + $1.gain * sin(2 * .pi * note.frequency * $1.ratio * t) }
+                data[first + i] += Float(0.16 * level * envelope * tone)
             }
-            frame += count
         }
         return buffer
     }

@@ -17,19 +17,19 @@ final class RehearsalTests: XCTestCase {
         expectText("Hi, I'm Kart. What are we shopping for today?")
 
         debug("debug.say.0")
-        expectText("Love it. Spaghetti, Rao's sauce, a baguette, and a Caesar kit. I'll walk you through it.")
+        expectText("Love it. Spaghetti, marinara, garlic bread, and a Caesar kit. I'll walk you through it.")
         expectText("Aisle 1 → Caesar Salad Kit")
         shot("rehearsal-1-plan")
 
         debug("debug.add.barilla-spaghetti")
-        expectText("Parmesan is $3 off in Aisle 4. Want it?")
+        expectText("Parmesan is $1 off in Aisle 4. Want it?")
         shot("rehearsal-2-deal")
         app.buttons["card.Yes"].tap()
         XCTAssertTrue(app.buttons["card.No thanks"].waitForNonExistence(timeout: 5))   // the card leaves (the caption stays)
         expectText("Parmesan")                                 // joined the list
 
         debug("debug.unsure.rao-marinara")
-        expectText("Is this the Rao's Sauce?")
+        expectText("Is this the Marinara?")
         shot("rehearsal-3-confirm")
         app.buttons["card.Yes"].tap()
         XCTAssertTrue(app.buttons["card.Not this"].waitForNonExistence(timeout: 5))
@@ -55,11 +55,11 @@ final class RehearsalTests: XCTestCase {
         expectText("Hi, I'm Kart. What are we shopping for today?")
         debug("debug.say.0")
         debug("debug.add.barilla-spaghetti")
-        expectText("Nice. Rao's is right beside it.", timeout: 30)
-        XCTAssertFalse(app.staticTexts["Parmesan is $3 off in Aisle 4. Want it?"].exists)   // no parmesan deal yet
+        expectText("Nice. The marinara is right beside it.", timeout: 30)
+        XCTAssertFalse(app.staticTexts["Parmesan is $1 off in Aisle 4. Want it?"].exists)   // no parmesan deal yet
         shot("merchant-1-before")
         debug("debug.createParmDeal")                  // the owner creates it live
-        expectText("Parmesan is $3 off in Aisle 4. Want it?", timeout: 5)
+        expectText("Parmesan is $1 off in Aisle 4. Want it?", timeout: 5)
         shot("merchant-2-after")
 
         debug("debug.add.bananas")

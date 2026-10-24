@@ -5,7 +5,7 @@ import Foundation
 public enum DemoScenario: String, CaseIterable, Sendable {
     case welcome, greeting, shopping, deal, confirm, crowded, talkative, amounts, nudge, checkoutShort, checkout, checkoutUnresolved, receipt
 
-    static let unsureLabel = "red jar of Rao's marinara"
+    static let unsureLabel = "red jar of marinara sauce"
     static let crowdedProducts = [
         "avocados", "mission-tortillas", "ground-beef", "tillamook-mexican-cheese", "tostitos-salsa", "taco-seasoning",
         "tostitos-chips", "daisy-sour-cream", "bananas", "whole-milk", "large-eggs", "kirkland-paper-towels",
@@ -88,7 +88,7 @@ public enum DemoScenario: String, CaseIterable, Sendable {
 
     private static func pastaTrip(_ backend: MockKartBackend) async throws {
         try await backend.appendTranscript(.user, DemoScript.userLines[0])
-        try await backend.appendTranscript(.agent, "Love it. Spaghetti, Rao's sauce, a baguette, and a Caesar kit. I'll walk you through it.")
+        try await backend.appendTranscript(.agent, "Love it. Spaghetti, marinara, garlic bread, and a Caesar kit. I'll walk you through it.")
         try await backend.setPlan(DemoScript.pastaPlan)
         await backend.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.95, label: "spaghetti")
         await backend.simulateVision(.added, productId: "bananas", confidence: 0.95, label: "bananas")

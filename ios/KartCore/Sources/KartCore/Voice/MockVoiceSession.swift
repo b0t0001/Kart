@@ -9,6 +9,9 @@ public final class MockVoiceSession: VoiceSession {
     public private(set) var isMuted = false
     public var holdToTalk = false
     public private(set) var isHeld = false
+    public let agentPrompt: AgentPrompt? = nil                  // the scripted Kart doesn't walk deals
+
+    public func clearAgentPrompt() {}
 
     /// Debug: simulate the voice connection dropping.
     public var forcedOffline = false {

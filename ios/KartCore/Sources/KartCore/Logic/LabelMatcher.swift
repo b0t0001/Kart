@@ -10,7 +10,7 @@ public struct ProductMatch: Sendable, Equatable {
     }
 }
 
-/// Turns a vision label ("red jar of Rao's marinara") into catalog guesses for a confirm card.
+/// Turns a vision label ("red jar of marinara sauce") into catalog guesses for a confirm card.
 public enum LabelMatcher {
     private static let stopwords: Set<String> = ["the", "a", "an", "of", "and", "with", "in", "for", "jar", "box", "bag", "pack"]
     private static let units: Set<String> = ["oz", "lb", "ct"]

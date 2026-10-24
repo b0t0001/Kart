@@ -14,8 +14,8 @@ import Testing
         await b.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")
         let s = try #require(b.cart.suggestion)
         #expect(s.dealId == "d-parm-3off" && s.productId == "kirkland-parmesan")
-        #expect(s.text == "Parmesan is $3 off in Aisle 4. Want it?")
-        #expect(s.salePrice == Decimal(string: "9.99") && s.aisle == "Aisle 4")
+        #expect(s.text == "Parmesan is $1 off in Aisle 4. Want it?")
+        #expect(s.salePrice == Decimal(string: "3.99") && s.aisle == "Aisle 4")
         #expect(b.cart.suggestedDeals == ["d-parm-3off"])
     }
     @Test func plannedProductsAreNeverSuggested() async throws {
@@ -32,7 +32,7 @@ import Testing
         #expect(b.cart.suggestion == nil)
         await b.simulateVision(.added, productId: "rao-marinara", confidence: 0.9, label: "r")
         #expect(b.cart.suggestion?.dealId == "d-baguette-1off")
-        #expect(b.cart.suggestion?.text == "Baguette is $1 off in Aisle 2. Want it?")
+        #expect(b.cart.suggestion?.text == "Garlic Bread is $1 off in Aisle 2. Want it?")
     }
     @Test func planningTheSuggestedProductConsumesItAndOffersTheNextPairing() async throws {
         let b = try await started()
@@ -64,10 +64,10 @@ import Testing
         let b = try await started()
         await b.simulateVision(.added, productId: "kirkland-parmesan", confidence: 0.9, label: "p")
         await b.removeDeal(id: "d-parm-3off")
-        #expect(b.cart.items.map(\.price) == [Decimal(string: "9.99")!])
+        #expect(b.cart.items.map(\.price) == [Decimal(string: "3.99")!])
         await b.simulateVision(.added, productId: "kirkland-parmesan", confidence: 0.9, label: "p")
-        #expect(b.cart.items.map(\.price) == [Decimal(string: "9.99")!] && b.cart.items[0].qty == 2)   // one line keeps the lower price
-        #expect(b.cart.total == Decimal(string: "19.98"))
+        #expect(b.cart.items.map(\.price) == [Decimal(string: "3.99")!] && b.cart.items[0].qty == 2)   // one line keeps the lower price
+        #expect(b.cart.total == Decimal(string: "7.98"))
     }
     @Test func storeCreatedDealReplacesCurrentSuggestion() async throws {
         let b = try await started()
@@ -92,7 +92,7 @@ import Testing
         await b.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")
         clock.now += 1380
         let r = try await b.checkout(provider: "simulated")
-        #expect(r.total == Decimal(string: "11.98") && r.savings == 3 && r.itemCount == 2 && r.durationS == 1380)
+        #expect(r.total == Decimal(string: "5.98") && r.savings == 1 && r.itemCount == 2 && r.durationS == 1380)
         #expect(r.provider == "simulated" && r.status == "paid" && r.items.count == 2 && r.tripId == b.cart.tripId)
         #expect(b.cart.status == .paid)
         #expect(try await b.checkout(provider: "simulated") == r)          // idempotent per trip

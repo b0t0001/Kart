@@ -17,6 +17,13 @@ public enum VoiceEvent: Sendable, Equatable {
     case uiAction(String)
 }
 
+/// What Kart is asking right now that the iPad shows as a card (the agent's `custom` messages): deals first get a
+/// "want to hear them?", then one card per deal.
+public enum AgentPrompt: Sendable, Equatable {
+    case dealDigest(count: Int)
+    case digestDeal(dealId: String, productId: String, text: String)
+}
+
 /// The hands-free conversation with Kart. `MockVoiceSession` now; `LineVoiceSession` in milestone 3.
 @MainActor public protocol VoiceSession: AnyObject, Observable {
     var state: VoiceState { get }
@@ -31,6 +38,10 @@ public enum VoiceEvent: Sendable, Equatable {
     func setMuted(_ muted: Bool)
     func setHeld(_ held: Bool)
     func send(_ event: VoiceEvent)
+    /// Kart's current question for a card, from the agent; nil when there's none.
+    var agentPrompt: AgentPrompt? { get }
+    /// After a tap: hide the card until Kart sends the next one.
+    func clearAgentPrompt()
 }
 
 /// Text-to-speech. Returns when the line has finished playing.
