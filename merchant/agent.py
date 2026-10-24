@@ -220,8 +220,10 @@ def build_tools(section_ids: list[str]) -> list[dict]:
                 "tags": {"type": "array", "items": {"type": "string"},
                          "description": "Lowercase meal/use tags the shopping assistant plans with, e.g. [\"pasta\", \"italian\"]."},
                 "stock": {"type": "integer"},
-                "vision_hint": {"type": "string", "description": "What the item looks like in a cart (packaging, colors, label text), "
-                                                                 "so the cart cameras can recognize it."},
+                "vision_hint": {"type": "string", "description": "What the item looks like in a cart (shape, packaging, colors, "
+                                                                 "label text), so the cart cameras can recognize it. Always fill it: if "
+                                                                 "the owner didn't describe it, write it from the product and its usual "
+                                                                 "packaging. The preview shows it so they can correct it."},
             }, "required": ["name", "short_name", "price", "section", "category", "tags", "stock", "vision_hint"],
                 "additionalProperties": False},
         },
@@ -411,7 +413,8 @@ class Tools:
                 "category": inp["category"].strip().lower() or "other", "tags": tags, "stock": stock,
                 "vision_hint": inp["vision_hint"].strip()}
         summary = (f"Add a new product: {name} (\"{short}\"), {money(price)}, in {section_name}, "
-                   f"{stock} in stock" + (f", tagged {', '.join(tags)}" if tags else "") + ".")
+                   f"{stock} in stock" + (f", tagged {', '.join(tags)}" if tags else "") + ". "
+                   f"Cart cameras will look for: {args['vision_hint']}")
         return "add_product", args, summary
 
     def stage_create_deal(self, inp):
@@ -488,6 +491,8 @@ live or applied unless a console update tells you it was confirmed.
 - After staging, reply in one or two short sentences: what you staged, and that it's waiting for \
 their Confirm. Don't repeat the whole preview; they can read the card.
 - One request can need several changes ("Rao's is out, put the spaghetti on sale instead"): stage each.
+- New products: the cart cameras recognize items from vision_hint, so always write one (from the owner's \
+description, or from the product's usual packaging) and mention they can correct it.
 - If something is ambiguous (two products match, no price given for a new item), ask one short question \
 instead of guessing. Infer the obvious: "we're out of X" is stock 0; "X $3 off" is an amount_off deal; \
 "20% off" is percent_off; a temporary discount is a deal, while "X now costs $Y" is a price change.

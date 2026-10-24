@@ -116,6 +116,7 @@ def test_add_product_then_undo_delists_it(store, tools):
                category="Produce", tags=["pasta", "Italian"], stock=20,
                vision_hint="small clear clamshell of bright green basil leaves")
     assert ch["args"]["id"] == "fresh-basil-0-75-oz"
+    assert ch["summary"].endswith("Cart cameras will look for: small clear clamshell of bright green basil leaves")
     store.apply(ch["id"])
     assert product(store, "fresh-basil-0-75-oz")["tags"] == ["italian", "pasta"]
     store.undo(ch["id"])
@@ -190,6 +191,8 @@ def test_undo_refuses_to_clobber_a_newer_change(store, tools):
     ("add_product", {"name": "Thing", "short_name": "A very long name", "price": 1, "section": "A1",
                      "category": "x", "tags": [], "stock": 1, "vision_hint": "box"}, "11 characters"),
     ("move_product", {"product_id": "bananas", "section": "A1"}, "already"),
+    ("add_product", {"name": "Thing", "short_name": "Thing", "price": 1, "section": "A1",
+                     "category": "x", "tags": [], "stock": 1, "vision_hint": "  "}, "vision_hint is required"),
     ("end_deal", {"deal_id": "d-nope"}, "No running deal"),
     ("undo_change", {"change_id": 999}, "can't be undone"),
 ])
