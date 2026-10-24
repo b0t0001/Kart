@@ -1,5 +1,7 @@
 # Demo shopping list
 
+> **FINAL PLAN: see [DEMO_PLAN.md](DEMO_PLAN.md).** It has the shopping list for the two shelf-stable meals (pasta night and game-night nachos), with each item's catalog id, aisle, deal and demo step. The lists below are earlier drafts.
+
 ## LEAN LIST (recommended): 7 shelf-stable items, ~$35–40, nothing to refrigerate
 
 | Buy | Qty | ~Cost | Covers |
