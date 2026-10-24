@@ -3,6 +3,8 @@
 
 On the Pi:      ~/venv/bin/python pi/main.py live --debug-view      (or the service with debug_view on)
 On the laptop:  python tools/remote_record.py --seconds 30           # → tools/out/rec-remote-…/
+On the Pi too:  --host localhost, so the live event log and the clip come from the same run
+Regression clip for git: --hz 5 --scale 0.5 --quality 80 --out pi/tests/clips/<name>
                 (if smartcart.local doesn't resolve: --host 192.168.137.127, the IP on the hotspot page)
 Then:           python pi/main.py replay tools/out/rec-remote-…      # same pipeline, on the recording
 """
@@ -28,6 +30,8 @@ def main() -> int:
     ap.add_argument("--seconds", type=float, default=30.0)
     ap.add_argument("--hz", type=float, default=5.0)
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--scale", type=float, default=1.0, help="0.5 = half-size frames (regression clips for git)")
+    ap.add_argument("--quality", type=int, default=95, help="JPEG quality of the saved frames")
     args = ap.parse_args()
     base = f"http://{args.host}:{args.port}"
     try:
@@ -44,7 +48,7 @@ def main() -> int:
             t0 = time.monotonic()
             tick = fetch_tick(base, cams)
             missing += sum(f is None for f in tick.values())
-            save_tick(out, tick)
+            save_tick(out, tick, scale=args.scale, quality=args.quality)
             n += 1
             time.sleep(max(0.0, 1.0 / args.hz - (time.monotonic() - t0)))
     except KeyboardInterrupt:
