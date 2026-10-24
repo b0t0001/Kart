@@ -1,6 +1,6 @@
 """Member memory end to end (CONTRACT v0.14, BETA), over PostgREST with the anon key, the way the iPad and the
 agent call it: sign in, remember a plan, check out, fast-forward, sign in again, recall. Its own cart and
-member (`it-e2e-…`), both removed afterwards; safe on the shared hosted project."""
+member (`it-e2e-…`), both removed afterwards. It calls checkout, so it runs on local Supabase only."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from datetime import timedelta
 import httpx
 import pytest
 
-from client import RpcError
+from client import URL, RpcError
 
 
 @pytest.fixture
@@ -21,6 +21,8 @@ def member_id(db):
 
 
 def test_member_round_trip(rest, db, cart_id, member_id):
+    if not any(host in URL for host in ("127.0.0.1", "localhost")):   # it checks out: never on hosted (CONTRACT §3)
+        pytest.skip("calls checkout, which lowers products.stock for everyone; run it against local Supabase")
     today = db.execute("select (now() at time zone 'America/Los_Angeles')::date").fetchone()[0]
     rest.rpc("reset_cart", p_cart_id=cart_id)
 

@@ -188,3 +188,14 @@ async def test_the_prompt_covers_unclear_it_rescaling_and_talking_slower():
     system = llm.requests[0]["system"]
     assert '"Two of what?"' in system and "it's 6 people now" in system
     assert "I can't change how fast I talk" in system
+
+
+async def test_a_combined_read_back_keeps_the_budget_warning():
+    backend = FakeBackend()
+    backend.cart.update({"budget": 10, "total": 0})
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1}]
+    adds = [ToolUse(f"t{i}", "add_to_plan", {"product_id": pid, "reason": "pasta"})
+            for i, pid in enumerate(["rao-marinara", "tostitos-salsa"])]
+    said = await collect(Brain(llm=FakeLLM([Turn(chunks=["Sure."], tools=adds)])).respond(
+        "add marinara and salsa", {"backend": backend, "cart_id": "7", "trip_id": "t"}))
+    assert "".join(said) == "Sure. Added rao's sauce, Aisle 6, and salsa, Aisle 5. That puts you at $10.48, over your $10."

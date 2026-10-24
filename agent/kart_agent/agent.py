@@ -83,6 +83,7 @@ class KartAgent:
         self._diet: dict[str, Any] = {}           # "no dairy": the kinds and products the cart offers no deals on
         self._skipped: set[str] = set()           # taken off the list ("we have some at home"): no deals on them
         self._total = 0.0
+        self._cart: dict[str, Any] = {}           # the latest cart row, for the live note on each Claude turn
         self._offer: dict[str, Any] | None = None   # the deal Kart just asked about, until it's answered
         self._nudge: dict[str, Any] | None = None   # the quantity nudge Kart just said (v0.12 beta)
         self._last_asked: str | None = None         # "offer" or "nudge": a plain answer goes to the latest question
@@ -334,6 +335,8 @@ class KartAgent:
             elif _ABOUT_DEALS.search(text) and self._offered:
                 heard = f"(Deals Kart offered this trip: {' '.join(self._offered)}) {text}"
             self._question = None
+            if live := self._live_note():                # the cart right now: "what's my total?" needs no tool round
+                heard = f"{live} {heard}"
             said = []
             async for out in self._say(self._caption_first(text, self.brain.respond(heard, ctx)), interruptible=self.barge_in):
                 said.append(out.text)
@@ -615,6 +618,34 @@ class KartAgent:
             return f"You're at ${self._total:.2f} of {cap}."
         return ""
 
+    def _live_note(self) -> str:
+        """ "(Right now: list: Spaghetti ✓ (Aisle 6); Marinara (Aisle 6). Cart: Spaghetti ×1 $1.99. Total $1.99, saved
+        $0.00. Next: Aisle 6 → Marinara.)", or "" before there's a list or anything in the cart."""
+        plan, items = self._cart.get("plan") or [], self._cart.get("items") or []
+        if not plan and not items:
+            return ""
+        names = {p["id"]: p.get("short_name") or p["name"] for p in self._catalog}
+
+        def listed(line: dict[str, Any]) -> str:
+            name = line.get("name") or names.get(line.get("product_id"), line.get("product_id"))
+            qty = line.get("qty") or 1
+            notes = [n for n in (line.get("aisle"), line.get("deal_label"),
+                                 "sold out" if line.get("in_stock") is False else None) if n]
+            return (f"{qty}× {name}" if qty > 1 else name) + (" ✓" if line.get("done") else "") + \
+                (f" ({', '.join(notes)})" if notes else "")
+
+        parts = [f"list: {'; '.join(listed(line) for line in plan)}"] if plan else []
+        if items:
+            parts.append("Cart: " + ", ".join(f"{i.get('short_name') or i.get('name') or names.get(i.get('product_id'))} "
+                                              f"×{i.get('qty', 1)} ${float(i.get('price') or 0):.2f}" for i in items))
+        parts.append(f"Total ${float(self._cart.get('total') or 0):.2f}, saved ${float(self._cart.get('savings') or 0):.2f}")
+        if self._cart.get("budget") is not None:
+            trip = float(self._cart.get("total") or 0) + float(self._cart.get("plan_estimate") or 0)
+            parts.append(f"Budget ${float(self._cart['budget']):g}, the trip comes to about ${trip:.2f}")
+        if self._cart.get("next_step"):
+            parts.append(f"Next: {self._cart['next_step']}")
+        return "(Right now: " + ". ".join(parts) + ".)"
+
     def _remember_offer(self, text: str) -> None:
         said = re.sub(r"\s*Want (it|them)\?$", "", text).strip()
         if said and said not in self._offered:
@@ -639,6 +670,7 @@ class KartAgent:
             self._items = cart.get("items", [])
             self._nudges = bool((cart.get("features") or {}).get("quantity_nudges"))
             self._budget, self._total = cart.get("budget"), float(cart.get("total") or 0)
+            self._cart = cart
             live = cart.get("nudge") if "nudge" in cart else self._nudge
             if self._nudge and not (live and (live.get("product_id"), live.get("kind")) ==
                                     (self._nudge.get("product_id"), self._nudge.get("kind"))):
