@@ -1,0 +1,7 @@
+opencv-python-headless>=4.10,<5  # match the Pi (apt OpenCV 4.10)
+numpy
+onnxruntime
+onnx
+anthropic
+python-dotenv
+pytest

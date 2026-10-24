@@ -1,0 +1,5 @@
+# Pi: OpenCV and NumPy come from apt (python3-opencv, python3-numpy); hardware/setup_pi.sh adds pytest.
+onnxruntime
+onnx
+anthropic
+python-dotenv
