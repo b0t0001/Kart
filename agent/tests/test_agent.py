@@ -687,3 +687,12 @@ async def test_after_no_thanks_kart_asks_about_no_more_deals_this_trip():
     backend.cart["deals_quiet"] = True                            # the shopper said "No thanks" to a card
     outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
     assert cards(outs) == []                                      # no "one deal goes with your list"
+
+
+async def test_yes_with_a_reason_answers_take_it_off_the_list_without_claude():
+    agent, backend = make()                                   # no Claude turns: a Claude round would fail
+    backend.cart["plan"] = [{"product_id": "kids-scissors", "reason": "school", "qty": 1, "done": False}]
+    out = UserCustomSent(metadata={"type": "cart_changed", "change": "removed", "product_id": "kids-scissors"})
+    assert await run(agent, out) == ["Took the Kids' Scissors off your bill. Take them off the list too?"]
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Yes, the school has some.")])) == \
+        ["Took kids' scissors off your list."]
