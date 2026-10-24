@@ -11,10 +11,13 @@ public final class MockKartBackend: KartBackend {
     public private(set) var transcript: [TranscriptLine] = []
     public private(set) var connection: ConnectionState = .online
     public private(set) var receipt: Receipt?
+    public private(set) var memberProfile: MemberProfile?
 
     @ObservationIgnored private let clock: @MainActor () -> Date
     @ObservationIgnored private var nextEventId: Int64 = 1
     @ObservationIgnored private var nextTranscriptId: Int64 = 1
+    @ObservationIgnored private var members: [String: MockMemberStore] = [:]
+    @ObservationIgnored private var nextMemoryId = 100
 
     public init(catalog: Catalog, cartId: String = "7", clock: @escaping @MainActor () -> Date = { .now }) {
         self.catalog = catalog
@@ -29,7 +32,9 @@ public final class MockKartBackend: KartBackend {
     public func startTrip() async throws {
         cart = CartState(cartId: cart.cartId, tripId: UUID(), items: [], itemCount: 0, total: 0, savings: 0,
                          plan: [], suggestedDeals: [], status: .shopping, tripStartedAt: now, updatedAt: now,
-                         features: cart.features)                 // feature switches belong to the cart, not the trip
+                         features: cart.features,                 // feature switches belong to the cart, not the trip
+                         memberRev: cart.memberRev, demoDate: cart.demoDate)   // so does the demo date; members don't
+        memberProfile = nil
         events = []
         transcript = []
         receipt = nil
@@ -86,6 +91,7 @@ public final class MockKartBackend: KartBackend {
     public func setFeature(_ feature: String, on: Bool) async throws {
         cart.features[feature] = on
         if !cart.quantityNudgesOn { cart.nudge = nil }
+        if !cart.memberMemoryOn { cart.memberId = nil; memberProfile = nil }
         cart.updatedAt = now
     }
 
@@ -98,6 +104,12 @@ public final class MockKartBackend: KartBackend {
                               itemCount: cart.itemCount, durationS: duration, provider: provider, status: "paid",
                               items: cart.items, createdAt: now)
         self.receipt = receipt
+        if let member = cart.memberId {                       // a member's bill becomes their history
+            let day = memberToday
+            members[member]?.purchases += cart.items
+                .filter { !MockMemberStore.sensitive.contains(catalog.product($0.productId)?.category ?? "") }
+                .map { MockMemberStore.Purchase(productId: $0.productId, day: day, qty: $0.qty, price: $0.price) }
+        }
         cart.status = .paid
         cart.updatedAt = now
         return receipt
@@ -110,6 +122,72 @@ public final class MockKartBackend: KartBackend {
     public func appendTranscript(_ role: TranscriptLine.Role, _ text: String) async throws {
         transcript.append(TranscriptLine(id: nextTranscriptId, role: role, text: text, createdAt: now))
         nextTranscriptId += 1
+    }
+
+    // MARK: Member memory (v0.14 beta)
+
+    /// The cart's "today": the demo date when set, else the store's real day.
+    private var memberToday: Int { cart.demoDate.flatMap(StoreDay.day(iso:)) ?? StoreDay.day(now) }
+
+    private var liveDealProducts: Set<String> {
+        Set(catalog.deals.filter { $0.endsAt.map { $0 > now } ?? true }.map(\.productId))
+    }
+
+    public func signIn(memberId: String) async throws {
+        guard cart.memberMemoryOn else { throw KartBackendError.featureOff }
+        if members[memberId] == nil {
+            members[memberId] = memberId == "1029" ? .dylan(today: memberToday, catalog: catalog) : .empty(today: memberToday)
+        }
+        cart.memberId = memberId
+        cart.updatedAt = now
+        await refreshMemberProfile()
+    }
+
+    public func signOut() async throws {
+        cart.memberId = nil
+        memberProfile = nil
+        cart.updatedAt = now
+    }
+
+    public func refreshMemberProfile() async {
+        guard let id = cart.memberId, let store = members[id] else { memberProfile = nil; return }
+        let taken = Set(cart.plan.map(\.productId) + cart.items.map(\.productId))
+        memberProfile = store.profile(memberId: id, today: memberToday, taken: taken, catalog: catalog,
+                                      liveDeals: liveDealProducts)
+    }
+
+    public func forgetMemory(id: Int) async throws {
+        guard let member = cart.memberId else { return }
+        members[member]?.memories.removeAll { $0.id == id }
+        cart.memberRev += 1
+        await refreshMemberProfile()
+    }
+
+    public func forgetMember() async throws {
+        guard let member = cart.memberId else { return }
+        members[member] = .empty(today: memberToday)          // like a deleted member signing up again
+        try await signOut()
+    }
+
+    public func setDemoDate(_ date: String?) async throws {
+        guard cart.memberMemoryOn else { throw KartBackendError.featureOff }
+        cart.demoDate = date
+        cart.updatedAt = now
+        await refreshMemberProfile()
+    }
+
+    /// What the agent's `remember` + `save_for_later` do (the scripted mock voice uses it).
+    public func remember(kind: String, text: String, eventDate: String?, items: [PlanItem]) async throws {
+        guard let member = cart.memberId else { throw KartBackendError.noActiveTrip }
+        let saved = items.compactMap { item in
+            catalog.product(item.productId).map { SavedItem(productId: item.productId, shortName: $0.shortName, qty: item.qty) }
+        }
+        members[member]?.memories.append(.init(id: nextMemoryId, kind: kind, text: text,
+                                              eventDay: eventDate.flatMap(StoreDay.day(iso:)),
+                                              items: saved.isEmpty ? nil : saved, createdDay: memberToday))
+        nextMemoryId += 1
+        cart.memberRev += 1
+        await refreshMemberProfile()
     }
 
     // MARK: Mock-only controls (debug panel, tests, scenarios)

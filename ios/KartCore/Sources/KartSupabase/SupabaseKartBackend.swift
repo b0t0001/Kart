@@ -135,6 +135,16 @@ public final class SupabaseKartBackend: KartBackend {
         await refreshTranscript()
     }
 
+    // MARK: Member memory (v0.14 beta): placeholders until Task 10 wires the RPCs
+
+    public private(set) var memberProfile: MemberProfile?
+    public func signIn(memberId: String) async throws { throw KartBackendError.featureOff }
+    public func signOut() async throws {}
+    public func refreshMemberProfile() async {}
+    public func forgetMemory(id: Int) async throws {}
+    public func forgetMember() async throws {}
+    public func setDemoDate(_ date: String?) async throws { throw KartBackendError.featureOff }
+
     // MARK: Debug levers (the Pi's call)
 
     public func simulateVision(_ type: CartEventType, productId: String?, confidence: Double, label: String) async {

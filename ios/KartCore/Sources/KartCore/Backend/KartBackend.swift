@@ -10,6 +10,8 @@ public enum KartBackendError: Error, Equatable {
     case unknownProduct(String)
     case invalidStatus
     case noActiveTrip
+    /// v0.14: the cart's `member_memory` beta is off (`feature_off: member_memory`).
+    case featureOff
 }
 
 /// Everything the iPad reads from and writes to the backend (contract §3, §5a).
@@ -46,4 +48,18 @@ public enum KartBackendError: Error, Equatable {
     func endTrip() async throws
     /// P6, agent side.
     func appendTranscript(_ role: TranscriptLine.Role, _ text: String) async throws
+
+    // Member memory beta (v0.14). Shown only when `cart.memberMemoryOn`.
+    /// The signed-in member's profile; nil for a guest or before it loads.
+    var memberProfile: MemberProfile? { get }
+    /// `set_member`, then the profile. Throws `.featureOff` when the cart's beta is off.
+    func signIn(memberId: String) async throws
+    func signOut() async throws
+    /// `member_profile` for the signed-in member; never throws (a failed read leaves it nil).
+    func refreshMemberProfile() async
+    func forgetMemory(id: Int) async throws
+    /// "Forget me": history, memories and name. Signs the cart out.
+    func forgetMember() async throws
+    /// The demo fast-forward (`YYYY-MM-DD`, nil = real today).
+    func setDemoDate(_ date: String?) async throws
 }
