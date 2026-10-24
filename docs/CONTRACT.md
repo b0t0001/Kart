@@ -29,6 +29,8 @@ Product background: `project_context/claude_CLAUDE.md` and `project_context/clau
 - Reset: the Pi polls `carts.trip_id` every 2 s and persists the last value it saw, so a reset made while the Pi was off is caught at boot.
 - CV's plan is `pi/docs/plans/2026-10-24-cv-pipeline.md`.
 
+**Hardware lane, as built (`230d259`, `6ea03d4`, v0.9):** `hardware/setup_pi.sh`, `sync_pi.sh`, `check_cameras.py`, `kart-cv.service` + `install_service.sh`. Real Pi: Debian 13 trixie, **Python 3.13.5**, 3.7 GB RAM. Cameras: **Brio 101**; use the stable `/dev/v4l/by-path/…` paths in `hardware/README.md`. Don't set `CAP_PROP_BUFFERSIZE=1`, since it halves the fps.
+
 **Sync:** the teammate's machine syncs through GitHub (`b0t0001/kart`, `main`). Pull before you work, push right after you commit; if a push is rejected, run `git pull --rebase` and push again. On Dylan's Mac, the manager pushes and pulls `main`.
 
 Stay inside your paths. Put ignore rules in a `.gitignore` **inside your own directory** (avoids merge conflicts). Commit only your own paths (`git commit -- <your dir>`); the manager coordinates anything that spans workstreams with the user.
