@@ -23,6 +23,14 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 evening · final demo script, conversation fixes
+- **Final demo** (`docs/DEMO_PLAN.md`): one natural pasta trip, plus a member Act 2 (capture Leo's party live → fast-forward). Shopping: 4 items, ~$16 at Target Berkeley Central.
+- **Voice:** list editing is live. Interaction catalog: 52 scenarios run against the real model. Fixes landing: replan keeps the cart, diet guard, "how much is this?", and more.
+- **Backend:** add/remove-plan RPCs, budget, nearby stores, bakery last, chocolate bar added; "that's mine" fully removed.
+- **Member memory:** backend and agent done on its branch; iPad in progress.
+- **Open:** Cartesia credits (Dylan); 3 KartCore tests to fix after the catalog change (iPad chat); the Target trip.
+
+
 ### 2026-10-24 late afternoon · demo meals, Target layout, nudge fixes
 - **Demo plan** (`docs/DEMO_PLAN.md`): two shelf-stable meals (pasta night for 4, game-night nachos for 6). Every item is verified in stock at **Target Berkeley Central** (aisles A12 and A6, ~$29; `docs/TARGET_SHOPPING_CHECKLIST.md`). Kart's lists match 3/3 with the real model.
 - **Backend:** the demo catalog is live; switchable store layouts (`db.py layout mini|target-berkeley`; the Target layout is a draft until Dylan confirms); `pre_judging.sh`; mid-trip "short" nudges off (`9f60cd3`).
