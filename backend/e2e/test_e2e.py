@@ -249,3 +249,16 @@ def test_quantity_nudges_are_off_by_default(rest, cart_id):
     for _ in range(3):
         c = rest.rpc("apply_cart_event", **cv_to_rpc(cv_event(cart_id, "added", "avocados", "Hass Avocados")))
     assert (c["nudge"], c["nudged"], c["features"]) == (None, [], {})
+
+
+def test_thats_mine_over_rest(rest, cart_id):
+    """v0.15: an unrecognized item that's the shopper's own doesn't block Pay and isn't billed."""
+    rest.rpc("reset_cart", p_cart_id=cart_id)
+    rest.rpc("apply_cart_event", **cv_to_rpc(cv_event(cart_id, "added", "barilla-spaghetti", "Spaghetti")))
+    phone = cv_event(cart_id, "added", None, "black rectangle, maybe a phone", 0.2, "none")
+    rest.rpc("apply_cart_event", **cv_to_rpc(phone))
+    c = rest.rpc("mark_personal", p_cart_id=cart_id, p_event_id=phone["event_id"])
+    assert c["total"] == 1.99
+    ev = rest.get("/cart_events", event_id=f"eq.{phone['event_id']}", select="resolution")[0]
+    assert ev["resolution"] == "personal"
+    assert rest.rpc("checkout", p_cart_id=cart_id, p_provider="simulated")["total"] == 1.99

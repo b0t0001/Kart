@@ -127,6 +127,10 @@ create table if not exists cart_events (
   created_at    timestamptz not null default now()
 );
 create index if not exists cart_events_cart_trip on cart_events (cart_id, trip_id, id);
+-- v0.15: how an unrecognized item was answered. null on rows resolved before v0.15 (nothing recorded
+-- which event resolved which, so they aren't backfilled).
+alter table cart_events add column if not exists resolution text
+  check (resolution in ('removed', 'confirmed', 'personal'));
 
 -- P6: live captions. reset_cart deletes the cart's rows (privacy).
 create table if not exists transcript (
