@@ -40,3 +40,12 @@ def test_motion_outside_the_floor_roi_is_ignored():
     md.update(Scene().render(0, 1))
     assert md.update(Scene(room_shift=(40, 25)).render(0, 2)) is False
     assert md.update(Scene(room_shift=(40, 25), hand=(400, 250)).render(0, 3)) is True
+
+
+def test_motion_on_portrait_frames():
+    import cv2
+    md = MotionDetector()
+    md.update(cv2.rotate(Scene().render(0, 1), cv2.ROTATE_90_CLOCKWISE))
+    assert md.update(cv2.rotate(Scene().render(0, 2), cv2.ROTATE_90_CLOCKWISE)) is False
+    assert md.update(cv2.rotate(Scene(hand=(400, 250)).render(0, 3), cv2.ROTATE_90_CLOCKWISE)) is True
+    assert md.size == (320, 180)  # the configured size is unchanged; portrait frames use it turned

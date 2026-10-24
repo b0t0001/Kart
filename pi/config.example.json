@@ -8,6 +8,7 @@
   "height": 720,
   "fps": 30,
   "camera_warmup_s": 3.0,
+  "rotate": {},
   "motion_size": [
     320,
     180

@@ -17,6 +17,7 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 REOPEN_EVERY_S = 5.0
+_ROTATIONS = {0: None, 90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
 STALE_AFTER_S = 2.0
 
 
@@ -63,11 +64,14 @@ class LiveCamera:
     """
 
     def __init__(self, cam: int, source: int | str, width: int, height: int, fps: int,
-                 warmup_s: float = 3.0, capture_factory: Callable | None = None):
+                 warmup_s: float = 3.0, capture_factory: Callable | None = None, rotate: int = 0):
         self.cam = cam
         self.source = source
         self.width, self.height, self.fps = width, height, fps
         self.warmup_s = warmup_s
+        if rotate not in _ROTATIONS:
+            raise ValueError(f"cam{cam}: rotate must be 0, 90, 180 or 270, not {rotate!r}")
+        self._rotation = _ROTATIONS[rotate]
         self._factory = capture_factory or _default_capture
         self._lock = threading.Lock()
         self._latest: Frame | None = None
@@ -126,11 +130,21 @@ class LiveCamera:
                 return None
             if now - self._opened_mono < self.warmup_s or now - self._latest_mono > STALE_AFTER_S:
                 return None
-            return self._latest
+            frame = self._latest
+        if self._rotation is None:
+            return frame
+        # rotate only the frames the loop uses (10 Hz), not every grabbed one
+        return Frame(cv2.rotate(frame.image, self._rotation), frame.ts, frame.cam)
 
     def close(self) -> None:
         self._stop.set()
         self._thread.join(timeout=2.0)
+
+
+def open_cameras(cfg) -> list[LiveCamera]:
+    """Every configured camera, with its warm-up and rotation (cfg.rotate, e.g. {"1": 90} for a portrait mount)."""
+    return [LiveCamera(k, src, cfg.width, cfg.height, cfg.fps, warmup_s=cfg.camera_warmup_s,
+                       rotate=int(cfg.rotate.get(str(k), 0))) for k, src in enumerate(cfg.cameras)]
 
 
 class FrameListSource:
@@ -193,8 +207,7 @@ def snap_all(cfg, out_dir: Path, timeout_s: float = 5.0) -> dict[int, Path | Non
     """Open every configured camera at once, wait out the exposure warm-up, save one frame each."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    cams = [LiveCamera(k, src, cfg.width, cfg.height, cfg.fps, warmup_s=cfg.camera_warmup_s)
-            for k, src in enumerate(cfg.cameras)]
+    cams = open_cameras(cfg)
     deadline = time.monotonic() + cfg.camera_warmup_s + timeout_s
     result: dict[int, Path | None] = {c.cam: None for c in cams}
     try:

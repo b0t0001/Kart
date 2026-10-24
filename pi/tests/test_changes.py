@@ -116,3 +116,20 @@ def test_an_items_long_shadow_is_not_part_of_the_item():  # real cart: the apple
     apple = Item("red-box", 330, 120, seed=1, shadow=600)
     r = detect_changes(1, Scene().render(1, 1), Scene(items=[apple]).render(1, 2), cfg, roi=cfg.roi["1"])
     assert len(r.blobs) == 1 and not r.blobs[0].edge  # just the item, billed now, not held back as an "arm"
+
+
+def test_portrait_frames_are_compared_without_squashing():
+    import cv2
+    a = cv2.rotate(Scene().render(0, 1), cv2.ROTATE_90_CLOCKWISE)  # 1280 tall, 720 wide
+    b = cv2.rotate(Scene(items=[RED]).render(0, 2), cv2.ROTATE_90_CLOCKWISE)
+    r = detect_changes(0, a, b, CFG)
+    assert r.status == "blobs" and len(r.blobs) == 1
+    x, y, w, h = r.blobs[0].box
+    rh, rw = RED.h, RED.w  # in this view the item is rotated too: taller than wide
+    assert h > w and 0 <= x and x + w <= 720 and y + h <= 1280
+
+
+def test_working_size_follows_the_frame_orientation():
+    from kartcv.changes import work_size
+    assert work_size((720, 1280, 3), (640, 360)) == (640, 360)
+    assert work_size((1280, 720, 3), (640, 360)) == (360, 640)  # portrait: same detail both ways, no squash

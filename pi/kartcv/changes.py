@@ -13,6 +13,12 @@ _OPEN = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
 _CLOSE = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
 
 
+def work_size(shape, base: tuple[int, int]) -> tuple[int, int]:
+    """The (w, h) to compare a frame at: the configured landscape size, turned for portrait frames."""
+    w, h = int(base[0]), int(base[1])
+    return (min(w, h), max(w, h)) if shape[0] > shape[1] else (max(w, h), min(w, h))
+
+
 def lab_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """Per-pixel color distance in 8-bit LAB, with lightness weighted half (shadows matter less)."""
     d = cv2.cvtColor(a, cv2.COLOR_BGR2LAB).astype(np.float32) - cv2.cvtColor(b, cv2.COLOR_BGR2LAB).astype(np.float32)
@@ -105,7 +111,7 @@ class ChangeResult:
 
 def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg, roi=None) -> ChangeResult:
     """Compare two still frames. `roi` (normalized floor polygon) limits everything to the basket floor."""
-    w, h = cfg.diff_size
+    w, h = work_size(current.shape, cfg.diff_size)
     full_h, full_w = current.shape[:2]
     sx, sy = full_w / w, full_h / h
     ref_s = cv2.resize(reference, (w, h), interpolation=cv2.INTER_AREA)

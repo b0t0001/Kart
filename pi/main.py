@@ -27,7 +27,7 @@ from kartcv.pipeline import Pipeline  # noqa: E402
 from kartcv.roi import draw_outline  # noqa: E402
 from kartcv.server import ControlServer  # noqa: E402
 from kartcv.sinks import ConsoleSink, HttpSink, JsonlSink  # noqa: E402
-from kartcv.sources import LiveCamera, iter_ticks, load_recording  # noqa: E402
+from kartcv.sources import iter_ticks, load_recording, open_cameras  # noqa: E402
 from kartcv.trip import TripWatcher  # noqa: E402
 
 log = logging.getLogger("kart")
@@ -85,8 +85,7 @@ def _close(sinks) -> None:
 def cmd_live(cfg, env, args) -> int:
     if args.debug_view:
         cfg.debug_view = True
-    cams = [LiveCamera(k, src, cfg.width, cfg.height, cfg.fps, warmup_s=cfg.camera_warmup_s)
-            for k, src in enumerate(cfg.cameras)]
+    cams = open_cameras(cfg)
     # judge in the background: a Claude call must never stop the cameras from being watched
     pipeline, sinks = build(cfg, env, args, [c.cam for c in cams], background=True)
     extras = start_extras(cfg, env, pipeline)

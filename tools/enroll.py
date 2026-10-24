@@ -23,7 +23,7 @@ from kartcv.config import REPO_ROOT, load_config, load_env  # noqa: E402
 from kartcv.enroll import run_enrollment  # noqa: E402
 from kartcv.identify.features import load_features  # noqa: E402
 from kartcv.identify.gallery import Gallery  # noqa: E402
-from kartcv.sources import LiveCamera  # noqa: E402
+from kartcv.sources import open_cameras  # noqa: E402
 
 
 def main() -> int:
@@ -45,8 +45,7 @@ def main() -> int:
 
     gallery = Gallery(cfg.path("gallery_dir"), load_features(cfg.path("model_path"), cfg.features))
     gallery.load()
-    cams = [LiveCamera(k, src, cfg.width, cfg.height, cfg.fps, warmup_s=cfg.camera_warmup_s)
-            for k, src in enumerate(cfg.cameras)]
+    cams = open_cameras(cfg)
 
     def ticks():
         while True:

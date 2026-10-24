@@ -82,3 +82,12 @@ def test_save_tick_can_shrink_frames_for_sharing(tmp_path):
     save_tick(tmp_path, {0: Frame(big, 1.0, 0)}, scale=0.5, quality=85)
     [f] = [s.read() for s in load_recording(tmp_path)]
     assert f.image.shape == (360, 640, 3) and abs(f.ts - 1.0) < 1e-6
+
+
+def test_live_camera_rotates_portrait_mounts():  # a camera mounted on its side delivers upright frames
+    for rot, shape in [(0, (720, 1280, 3)), (90, (1280, 720, 3)), (180, (720, 1280, 3)), (270, (1280, 720, 3))]:
+        cam = LiveCamera(0, "/dev/fake", 1280, 720, 30, warmup_s=0.0, capture_factory=lambda s: FakeCap(s), rotate=rot)
+        time.sleep(0.2)
+        f = cam.read()
+        cam.close()
+        assert f is not None and f.image.shape == shape

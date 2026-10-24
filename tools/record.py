@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pi"))
 
 from kartcv.config import REPO_ROOT, load_config  # noqa: E402
-from kartcv.sources import Frame, LiveCamera, save_tick  # noqa: E402
+from kartcv.sources import Frame, open_cameras, save_tick  # noqa: E402
 
 
 def main() -> int:
@@ -32,8 +32,7 @@ def main() -> int:
     args = ap.parse_args()
     cfg = load_config(args.config)
     out = args.out or REPO_ROOT / "tools/out" / f"rec-{datetime.now():%Y%m%d-%H%M%S}"
-    cams = [LiveCamera(k, src, cfg.width, cfg.height, cfg.fps, warmup_s=cfg.camera_warmup_s)
-            for k, src in enumerate(cfg.cameras)]
+    cams = open_cameras(cfg)
     print(f"waiting {cfg.camera_warmup_s:.0f} s for exposure to settle...")
     time.sleep(cfg.camera_warmup_s + 0.5)
     print(f"recording {args.seconds:.0f} s at {args.hz:.0f} Hz -> {out}")

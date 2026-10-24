@@ -24,6 +24,7 @@ class Config:
     height: int = 720
     fps: int = 30
     camera_warmup_s: float = 3.0
+    rotate: dict = field(default_factory=dict)  # {"1": 90}: degrees clockwise per camera (portrait mounts)
 
     # motion + settle (spec §5.1)
     motion_size: tuple[int, int] = (320, 180)
