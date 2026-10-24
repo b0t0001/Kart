@@ -38,7 +38,8 @@ def main() -> None:
         elif args.command == "reset-demo":
             print("seeded", kartdb.seed(conn))
             conn.execute("select reset_cart(%s)", [args.cart])
-            print(f"cart {args.cart} reset")
+            conn.execute("select set_cart_status(%s, 'idle')", [args.cart])  # iPad back on Welcome
+            print(f"cart {args.cart} reset (status idle)")
         if args.command in ("reset-demo", "show"):
             row = conn.execute("select to_jsonb(c) from carts c where cart_id = %s", [args.cart]).fetchone()
             print(json.dumps(row[0] if row else None, indent=2, default=str))

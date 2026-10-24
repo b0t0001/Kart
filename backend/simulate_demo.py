@@ -34,6 +34,7 @@ def vision(type_, product_id, label, confidence=0.93, method="local", event_id=N
 
 def steps():
     first_add = vision("added", "barilla-spaghetti", "Barilla Spaghetti, 1 lb", 0.94)
+    unknown = vision("added", None, "blue cardboard box, label not visible", 0.31, "none")
     return [
         ("iPad: new trip", "reset_cart", {}),
         ("Voice agent: 'pasta dinner for my family' → plan", "set_plan", {"p_plan": PASTA_PLAN}),
@@ -44,11 +45,13 @@ def steps():
         ("CV: Rao's marinara", "apply_cart_event", vision("added", "rao-marinara", "Rao's Homemade Marinara")),
         ("CV: Rao's taken back out", "apply_cart_event",
          vision("removed", "rao-marinara", "Rao's Homemade Marinara", 0.97, "memory")),
-        ("CV: something it can't identify", "apply_cart_event",
-         vision("added", None, "blue cardboard box, label not visible", 0.31, "none")),
-        ("iPad: shopper taps 'that was spaghetti'", "apply_cart_event",
+        ("CV: something it can't identify", "apply_cart_event", unknown),
+        ("iPad: confirm card → 'it's spaghetti'", "apply_cart_event",
          {"p_type": "added", "p_product_id": "barilla-spaghetti", "p_confidence": 1.0,
-          "p_source": "manual", "p_label": "fixed by shopper", "p_method": "manual"}),
+          "p_source": "manual", "p_label": "confirmed by shopper", "p_method": "manual",
+          "p_resolves_event_id": unknown["p_event_id"]}),
+        ("Voice: 'I'm done'", "set_cart_status", {"p_status": "checkout"}),
+        ("iPad: tap to pay (simulated)", "checkout", {"p_provider": "simulated"}),
     ]
 
 
@@ -72,12 +75,16 @@ class SqlClient:
 
 
 def show(cart: dict) -> None:
+    if "duration_s" in cart:  # a receipt
+        print(f"   RECEIPT ${cart['total']:.2f}  saved ${cart['savings']:.2f}  "
+              f"{cart['item_count']} items  {cart['duration_s']} s  via {cart['provider']}")
+        return
     items = ", ".join(f"{i['short_name']}×{i['qty']} ${i['price']:.2f}"
                       + (f" ({i['deal_label']})" if i.get("deal_label") else "")
                       for i in cart["items"]) or "(empty)"
     print(f"   total ${cart['total']:.2f}  saved ${cart['savings']:.2f}  items: {items}")
     print(f"   next_step: {cart['next_step']}")
-    print(f"   lcd:       [{cart['lcd_line1']:<16}]")
+    print(f"   status:    {cart['status']}   lcd: [{cart['lcd_line1']:<16}]")
     if cart.get("suggestion"):
         print(f"   suggest:   {cart['suggestion']['text']}")
 

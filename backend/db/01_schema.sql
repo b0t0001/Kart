@@ -68,6 +68,10 @@ create table if not exists carts (
   lcd_line1        text check (lcd_line1 is null or char_length(lcd_line1) <= 16),
   suggestion       jsonb,                             -- {product_id,deal_id,text,deal_label,aisle,section,price,sale_price}
   suggested_deals  text[] not null default '{}',      -- deals already offered this trip (offered once each)
+  status           text not null default 'idle'       -- P2: idle → shopping → checkout → paid → idle
+                   check (status in ('idle', 'shopping', 'checkout', 'paid')),
+  trip_started_at  timestamptz,                       -- P2: set by reset_cart
+  location         jsonb,                             -- P3: {section, source: "item"|"voice", at}; null = entrance
   updated_at       timestamptz not null default now()
 );
 
@@ -85,9 +89,37 @@ create table if not exists cart_events (
   label         text,                                 -- raw model answer / catalog name
   snapshot_url  text,
   applied       boolean not null default false,       -- did it change the cart?
+  resolved_at   timestamptz,                          -- P4: a manual fix named this event
   created_at    timestamptz not null default now()
 );
 create index if not exists cart_events_cart_trip on cart_events (cart_id, trip_id, id);
+
+-- P6: live captions. reset_cart deletes the cart's rows (privacy).
+create table if not exists transcript (
+  id          bigserial primary key,
+  cart_id     text not null references carts(cart_id),
+  trip_id     uuid,
+  role        text not null check (role in ('user', 'agent')),
+  text        text not null,
+  created_at  timestamptz not null default now()
+);
+create index if not exists transcript_cart_trip on transcript (cart_id, trip_id, id);
+
+-- P8: one receipt per trip, written by checkout(). Payment is simulated in v1.
+create table if not exists receipts (
+  id          bigserial primary key,
+  cart_id     text not null references carts(cart_id),
+  trip_id     uuid not null,
+  total       numeric(10,2) not null,
+  savings     numeric(10,2) not null,
+  item_count  int not null,
+  duration_s  int,                                     -- trip_started_at → checkout
+  provider    text not null,                           -- "simulated", later a Visa-supported plugin
+  status      text not null default 'paid' check (status in ('paid', 'failed')),
+  items       jsonb not null default '[]',             -- the bill as paid
+  created_at  timestamptz not null default now(),
+  unique (cart_id, trip_id)
+);
 
 insert into carts (cart_id) values ('7') on conflict do nothing;
 
@@ -96,7 +128,7 @@ insert into carts (cart_id) values ('7') on conflict do nothing;
 do $$
 declare t text;
 begin
-  foreach t in array array['carts', 'cart_events', 'products', 'deals', 'sections'] loop
+  foreach t in array array['carts', 'cart_events', 'products', 'deals', 'sections', 'transcript', 'receipts'] loop
     if not exists (select 1 from pg_publication_tables
                    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
       execute format('alter publication supabase_realtime add table public.%I', t);
@@ -110,7 +142,8 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['store_info', 'sections', 'products', 'deals', 'carts', 'cart_events'] loop
+  foreach t in array array['store_info', 'sections', 'products', 'deals', 'carts', 'cart_events',
+                           'transcript', 'receipts'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists read_all on public.%I', t);
     execute format('create policy read_all on public.%I for select using (true)', t);

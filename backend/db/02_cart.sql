@@ -122,12 +122,16 @@ begin
   from jsonb_array_elements(v_items) e;
   c.items := v_items;
 
-  -- Where the shopper probably is: the aisle of the last thing they added.
-  select pc.section_x into v_pos_x
-  from jsonb_array_elements(v_items) e
-  join product_catalog pc on pc.id = e->>'product_id'
-  order by (e->>'last_added_at')::timestamptz desc
-  limit 1;
+  -- Where the shopper is (P3): carts.location (set by the last add, or "I'm at aisle 5"),
+  -- else the aisle of the last thing they added, else the entrance.
+  select x into v_pos_x from sections where id = c.location->>'section';
+  if v_pos_x is null then
+    select pc.section_x into v_pos_x
+    from jsonb_array_elements(v_items) e
+    join product_catalog pc on pc.id = e->>'product_id'
+    order by (e->>'last_added_at')::timestamptz desc
+    limit 1;
+  end if;
   v_pos_x := coalesce(v_pos_x, (select entrance_x from store_info where id = 1), 0);
 
   -- Plan: done items first (as they were picked up), then the rest in walking order:
@@ -250,6 +254,10 @@ end $$;
 
 -- ── RPCs (writers only use these; CONTRACT §3) ──
 
+-- The pre-P4 signature; without this drop, a re-run would leave two overloads and
+-- PostgREST would reject calls as ambiguous.
+drop function if exists apply_cart_event(text, text, text, real, text, text, int, text, uuid, text);
+
 create or replace function apply_cart_event(
   p_cart_id      text,
   p_type         text,
@@ -260,10 +268,12 @@ create or replace function apply_cart_event(
   p_camera       int  default null,
   p_snapshot_url text default null,
   p_event_id     uuid default null,
-  p_method       text default null
+  p_method       text default null,
+  p_resolves_event_id uuid default null     -- P4: this manual fix answers that unrecognized event
 ) returns carts language plpgsql security definer set search_path = public as $$
 declare
   c        carts;
+  v_section text;
   v_pid    text := nullif(trim(p_product_id), '');
   v_label  text := p_label;
   v_ev     bigint;
@@ -290,10 +300,11 @@ begin
     v_pid := null;
   end if;
 
+  -- Every event gets an event_id, so the iPad can name any of them in p_resolves_event_id.
+  -- Lenient on source/method so a typo can't wedge CV's retry outbox.
   insert into cart_events (event_id, cart_id, trip_id, type, product_id, confidence,
                            source, method, camera, label, snapshot_url)
-  -- Lenient on source/method so a typo can't wedge CV's retry outbox.
-  values (p_event_id, p_cart_id, c.trip_id, p_type, v_pid, p_confidence,
+  values (coalesce(p_event_id, gen_random_uuid()), p_cart_id, c.trip_id, p_type, v_pid, p_confidence,
           case when p_source = 'manual' then 'manual' else 'vision' end,
           case when p_method in ('local', 'cloud', 'memory', 'none', 'manual') then p_method
                when p_source = 'manual' then 'manual' end,
@@ -329,6 +340,18 @@ begin
       update carts set items = v_items where cart_id = p_cart_id;
       update cart_events set applied = true where id = v_ev;
     end if;
+
+    -- P3: an add tells us where the shopper is.
+    if v_applied and p_type = 'added' then
+      select section into v_section from products where id = v_pid;
+      update carts set location = jsonb_build_object('section', v_section, 'source', 'item', 'at', now())
+      where cart_id = p_cart_id;
+    end if;
+  end if;
+
+  if p_resolves_event_id is not null then
+    update cart_events set resolved_at = now()
+    where event_id = p_resolves_event_id and cart_id = p_cart_id and resolved_at is null;
   end if;
 
   return recompute_cart(p_cart_id);
@@ -357,13 +380,16 @@ begin
   return recompute_cart(p_cart_id);
 end $$;
 
--- New trip / demo reset: empties the cart and issues a new trip_id (the Pi watches it).
+-- New trip (the iPad's Welcome tap): empties the cart, issues a new trip_id (the Pi
+-- watches it), status → shopping (P2), forgets location (P3) and captions (P6).
 create or replace function reset_cart(p_cart_id text)
 returns carts language plpgsql security definer set search_path = public as $$
 begin
   insert into carts (cart_id) values (p_cart_id) on conflict do nothing;
+  delete from transcript where cart_id = p_cart_id;
   update carts set items = '[]', plan = '[]', suggestion = null, suggested_deals = '{}',
-                   trip_id = gen_random_uuid()
+                   trip_id = gen_random_uuid(), status = 'shopping', trip_started_at = now(),
+                   location = null
   where cart_id = p_cart_id;
   return recompute_cart(p_cart_id);
 end $$;
@@ -416,7 +442,7 @@ create trigger touch before update on deals for each row execute function touch_
 revoke execute on function recompute_cart(text)  from public, anon, authenticated;
 revoke execute on function recompute_all_carts() from public, anon, authenticated;
 
-grant execute on function apply_cart_event(text, text, text, real, text, text, int, text, uuid, text)
+grant execute on function apply_cart_event(text, text, text, real, text, text, int, text, uuid, text, uuid)
   to anon, authenticated, service_role;
 grant execute on function set_plan(text, jsonb)          to anon, authenticated, service_role;
 grant execute on function reset_cart(text)               to anon, authenticated, service_role;
