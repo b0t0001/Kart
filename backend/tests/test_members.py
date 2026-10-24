@@ -226,3 +226,88 @@ def test_profile_shape_usuals_and_last_trip(conn, member):
 
 def test_unknown_member_is_null(conn):
     assert profile(conn, "it-nobody") is None
+
+
+# ── Remember, save for later, forget ──
+
+def rpc(conn, fn, **params):
+    return kartdb.rpc(conn, fn, **params)
+
+
+def test_remember_event_then_profile_lists_it(conn, member):
+    saved = rpc(conn, "member_remember", p_member_id=member, p_kind="event", p_text="Friendsgiving for 10",
+                p_event_date="2026-10-31")
+    assert {k: saved[k] for k in ("kind", "text", "event_date")} == \
+        {"kind": "event", "text": "Friendsgiving for 10", "event_date": "2026-10-31"}
+    mems = profile(conn, member)["memories"]
+    assert (mems[0]["id"], mems[0]["days_until"]) == (saved["id"], 7)
+
+
+def test_remember_name_and_household_update_member(conn, member):
+    assert rpc(conn, "member_remember", p_member_id=member, p_kind="name", p_text="  Dyl  ") == \
+        {"kind": "name", "text": "Dyl"}
+    rpc(conn, "member_remember", p_member_id=member, p_kind="household", p_text="5")
+    assert conn.execute("select name, household from members where member_id = %s", [member]).fetchone() == ("Dyl", 5)
+    with pytest.raises(psycopg.errors.RaiseException, match="household"):
+        rpc(conn, "member_remember", p_member_id=member, p_kind="household", p_text="a few")
+    with pytest.raises(psycopg.errors.RaiseException, match="bad kind"):
+        rpc(conn, "member_remember", p_member_id=member, p_kind="secret", p_text="x")
+    with pytest.raises(psycopg.errors.RaiseException, match="unknown member"):
+        rpc(conn, "member_remember", p_member_id="it-nobody", p_kind="note", p_text="x")
+
+
+def test_reminder_requires_date(conn, member):
+    with pytest.raises(psycopg.errors.RaiseException, match="needs a date"):
+        rpc(conn, "member_remember", p_member_id=member, p_kind="reminder", p_text="batteries")
+
+
+def test_save_for_later_merges_and_rejects_unknown(conn, member):
+    mid = memory(conn, member, "event", "Friendsgiving for 10", days=7)
+    rpc(conn, "member_save_for_later", p_member_id=member, p_memory_id=mid,
+        p_items=[{"product_id": "barilla-spaghetti", "qty": 2}, {"product_id": "rao-marinara", "qty": 1}])
+    saved = rpc(conn, "member_save_for_later", p_member_id=member, p_memory_id=mid,
+                p_items=[{"product_id": "rao-marinara", "qty": 3}])
+    assert [(i["product_id"], i["short_name"], i["qty"]) for i in saved["items"]] == \
+        [("barilla-spaghetti", "Spaghetti", 2), ("rao-marinara", "Marinara", 3)]
+    with pytest.raises(psycopg.errors.RaiseException, match="unknown product: turkey"):
+        rpc(conn, "member_save_for_later", p_member_id=member, p_memory_id=mid, p_items=[{"product_id": "turkey"}])
+    pref = memory(conn, member, "preference", "Likes the Marinara here")
+    with pytest.raises(psycopg.errors.RaiseException, match="not an event"):
+        rpc(conn, "member_save_for_later", p_member_id=member, p_memory_id=pref,
+            p_items=[{"product_id": "rao-marinara", "qty": 1}])
+
+
+def test_save_for_later_rejects_other_members_memory(conn, member):
+    conn.execute("insert into members (member_id) values ('it-other')")
+    theirs = memory(conn, "it-other", "event", "Their party", days=3)
+    with pytest.raises(psycopg.errors.RaiseException, match="not your memory"):
+        rpc(conn, "member_save_for_later", p_member_id=member, p_memory_id=theirs,
+            p_items=[{"product_id": "rao-marinara", "qty": 1}])
+
+
+def test_forget_one(conn, member):
+    mid = memory(conn, member, "note", "Gluten-free dinner guests")
+    assert rpc(conn, "member_forget", p_member_id=member, p_memory_id=mid) == {"forgotten": 1}
+    assert rpc(conn, "member_forget", p_member_id=member, p_memory_id=mid) == {"forgotten": 0}
+    assert profile(conn, member)["memories"] == []
+
+
+def test_forget_all_signs_cart_out(member_cart, conn):
+    member_cart("set_member", p_member_id="it-1")
+    add(member_cart, "whole-milk")
+    member_cart("checkout")
+    assert rpc(conn, "member_forget", p_member_id="it-1") == {"forgotten": "all"}
+    assert conn.execute("select count(*) from member_purchases where member_id = 'it-1'").fetchone()[0] == 0
+    assert conn.execute("select member_id from carts where cart_id = '7'").fetchone() == (None,)
+    assert profile(conn, "it-1") is None
+
+
+def test_writes_bump_member_rev(member_cart, conn):
+    member_cart("set_member", p_member_id="it-1")
+    rev = lambda: conn.execute("select member_rev from carts where cart_id = '7'").fetchone()[0]
+    start = rev()
+    saved = rpc(conn, "member_remember", p_member_id="it-1", p_kind="event", p_text="Party", p_event_date="2026-11-01")
+    rpc(conn, "member_save_for_later", p_member_id="it-1", p_memory_id=saved["id"],
+        p_items=[{"product_id": "tostitos-salsa", "qty": 1}])
+    rpc(conn, "member_forget", p_member_id="it-1", p_memory_id=saved["id"])
+    assert rev() == start + 3

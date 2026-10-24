@@ -322,6 +322,119 @@ begin
   );
 end $$;
 
+-- ── What Kart learns in conversation ──
+
+-- Bumps member_rev on every cart this member is signed in on, so the iPad refetches the profile.
+create or replace function member_touch(p_member_id text)
+returns void language sql security definer set search_path = public as $$
+  update carts set member_rev = member_rev + 1 where member_id = p_member_id
+$$;
+
+create or replace function member_memory_json(mm member_memories)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'id', mm.id, 'kind', mm.kind, 'text', mm.text, 'event_date', to_char(mm.event_date, 'YYYY-MM-DD'),
+    'items', (select jsonb_agg(jsonb_build_object(
+                'product_id', it->>'product_id', 'short_name', coalesce(pr.short_name, pr.name, it->>'product_id'),
+                'qty', coalesce((it->>'qty')::int, 1)) order by o)
+              from jsonb_array_elements(mm.items) with ordinality as x(it, o)
+              left join products pr on pr.id = it->>'product_id'))
+$$;
+
+-- Saves something worth knowing next trip. event / reminder / preference / note add a memory
+-- (a reminder needs its date); name and household update the member instead.
+create or replace function member_remember(p_member_id text, p_kind text, p_text text,
+                                           p_event_date date default null, p_trip_id uuid default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  mm member_memories;
+  v_text text := trim(coalesce(p_text, ''));
+begin
+  if not exists (select 1 from members where member_id = p_member_id) then
+    raise exception 'unknown member: %', p_member_id;
+  end if;
+  if v_text = '' then
+    raise exception 'text is empty';
+  end if;
+  if p_kind = 'name' then
+    update members set name = left(v_text, 40) where member_id = p_member_id;
+    perform member_touch(p_member_id);
+    return jsonb_build_object('kind', 'name', 'text', left(v_text, 40));
+  elsif p_kind = 'household' then
+    if v_text !~ '^\d{1,2}$' then
+      raise exception 'household must be a number of people';
+    end if;
+    update members set household = v_text::int where member_id = p_member_id;
+    perform member_touch(p_member_id);
+    return jsonb_build_object('kind', 'household', 'text', v_text);
+  elsif p_kind not in ('event', 'reminder', 'preference', 'note') or p_kind is null then
+    raise exception 'bad kind: %', p_kind;
+  elsif p_kind = 'reminder' and p_event_date is null then
+    raise exception 'a reminder needs a date';
+  end if;
+  insert into member_memories (member_id, kind, text, event_date, trip_id)
+  values (p_member_id, p_kind, v_text, p_event_date, p_trip_id)
+  returning * into mm;
+  perform member_touch(p_member_id);
+  return jsonb_build_object('id', mm.id, 'kind', mm.kind, 'text', mm.text,
+                            'event_date', to_char(mm.event_date, 'YYYY-MM-DD'));
+end $$;
+
+-- Puts store products on an event's (or reminder's) saved list, merged by product_id: the new qty wins.
+create or replace function member_save_for_later(p_member_id text, p_memory_id bigint, p_items jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  mm   member_memories;
+  it   jsonb;
+  v_items jsonb;
+  v_pid text;
+begin
+  select * into mm from member_memories where id = p_memory_id for update;
+  if not found then
+    raise exception 'unknown memory: %', p_memory_id;
+  elsif mm.member_id is distinct from p_member_id then
+    raise exception 'not your memory';
+  elsif mm.kind not in ('event', 'reminder') then
+    raise exception 'not an event';
+  end if;
+  v_items := coalesce(mm.items, '[]');
+  for it in select * from jsonb_array_elements(coalesce(p_items, '[]')) loop
+    v_pid := it->>'product_id';
+    if v_pid is null or not exists (select 1 from products where id = v_pid) then
+      raise exception 'unknown product: %', coalesce(v_pid, '(none)');
+    end if;
+    if exists (select 1 from jsonb_array_elements(v_items) x where x->>'product_id' = v_pid) then
+      select jsonb_agg(case when x->>'product_id' = v_pid
+                            then jsonb_build_object('product_id', v_pid, 'qty', coalesce((it->>'qty')::int, 1))
+                            else x end order by o)
+      into v_items from jsonb_array_elements(v_items) with ordinality as t(x, o);
+    else
+      v_items := v_items || jsonb_build_array(jsonb_build_object('product_id', v_pid,
+                                                                 'qty', coalesce((it->>'qty')::int, 1)));
+    end if;
+  end loop;
+  update member_memories set items = v_items where id = p_memory_id returning * into mm;
+  perform member_touch(p_member_id);
+  return member_memory_json(mm);
+end $$;
+
+-- Forgets one memory, or (null) everything: history, memories and name. Carts signed in as the
+-- member are signed out by the foreign key.
+create or replace function member_forget(p_member_id text, p_memory_id bigint default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  n int;
+begin
+  if p_memory_id is null then
+    delete from members where member_id = p_member_id;
+    return jsonb_build_object('forgotten', 'all');
+  end if;
+  delete from member_memories where id = p_memory_id and member_id = p_member_id;
+  get diagnostics n = row_count;
+  perform member_touch(p_member_id);
+  return jsonb_build_object('forgotten', n);
+end $$;
+
 -- ── Access: members are never readable directly ──
 
 alter table members enable row level security;           -- no policies: anon sees nothing
@@ -335,3 +448,8 @@ revoke execute on function member_today(text) from public, anon, authenticated;
 grant execute on function set_member(text, text)      to anon, authenticated, service_role;
 grant execute on function set_demo_date(text, date)   to anon, authenticated, service_role;
 grant execute on function member_profile(text, text, date) to anon, authenticated, service_role;
+grant execute on function member_remember(text, text, text, date, uuid) to anon, authenticated, service_role;
+grant execute on function member_save_for_later(text, bigint, jsonb) to anon, authenticated, service_role;
+grant execute on function member_forget(text, bigint)      to anon, authenticated, service_role;
+revoke execute on function member_touch(text) from public, anon, authenticated;
+revoke execute on function member_memory_json(member_memories) from public, anon, authenticated;
