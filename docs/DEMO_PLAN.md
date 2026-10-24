@@ -2,18 +2,18 @@
 
 > **FINAL SCRIPT (2026-10-24): one natural trip. This supersedes §3 Meal A below.**
 >
-> **Props:** spaghetti ×3, marinara, Parmesan shaker, Hershey's XL ([TARGET_SHOPPING_CHECKLIST.md](TARGET_SHOPPING_CHECKLIST.md)). Not bought: garlic bread (removed by voice) and olive oil (not sold at Target Berkeley Central, and not in our catalog).
+> **Props (bought 2026-10-24, one of each):** Barilla spaghetti, Good & Gather marinara, Market Pantry grated Parmesan, up&up kids' scissors. Not bought: garlic bread (removed by voice) and olive oil (not sold at Target Berkeley Central, and not in our catalog).
 >
 > | # | Shopper | Kart / cart | Shows |
 > |---|---|---|---|
 > | 0 | *(member beta)* Sign in as **Dylan** | "Welcome back, Dylan!" | Member sign-in (one trip) |
 > | 1 | "Pasta night for my family of 4." → "Not now." | Lists spaghetti, marinara, garlic bread; "First stop is Aisle 6 for the spaghetti." → "One deal goes with your list. Want to hear it?" → "I'll tell you at the shelf." | Voice planning |
 > | 2 | "We've got garlic bread at home, take it off." | "Took garlic bread off your list." | Remove by voice |
-> | 3 | "Add something chocolate for dessert." | "Added the chocolate bar, Aisle 7." (A3 at Target) | Add by voice from the store's catalog |
+> | 3 | "Oh, and Leo needs kids' scissors for school." | "Added kids' scissors, Aisle 9." (across the store, routed after the pasta) | Add by voice, a non-food item, **navigation across the store** |
 > | 4 | Drop **spaghetti** → "Yes" → drop the **Parmesan** | "Got the Spaghetti. Parmesan is $1 off in Aisle 4. Want it?" → bill shows "saved $1" | Live bill + deal at the moment of decision |
 > | 5 | Drop the **marinara**. "Add olive oil too." | "Got the Marinara." → "We don't carry olive oil here. Trader Joe's, about a mile away, might have it." (exact store per Kart) | Honest "not sold here" |
 > | 5b | *(member beta)* "Oh, next Saturday is Leo's soccer team party, we'll need pasta for 12." → "Yes." | "Got it, I'll remember Leo's party on Saturday. Want me to save a list for it?" → "Saved: three boxes of spaghetti and two jars of marinara for Leo's party." | **Memory created by conversation** |
-> | 6 | Drop the **chocolate** → change your mind and **take it back out** | "Got the Chocolate Bar." → "Took the Chocolate Bar off your bill. Take it off the list too?" → "Yes." → "Took chocolate bar off your list." | Changing your mind |
+> | 6 | Walk to Aisle 9, drop the **scissors** → "Actually, the school has some" → **take them back out** | "Got the Kids' Scissors." → "Took the Kids' Scissors off your bill. Take them off the list too?" → "Yes." | Changing your mind |
 > | 7 | Tap **Check out** → **Pay** | Receipt with savings and time in store → "Paid. Enjoy pasta night!" | Uniqlo-style checkout |
 >
 > **ACT 2: fast-forward (member beta, ~30 s, no extra props)**
