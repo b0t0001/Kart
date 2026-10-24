@@ -25,9 +25,9 @@
 
 Before judging, `backend/members.py seed` loads member **1029, "Dylan"**: a household of 4 with ten weeks of believable trips, plus Leo's soccer party tomorrow. The seed is relative to the day it runs, so the demo day is always one of his usual shopping days.
 
-1. Welcome screen → **"Member? Sign in"** → type `1029` on the member card. Kart waves: *"Welcome back, Dylan!"* and then, from memory: *"Leo's soccer party is tomorrow. Want chips and salsa for twelve? Chips are $1.50 off."*
+1. Welcome screen → **"Member? Sign in"** → type `1029` on the member card. Kart waves: *"Welcome back, Dylan!"* and then, from memory: *"Leo's soccer party is tomorrow. Want the nachos list?"* "Yes" puts the saved nachos list on today's plan, and that flows straight into Meal B (`docs/DEMO_PLAN.md`). The chips stay off the list, so the chips deal card still fires.
 2. The **For you** card shows three picks, each with its reason:
-   - Chips: *Leo's party · $1.50 off*
+   - Salsa: *Leo's soccer party · tomorrow*
    - Milk: *every week · last Sat*
    - Tortillas: *your Saturday usual*
    One tap adds a pick to the list.
@@ -40,7 +40,7 @@ Before judging, `backend/members.py seed` loads member **1029, "Dylan"**: a hous
    - The For you card leads with the Friendsgiving list.
    - Milk is due again: it was last bought in step 4, "a week ago".
    - Kart may ask how Leo's party went.
-7. The member chip → **What Kart remembers**: Friendsgiving, Leo's party (past), "likes Rao's", his usuals. Tap **Forget** on any row; **Forget me** wipes everything.
+7. The member chip → **What Kart remembers**: Friendsgiving, Leo's party (past), "likes the marinara here", his usuals. Tap **Forget** on any row; **Forget me** wipes everything.
 8. After the pitch: demo controls → **Back to today**.
 
 ## 3. Experience
@@ -118,10 +118,9 @@ The backend computes these deterministically (testable, instant). Claude only ph
 | **Coming up** | An event memory dated within the next 14 days that has saved items. Its first saved item not yet on the list. (An event with no saved list still shows as the card's event line and in Kart's greeting.) | *"Leo's party tomorrow"* |
 | **Due again** | Bought ≥ 3 times; `days since last ≥ 0.85 × median gap` | *"every week · last Sat"* |
 | **Your usual today** | Bought on this weekday in ≥ 60% of the member's trips on this weekday | *"your Saturday usual"* |
-| **Favorite on deal** | One of their top-5 products has a live deal | *"$1.50 off this week"* |
 
 - **Picks:** up to 3. First the top pick from each signal, in the table's order, so the card shows a mix (one for the event, one that's due, one usual). Then any open slots fill by the same order. Each product appears once. Picks leave out anything already in the cart or on the plan, and anything out of stock.
-- **Deals:** a pick's line adds the deal label when there's a live deal.
+- **Deals stay with the deal cards:** a product with a live deal is never a pick, and Kart doesn't pitch deals from memory. The store's deal moments, the Parmesan and chips cards, fire exactly as before (a card never shows for something already on the list).
 - **Profile data for Claude:** the rhythms (every N days, usual weekday), favorites, the last trip, and the memories.
 
 ## 5. Architecture
@@ -161,7 +160,7 @@ The backend computes these deterministically (testable, instant). Claude only ph
     ```jsonc
     { "member": {"member_id","name","household","since","trips"},
       "today": "2026-10-24", "weekday": "Saturday",
-      "picks":   [{"product_id","short_name","kind":"event|due|usual|deal","reason","aisle","deal_label"?,"memory_id"?}],
+      "picks":   [{"product_id","short_name","kind":"event|due|usual","reason","aisle","memory_id"?}],
       "usuals":  [{"product_id","short_name","times","every_days","last","weekday"?}],
       "memories":[{"id","kind","text","event_date","days_until","items":[{"product_id","short_name","qty"}]}],
       "last_trip": {"date","items":["Chips","Milk",…],"total"} }
@@ -181,10 +180,11 @@ The backend computes these deterministically (testable, instant). Claude only ph
     - The receipt's own `created_at` stays real.
   - **On a new trip:** when `carts.trip_id` changes, `member_id` goes back to null. Every trip starts as a guest, and `reset_cart` is unchanged.
 - **Seed:** `backend/members.py seed [--member 1029 --name Dylan]` rebuilds that member relative to today and touches nothing else:
-  - **Trips:** ten weeks, on today's weekday plus a midweek top-up, using today's catalog ids. The usual-day basket is taco night; milk and bananas weekly, eggs every ~10 days, pasta and Rao's every other week, paper towels every ~5 weeks; chips and salsa are the favorite snack.
+  - **Trips:** ten weeks, on today's weekday plus a midweek top-up, using today's catalog ids. The usual-day basket is taco night; milk and bananas weekly, eggs every ~10 days, pasta and marinara every other week, paper towels every ~5 weeks; chips and salsa are the favorite snack.
   - **Memories:**
-    - "Leo's soccer party, bringing snacks for 12", dated tomorrow, with a saved list (chips ×3, salsa ×2);
-    - "Likes Rao's, not the store brand".
+    - "Leo's soccer party, nachos for the team", dated tomorrow, with a saved list: Meal B without the chips, one each of `tostitos-salsa`, `queso`, `black-beans`, `jalapenos` and `daisy-sour-cream`;
+    - the preference "Likes the {short_name} here" for `rao-marinara`, using its live short_name, because the brand is changing to a generic jar.
+  - **By product id:** the seed looks up names and prices by product id at run time and skips missing ids with a warning, since the catalog is changing for the demo meals.
   - **When to run it:** right before judging, next to `reset-demo`, because "tomorrow" and "last Saturday" are relative to the day it runs.
   - `members.py show 1029` prints the profile.
 - **Tests:** member ids starting `it-` are test members, and they never touch 1029.
@@ -198,10 +198,12 @@ The backend computes these deterministically (testable, instant). Claude only ph
 - **New tools, exposed only when a member is signed in:**
   - `remember(kind, text, date?)`
   - `save_for_later(memory_id, items)`
+  - `shop_saved_list(memory_id)`: puts a saved event list on today's plan in one `set_plan` and keeps what's there ("Yes" to "want the nachos list?")
   - `forget(memory_id)`: one memory, required id
   After a write, the agent refreshes the profile.
 - **Prompt rules for members:**
   - Use at most one or two memories per turn, naturally.
+  - Leave deals to the cart's deal cards; don't pitch them from memory.
   - Never recite their history or what they paid.
   - Only state memories that are in the profile.
   - When they share future plans, save them and offer a list.
@@ -257,7 +259,7 @@ The backend computes these deterministically (testable, instant). Claude only ph
 
 ## 9. Testing
 - **Backend (pytest, local Postgres):**
-  - each pick rule (event, due, usual, deal), the 3-pick cap, and leaving out items on the plan or out of stock;
+  - each pick rule (event, due, usual), live-deal products never picked, the 3-pick cap, and leaving out items on the plan or out of stock;
   - unknown ids create members;
   - the flag-off refusal;
   - the receipt trigger copies lines once (idempotent checkout);

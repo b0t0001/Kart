@@ -24,7 +24,7 @@
   - profile failed: `"Welcome back! What are we shopping for today?"`
   - questions: `"By the way, what should I call you?"` when there's no name; otherwise the rotation `["Any fun plans coming up I can help you shop for?", "Anyone coming over soon?", "Got anything coming up, like a party or a holiday?"]`
   - receipt: `"Saved to {name}'s history."`, or `"Saved to your history."` with no name
-- **Picks:** at most 3; signal order `event`, `due`, `usual`, `deal`; first one per signal, then fill.
+- **Picks:** at most 3; signal order `event`, `due`, `usual`; first one per signal, then fill. A product with a live deal (non-null `deal_label` in `product_catalog`) is **never** a pick. Deals stay with the deal cards, so the Meal A and Meal B deal beats in `docs/DEMO_PLAN.md` are untouched.
 - **Lull:** 40 s with no activity, while shopping, signed in, with no visible card. Once per trip, shared with the "Hey Kart" trigger.
 - **Hosted:** apply additive migrations only, never run `reset-demo`, and test on throwaway carts (`it-mem-*`) and `it-` members.
 - **Branch:** work in the worktree `.claude/worktrees/member-memory`, on branch `member-memory`. Merge `main` into it before each part (backend, agent, iPad) and before the end, never rebase. Commit only on this branch.
@@ -122,14 +122,13 @@
   - `times` = the number of trips it was bought on;
   - `last` = its latest date;
   - `every_days` = the median gap between its dates, rounded (null if `times < 2`).
-- **Taken:** a product on the cart's `items` or `plan` (when `p_cart_id` is given). Picks skip taken products and anything not `in_stock` in `product_catalog`.
+- **Taken:** a product on the cart's `items` or `plan` (when `p_cart_id` is given). Picks skip taken products, anything not `in_stock` in `product_catalog`, and anything with a live deal.
 - **Candidates by kind:**
   - **event:** memories of kind `event` with `event_date` in `[today, today+14]` and saved items, nearest date first. The candidate is each saved item in order. Each pick carries `memory_id`.
   - **due:** `times >= 3` and `today - last >= 0.85 * every_days`, ordered by `(today-last)/every_days` descending.
   - **usual:** today's weekday has `>= 2` member trips, and the product was bought on `>= 60%` of them. Ordered by share, then `times`.
-  - **deal:** among the top 5 by `times` (ties: later `last`), those with a non-null `deal_label` in `product_catalog`.
 - **Selection:**
-  1. Take the first untaken candidate of each kind, in the order event, due, usual, deal.
+  1. Take the first untaken candidate of each kind, in the order event, due, usual.
   2. Fill up to 3 by repeating that kind order over the remaining candidates.
   3. A product appears once.
 - **`reason` text:**
@@ -140,8 +139,6 @@
     - `every`: 6–8 days → `every week`; 13–15 → `every 2 weeks`; 27–31 → `every month`; otherwise `every N days`.
     - `when`: 7 days ago or fewer → a weekday abbreviation; otherwise `Oct 17`.
   - **usual:** `"your {Weekday} usual"`.
-  - **deal:** `"a favorite"`.
-  - Any pick with a live deal appends `" · {deal_label}"`.
 - **`usuals`:** the top 6 by `times` with `times >= 2`. `weekday` is the product's most common weekday if that weekday holds ≥ 60% of its trips, else null.
 - **`memories`:**
   - All rows, each with `days_until` (null for non-events) and `items` expanded with `short_name`.
@@ -152,7 +149,8 @@
 - [ ] **Step 1: Write failing tests.** Use a helper `buy(conn, member, product_id, days_ago, qty=1, today=TODAY)` that inserts a purchase at noon store time. Set `TODAY = date(2026, 10, 24)` (a Saturday) and pass it as `p_today`. Tests:
   - `test_due_pick_weekly_milk`: milk bought 7, 14, 21 and 28 days ago → a pick `{"product_id": "whole-milk", "kind": "due", "reason": "every week · last Sat"}`.
   - `test_usual_pick_on_weekday`: tortillas on 3 of 3 Saturdays → kind `usual`, reason `"your Saturday usual"`.
-  - `test_event_pick_with_deal_label`: memory `"Leo's soccer party, bringing snacks for 12"`, dated TODAY+1, items `[{"product_id": "tostitos-chips", "qty": 3}]` → the first pick has reason `"Leo's soccer party · tomorrow · $1.50 off"` and its `memory_id`.
+  - `test_event_pick`: memory `"Leo's soccer party, nachos for the team"`, dated TODAY+1, items `[{"product_id": "tostitos-chips", "qty": 1}, {"product_id": "tostitos-salsa", "qty": 1}]`, with the chips deal live → the first pick is `tostitos-salsa`, with reason `"Leo's soccer party · tomorrow"` and its `memory_id`.
+  - `test_live_deal_products_never_picked`: chips are due and usual, and the deal is live → chips are not in picks. End the deal → chips appear.
   - `test_mix_one_per_signal_then_cap_3`: event + 2 due + 1 usual → kinds `["event", "due", "usual"]`.
   - `test_picks_skip_plan_and_cart_and_out_of_stock`.
   - `test_today_uses_store_timezone`:
@@ -229,13 +227,13 @@
 - **Every 35 days:** `kirkland-paper-towels`.
 - **Prices:** today's `products.price`.
 - **Memories:**
-  - event `"Leo's soccer party, bringing snacks for 12"`, dated today+1, with items `[{"product_id":"tostitos-chips","qty":3},{"product_id":"tostitos-salsa","qty":2}]`
-  - preference `"Likes Rao's sauce, not the store brand"`
-- **Missing products:** any product id not in `products` is skipped, with a warning (the catalog is churning).
+  - event `"Leo's soccer party, nachos for the team"`, dated today+1, with items qty 1 each of `tostitos-salsa`, `queso`, `black-beans`, `jalapenos` and `daisy-sour-cream` (Meal B without the chips)
+  - preference `f"Likes the {short_name} here"` for `rao-marinara`, using its live `short_name` (skipped if it's missing)
+- **Missing products:** any product id not in `products` is skipped, with a warning (the catalog is churning). **Merge `main` first:** the backend chat is changing `03_seed.sql` and `data/store.json`.
 
 - [ ] **Step 1: Write a failing test,** `test_seed_member_makes_the_demo_profile`: `seed_member(conn, "it-seed", "Dylan", 4, TODAY)`, then `member_profile(p_today=TODAY)`. Expect:
   - `member.name == "Dylan"` and `member.trips >= 15`;
-  - pick kinds include `event` (chips, "tomorrow") and `due` (`whole-milk`);
+  - pick kinds include `event` (salsa, "tomorrow") and `due` (`whole-milk`);
   - at least one `usual`;
   - re-running the seed leaves the counts unchanged.
 - [ ] **Step 2: Run.** Expected: FAIL.
@@ -273,10 +271,11 @@ Merge `main` into the branch first. `agent.py`, `brain.py` and the tests change 
 **Interfaces:**
 - Produces, in `memory.py`:
   - **`MEMBER_TOOLS: list[dict]`**, built with `tools._tool`, eager streaming:
+    - `shop_saved_list(memory_id: int)`: "Put a saved event list on today's shopping list, keeping what's already on it." It reads the memory's items from `ctx["profile"]` and appends the ones not already on the plan, with reason = the memory's title, through **one** `set_plan` (reuse `tools._dispatch("set_plan", …)` so the stock caps and notes apply).
     - `remember(kind: enum[event, preference, note, name, household], text: str, date?: str YYYY-MM-DD)`: "Save something worth knowing on future trips: a coming event (with its date), a lasting preference, their name, how many people are in the household. Not small talk."
     - `save_for_later(memory_id: int, items: [{product_id, qty}])`: "Put store products on a saved list for a coming event, not on today's list."
     - `forget(memory_id: int)`: "Forget one memory the shopper asked you to forget."
-  - **`MEMBER_TOOL_NAMES = {"remember", "save_for_later", "forget"}`**
+  - **`MEMBER_TOOL_NAMES = {"remember", "save_for_later", "forget", "shop_saved_list"}`**
   - **`async member_dispatch(name, args, ctx) -> dict`.** `ctx` holds `backend`, `member_id`, `trip_id` and `cart_id`.
     - It calls the RPCs `member_remember` (`p_event_date` from `date`), `member_save_for_later` and `member_forget`.
     - **`forget`** raises `ValueError("'memory_id' must be an integer")` when the id is missing.
@@ -296,7 +295,8 @@ Merge `main` into the branch first. `agent.py`, `brain.py` and the tests change 
     - when they share a future plan, call `remember` with its date, then offer to start a list and use `save_for_later` (never `set_plan`) for it;
     - say plainly what the store doesn't carry;
     - if a memory tool returns an error, say you couldn't save it, and never claim you'll remember;
-    - "shop my Friendsgiving list" = `add_to_plan` for each saved item.
+    - "shop my Friendsgiving list", or yes to "want the nachos list?", = `shop_saved_list`;
+    - leave deals to the cart's deal cards, and don't pitch them from memory.
   - **`welcome_line(profile: dict | None) -> str`:** the fixed lines in Global Constraints.
   - **`GREETING_TURN: str`:** `'(The shopper just signed in, and Kart already said "{welcome}". Add at most two short sentences that use the most relevant memory, then ask what they\'re shopping for. Don\'t welcome them again.)'`
   - **`question(profile: dict | None, n: int) -> str`:** the fixed questions; `n` picks from the rotation.
@@ -311,6 +311,7 @@ Merge `main` into the branch first. `agent.py`, `brain.py` and the tests change 
   - `test_only_greeting` (a table of positives and negatives)
   - `test_remember_calls_rpc_with_member` (via `FakeBackend.calls`)
   - `test_forget_requires_memory_id`
+  - `test_shop_saved_list_one_set_plan_keeps_existing`
   - `test_member_tools_need_a_member`
 - [ ] **Step 2: Run** `/Users/dylan/Documents/GitHub/kart/agent/.venv/bin/python -m pytest tests/test_memory.py -q` from `agent/`. Expected: FAIL.
 - [ ] **Step 3: Implement** `memory.py` and the dispatch line.
@@ -345,6 +346,7 @@ Merge `main` into the branch first. `agent.py`, `brain.py` and the tests change 
   - On a failure or timeout: `_profile = None`, and `brain.set_member` gets just a short "a member is signed in" section with no facts.
 
 **Hooks:**
+- **Every Claude turn:** `ctx["profile"]` is the current profile (for `shop_saved_list`).
 - **`CallStarted`:**
   - Guest: unchanged.
   - Member, when there's no plan or items yet:
@@ -404,7 +406,7 @@ Merge `main` into the branch first. Run `cd ios && xcodegen generate` after merg
 - **Produces** (`Codable, Sendable, Equatable`, decoded with `KartJSON.decoder()`):
   - `MemberProfile { member: MemberInfo; today: String; weekday: String; picks: [MemberPick]; usuals: [MemberUsual]; memories: [MemberMemory]; lastTrip: LastTrip? }`
   - `MemberInfo { memberId: String; name: String?; household: Int?; since: String; trips: Int }`
-  - `MemberPick: Identifiable { productId; shortName; kind: Kind (event, due, usual, deal); reason; aisle: String?; dealLabel: String?; memoryId: Int? }`
+  - `MemberPick: Identifiable { productId; shortName; kind: Kind (event, due, usual); reason; aisle: String?; memoryId: Int? }`
   - `MemberUsual { productId; shortName; times: Int; everyDays: Int?; last: String; weekday: String? }`
   - `MemberMemory: Identifiable { id: Int; kind: String; text: String; eventDate: String?; daysUntil: Int?; items: [SavedItem]? }`
   - `SavedItem { productId; shortName; qty: Int }`
@@ -440,7 +442,7 @@ Merge `main` into the branch first. Run `cd ios && xcodegen generate` after merg
   - `func setDemoDate(_ date: String?) async throws`
   - `func remember(kind: String, text: String, eventDate: String?, items: [PlanItem]) async throws`: **mock only**, used by the scripted voice in Task 13. Put it on `MockKartBackend` itself, not on the protocol.
 - **`MockMembers`:**
-  - `static func dylan(today: Date) -> MockMemberStore` holds memories and history. The fixture matches the Task 4 seed in miniature: milk weekly, Saturday tacos, and Leo's party tomorrow with chips ×3 and salsa ×2.
+  - `static func dylan(today: Date) -> MockMemberStore` holds memories and history. The fixture matches the Task 4 seed in miniature: milk weekly, Saturday tacos, and Leo's party tomorrow with the nachos list (Meal B without the chips; ids missing from the bundled catalog are dropped).
   - `func profile(today: Date, taken: Set<String>, catalog: Catalog) -> MemberProfile` applies the same pick rules and reason strings as Task 2 to its in-memory history. Copy the rules; keep them small.
 - **Mock behavior:**
   - Any id other than `1029` signs in as a new, empty member: no name, no history, and an empty profile. It's kept in memory for the session.
@@ -451,7 +453,7 @@ Merge `main` into the branch first. Run `cd ios && xcodegen generate` after merg
 
 - [ ] **Step 1: Write failing tests:**
   - `testMockSignInNeedsFlag`
-  - `testMockProfilePicksForDylan` (kinds `[event, due, usual]` with exact reasons, e.g. `"Leo's soccer party · tomorrow · $1.50 off"` when the chips deal is live)
+  - `testMockProfilePicksForDylan` (kinds `[event, due, usual]` with exact reasons, e.g. `"Leo's soccer party · tomorrow"`; nothing on a live deal)
   - `testMockStartTripClearsMember`
   - `testMockFastForwardShowsSavedEventAndDueMilk` (remember Friendsgiving at +7 with items, check out with milk, set the demo date to +6, sign in → the first pick is a Friendsgiving item reading "tomorrow", and milk is due with reason `"every week · last Sat"`)
   - `testMockForgetAllSignsOut`
@@ -575,7 +577,7 @@ Merge `main` into the branch first. Run `cd ios && xcodegen generate` after merg
 
 **Files:**
 - Modify: `ios/KartCore/Sources/KartCore/Voice/MockAgentBrain.swift`
-  - With a member in `tripContext`, the greeting is `"Welcome back, Dylan! Leo's soccer party is tomorrow. Want chips and salsa for twelve?"`. After a fast-forward it uses the nearest upcoming event instead: `"Welcome back, Dylan! Friendsgiving's tomorrow, and your list is ready. Want to shop it now?"`.
+  - With a member in `tripContext`, the greeting is `"Welcome back, Dylan! Leo's soccer party is tomorrow. Want the nachos list?"`, and "yes" right after it shops the saved list. After a fast-forward it uses the nearest upcoming event instead: `"Welcome back, Dylan! Friendsgiving's tomorrow, and your list is ready. Want to shop it now?"`.
   - `"hey kart"` → the first question line.
   - `"I'm hosting Friendsgiving next Saturday, ten people"` calls `MockKartBackend.remember(kind: "event", text: "Friendsgiving for 10", eventDate: <today+7>, items: [spaghetti ×3, rao-marinara ×3, french-baguette ×2])` and answers `"Ooh, fun. I'll remember that, and I started a list for it."`.
 - Modify: `ios/Kart/Debug/DebugPanel.swift`: add the two utterances to "You say".
