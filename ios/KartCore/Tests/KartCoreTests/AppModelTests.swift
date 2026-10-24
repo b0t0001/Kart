@@ -92,7 +92,7 @@ import Testing
     await t.backend.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")
     await t.model.respond(to: try #require(t.model.visibleCard), with: .yes)
     #expect(t.backend.cart.plan.contains { $0.productId == "kirkland-parmesan" && $0.reason == "deal" })
-    #expect(t.model.visibleCard?.title == "Garlic Bread is $1 off in Aisle 8. Want it?")   // the Yes consumed it; the next pairing pops
+    #expect(t.model.visibleCard?.title == (try Fixtures.dealLine("d-baguette-1off")))   // the Yes consumed it; the next pairing pops
 
     await t.model.startTrip()                                // "No thanks" on a fresh trip
     await t.backend.simulateVision(.added, productId: "tostitos-salsa", confidence: 0.9, label: "salsa")   // suggests chips
