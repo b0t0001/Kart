@@ -111,4 +111,4 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
    - record the identical-spaghetti counting clips.
 5. **CV:** replays the clips and reports recognition accuracy for each bought item.
 6. **Whole team:** rehearse Meal A three times, on cart 7 or a test cart. Rehearsals use placeholder stock (20).
-7. **Right before judging (operator, in this order):** `backend/db.py sync-catalog --with-stock` (real counts) → `backend/db.py reset-demo` → *(if the member beta ships)* `backend/members.py seed`. See the pre-judging section of `backend/docs/DEMO.md`.
+7. **Right before judging (operator):** one command, `backend/pre_judging.sh` (add `--members` if the member beta ships). It shows the target database and asks you to type `judging`, then sets the real stock counts, resets the demo and seeds the member. See `backend/docs/DEMO.md`.
