@@ -106,6 +106,8 @@ async def test_every_planned_line_keeps_its_basis(backend):
 
 async def test_dismiss_nudge_passes_keep_or_ok(backend):
     await run_tool("dismiss_nudge", {"action": "keep"}, ctx(backend))
+    await run_tool("dismiss_nudge", {"action": "shop"}, ctx(backend))
+    assert ("dismiss_nudge", {"p_cart_id": "7", "p_action": "shop"}) in backend.calls
     out = json.loads(await run_tool("dismiss_nudge", {"action": "maybe"}, ctx(backend)))
     assert ("dismiss_nudge", {"p_cart_id": "7", "p_action": "keep"}) in backend.calls and "error" in out
 

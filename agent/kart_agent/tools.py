@@ -43,8 +43,9 @@ TOOLS: list[dict[str, Any]] = [
     _tool("get_deals", "Every live deal in the store, with product, label and aisle."),
     _tool("set_location", "The shopper said where they are, e.g. 'aisle 5'.", {"section": {"type": "string"}}, ["section"]),
     _tool("dismiss_suggestion", "The shopper said no to the current deal suggestion."),
-    _tool("dismiss_nudge", "Answer Kart's quantity nudge: 'keep' (keep the extra; the list goes up) or 'ok' (got it).",
-          {"action": {"type": "string", "enum": ["keep", "ok"]}}, ["action"]),
+    _tool("dismiss_nudge", "Answer Kart's quantity nudge: 'keep' (keep the extra; the list goes up), 'ok' (got it), "
+          "'skip' (skip what's missing) or 'shop' (go back for what's missing, at checkout).",
+          {"action": {"type": "string", "enum": ["keep", "ok", "skip", "shop"]}}, ["action"]),
     _tool("confirm_item", "The shopper said what the cameras' unrecognized item is.", {"product_id": {"type": "string"}}, ["product_id"]),
     _tool("start_checkout", "The shopper is done; show the bill."),
 ]
@@ -154,8 +155,8 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
         return {"ok": True}
     if name == "dismiss_nudge":
         action = _str(args, "action")
-        if action not in ("keep", "ok"):
-            raise ValueError("action must be 'keep' or 'ok'")
+        if action not in ("keep", "ok", "skip", "shop"):
+            raise ValueError("action must be 'keep', 'ok', 'skip' or 'shop'")
         await backend.rpc("dismiss_nudge", p_cart_id=cart_id, p_action=action)
         return {"ok": True}
     if name == "confirm_item":

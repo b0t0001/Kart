@@ -82,3 +82,15 @@ def test_an_extra_beyond_the_list_is_left_to_the_nudge_when_the_beta_is_on():
     extra = [{"product_id": "barilla-spaghetti", "qty": 2}]
     assert proactive_line(added, CATALOG, plan, items=extra, nudges=True) is None   # "Keep the extra?" comes next
     assert proactive_line(added, CATALOG, plan, items=extra) == "Got the Spaghetti."  # beta off: as before
+
+
+
+def test_the_combined_checkout_nudge_is_said_as_one_list():
+    from kart_agent.lines import proactive_line
+    from fakes import CATALOG
+    combined = {"type": "nudge", "product_id": "barilla-spaghetti", "kind": "under", "have": 0, "need": 1,
+                "text": "Before you go: you still need Spaghetti and Parmesan.",
+                "items": [{"product_id": "barilla-spaghetti", "have": 0, "need": 1, "aisle": "Aisle 6"},
+                          {"product_id": "kirkland-parmesan", "have": 0, "need": 2, "aisle": "Aisle 4"}]}
+    assert proactive_line(combined, CATALOG, [], meal="pasta night for 4") == (
+        "Before you go: you still need one pound of spaghetti and two wedges of parmesan for pasta night for 4.")

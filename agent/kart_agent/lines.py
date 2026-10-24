@@ -82,12 +82,34 @@ def _amount(n: int, product: dict[str, Any]) -> str:
     return f"{_words(n)} {unit if n == 1 else plural} of {name}"
 
 
+def _list_amount(n: int, product: dict[str, Any]) -> str:
+    """For a list of what's missing: "one pound of ground beef", but just "salsa" for a single plain item."""
+    if _unit(product["name"]) is None and n == 1:
+        return (product.get("short_name") or product["name"]).lower()
+    return _amount(n, product)
+
+
+def _combined_line(items: list[dict[str, Any]], catalog: list[dict[str, Any]], meal: str | None) -> str | None:
+    """The combined checkout nudge: every short item in one sentence (None when nothing can be named)."""
+    by_id = {p["id"]: p for p in catalog}
+    parts = [_list_amount(i["need"] - i["have"], by_id[i["product_id"]]) if i.get("product_id") in by_id
+             else str(i.get("name") or "").lower() for i in items]
+    parts = [p for p in parts if p]
+    if not parts:
+        return None
+    listed = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+    return f"Before you go: you still need {listed}{f' for {meal}' if meal else ''}."
+
+
 def _nudge_line(event: dict[str, Any], catalog: list[dict[str, Any]], meal: str | None) -> str | None:
     """The backend's nudge text uses digits and short names ("1 Tortillas"). For speech: counts in words, in the
     package as sold ("one pack of tortillas"), tied to the trip's meal when Kart knows it. Falls back to the text when
     the product or counts aren't known."""
     product = next((p for p in catalog if p["id"] == event.get("product_id")), None)
     have, need = event.get("have"), event.get("need")
+    items = event.get("items")
+    if event.get("kind") == "under" and isinstance(items, list) and len(items) > 1:
+        return _combined_line(items, catalog, meal) or event.get("text") or None
     if product is None or not isinstance(have, int) or not isinstance(need, int):
         return event.get("text") or None
     if event.get("kind") == "over":
@@ -131,14 +153,15 @@ NUDGE_OK_LINE = "Got it."
 _KEEP = {"keep it", "keep", "keep them", "keep both", "keeping it", "i'll keep it", "i'll keep them", "yes keep it",
          "yeah keep it", "i want it", "i want them"}
 _NUDGE_OK = {"ok", "okay", "got it", "gotcha", "i'll put it back", "put it back", "putting it back", "no",
-             "nope", "nah", "fine", "right", "my bad", "oops", "skip it", "skip", "skip that", "never mind", "it's fine"}
-_FETCH = ("go get it", "i'll get it", "i'll go get it", "i'll grab it", "let me get it", "let me grab it", "go back",
-          "i'll go back", "get it")
+             "nope", "nah", "fine", "right", "my bad", "oops", "never mind", "it's fine"}
+_SKIP = {"skip it", "skip", "skip that", "skip them", "skip those"}
+_FETCH = ("go get it", "go get them", "i'll get it", "i'll go get it", "i'll grab it", "let me get it", "let me grab it",
+          "go back", "i'll go back", "get it", "get them")
 
 
 def nudge_answer(text: str) -> str | None:
-    """A plain spoken answer to a quantity nudge: 'keep', 'ok' (dismiss_nudge) or 'fetch' (short: go back for it),
-    else None for Claude."""
+    """A plain spoken answer to a quantity nudge, as dismiss_nudge's action: 'keep', 'ok', 'skip' or 'shop' (short at
+    checkout: go back for it), else None for Claude."""
     if "?" in text:
         return None
     words = re.sub(r"[^a-z' ]", " ", text.lower()).split()
@@ -149,8 +172,10 @@ def nudge_answer(text: str) -> str | None:
         return None
     if phrase in _KEEP or "keep" in words:
         return "keep"
+    if phrase in _SKIP:
+        return "skip"
     if phrase in _FETCH or phrase.startswith(("i'll go get", "i'll grab", "i'll get", "let me get", "let me grab")):
-        return "fetch"
+        return "shop"
     if phrase in _NUDGE_OK or phrase.startswith(("okay", "ok ", "got it", "i'll put", "put it back")):
         return "ok"
     return None

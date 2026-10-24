@@ -251,10 +251,18 @@ async def test_at_checkout_skip_it_or_go_get_it_by_voice():
     short = {"type": "nudge", "product_id": "barilla-spaghetti", "kind": "under", "have": 0, "need": 1, "text": "x"}
     agent.run_filter(UserCustomSent(metadata=short))
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Um, I'll go get it.")])) == ["Okay, it's in Aisle 6."]
-    assert ("set_cart_status", {"p_cart_id": "7", "p_status": "shopping"}) in backend.calls          # back to the aisle
     agent.run_filter(UserCustomSent(metadata={**short, "product_id": "rao-marinara"}))
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Skip it.")])) == ["Got it."]
-    assert [p["p_action"] for name, p in backend.calls if name == "dismiss_nudge"] == ["ok", "ok"]
+    assert [p["p_action"] for name, p in backend.calls if name == "dismiss_nudge"] == ["shop", "skip"]  # shop: back to shopping
+
+
+async def test_go_get_them_for_the_combined_nudge_says_where_to_start():
+    agent, backend = make()
+    combined = {"type": "nudge", "product_id": "rao-marinara", "kind": "under", "have": 0, "need": 1, "text": "x",
+                "items": [{"product_id": "rao-marinara", "have": 0, "need": 1, "aisle": "Aisle 6"},
+                          {"product_id": "kirkland-parmesan", "have": 0, "need": 1, "aisle": "Aisle 4"}]}
+    agent.run_filter(UserCustomSent(metadata=combined))
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Let me grab them.")])) == ["Okay, start in Aisle 6."]
 
 
 async def test_the_agent_knows_when_the_cart_has_the_nudge_beta():
