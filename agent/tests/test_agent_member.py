@@ -345,3 +345,11 @@ async def test_slow_reload_keeps_the_good_profile():
     agent.run_filter(trip_context("1029", "trip-1"))       # ...after a same-member trip_context (every call sends two)
     await run(agent, said_by_user("what's on my list"))
     assert agent._profile is not None and "About this shopper, from Kart's memory" in llm.requests[-1]["system"]
+
+
+async def test_a_failed_forget_me_is_said_honestly():
+    agent, backend, llm = make()
+    failed = UserCustomSent(metadata={"type": "member_forget_failed"})
+    assert agent.run_filter(failed) is True
+    assert await run(agent, failed) == ["Sorry, I couldn't do that just now."]
+    assert agent.member_id == "1029"                       # nothing was forgotten

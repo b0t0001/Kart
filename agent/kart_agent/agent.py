@@ -16,7 +16,7 @@ from .lines import (DECLINED_LINE, KEEP_LINE, LIST_KEPT, LIST_KEPT_THEM, LIST_TO
                     QUIET_OFF_LINE, QUIET_ON_LINE, plural,
                     WELCOME_LINE, accepted_line, nudge_answer, only_ack, only_filler, only_thanks, proactive_line,
                     quiet_request, yes_or_no)
-from .memory import (FORGOTTEN_LINE, FORGOTTEN_NOTE, GREETING_TURN, LIST_LATER_LINE, NOT_ME_NOTE, PROFILE_FAILED_LINE,
+from .memory import (FORGET_FAILED_LINE, FORGOTTEN_LINE, FORGOTTEN_NOTE, GREETING_TURN, LIST_LATER_LINE, NOT_ME_NOTE, PROFILE_FAILED_LINE,
                      after_last_drop, list_shopped_line, member_section, only_greeting, question, saved_list_offer,
                      still_there_line, welcome_line)
 from .tools import run_tool
@@ -128,6 +128,8 @@ class KartAgent:
                 self._context.set()
                 return False
             if meta.get("type") == "member_forgotten":  # "Forget me" on the screen: Kart lets go at once
+                return bool(self.member_id)
+            if meta.get("type") == "member_forget_failed":   # "Forget me" didn't go through: say so, honestly
                 return bool(self.member_id)
             if meta.get("type") == "member_idle":       # 3 quiet minutes while signed in
                 return bool(self.member_id and not self._speaking and not self._quiet)
@@ -365,6 +367,10 @@ class KartAgent:
                 self.member_id = None
                 self.brain.remember(FORGOTTEN_NOTE, FORGOTTEN_LINE)   # a clean slate, and Claude knows why
                 async for out in self._say([FORGOTTEN_LINE], interruptible=False):
+                    yield out
+                return
+            if meta.get("type") == "member_forget_failed":
+                async for out in self._say([FORGET_FAILED_LINE], interruptible=False):
                     yield out
                 return
             if meta.get("type") == "member_idle":

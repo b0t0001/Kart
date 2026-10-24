@@ -422,3 +422,29 @@ struct MemberContractTests {
         #expect(t.model.memberIdleStage(now: t.clock.now + 181) == .ask)
     }
 }
+
+// ── Deferred minors (1) and (5), now fixed ──
+
+@MainActor struct MemberHonestyTests {
+    @Test func aFailedForgetMeTellsKartItCouldNot() async throws {
+        let t = try make()
+        try await t.backend.setFeature("member_memory", on: true)
+        await t.model.startTrip(memberId: "1029")
+        t.voice.sent = []
+        t.backend.failMemberWrites = true
+        await t.model.forgetMember()
+        #expect(t.voice.sent == [.memberForgetFailed] && t.backend.cart.memberId == "1029")
+        #expect(LineCodec.metadata(.memberForgetFailed)["type"] as? String == "member_forget_failed")
+    }
+
+    @Test func signInStepsAreKindWhenTheLookupFails() {
+        let known = MemberSignInStep(lookup: MemberLookup(exists: true, name: "Dylan"), memberId: "1029")
+        #expect((known.title, known.primary, known.secondary) == ("Dylan?", "That's me", "Not me"))
+        let unknown = MemberSignInStep(lookup: MemberLookup(exists: false), memberId: "1092")
+        #expect((unknown.title, unknown.primary, unknown.secondary)
+                == ("We don't know 1092. Start a new membership?", "Yes", "No"))
+        let offline = MemberSignInStep(lookup: nil, memberId: "1029")
+        #expect((offline.title, offline.primary, offline.secondary)
+                == ("I can't check member numbers right now. Try again, or shop as a guest.", "Try again", "Shop as guest"))
+    }
+}

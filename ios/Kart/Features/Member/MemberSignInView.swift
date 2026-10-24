@@ -7,14 +7,16 @@ struct MemberSignInView: View {
     let model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var digits = ""
-    @State private var found: MemberLookup?
+    @State private var step: MemberSignInStep?
 
     var body: some View {
         VStack(spacing: Theme.xl) {
             MemberCard(store: model.backend.catalog.layout.store.name, digits: digits)
-            if let found {
-                Confirm(memberId: digits, found: found, onYes: start, onNo: { self.found = nil; digits = "" })
-                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+            if let step {
+                Confirm(step: step, onPrimary: { step == .unreachable ? lookUp() : start() }, onSecondary: {
+                    if step == .unreachable { shopAsGuest() } else { self.step = nil; digits = "" }
+                })
+                .transition(.scale(scale: 0.95).combined(with: .opacity))
             } else {
                 Keypad(onDigit: press, onDelete: { if !digits.isEmpty { digits.removeLast() } })
             }
@@ -33,11 +35,20 @@ struct MemberSignInView: View {
         guard digits.count < 4 else { return }
         digits.append(String(digit))
         guard digits.count == 4 else { return }
+        lookUp()
+    }
+
+    private func lookUp() {
         let memberId = digits
         Task {
-            let lookup = await model.lookUpMember(memberId) ?? MemberLookup(exists: false)
-            withAnimation(Theme.spring) { found = lookup }
+            let lookup = await model.lookUpMember(memberId)            // nil = no answer, not "unknown"
+            withAnimation(Theme.spring) { step = MemberSignInStep(lookup: lookup, memberId: memberId) }
         }
+    }
+
+    private func shopAsGuest() {
+        dismiss()
+        Task { await model.startTrip() }
     }
 
     private func start() {
@@ -47,27 +58,35 @@ struct MemberSignInView: View {
     }
 }
 
-/// "Dylan?" for a known number (first name only), or "start a new membership?" for one Kart doesn't know.
+/// "Dylan?" for a known number (first name only), "start a new membership?" for one Kart doesn't know, and a kind
+/// way on when the check itself failed.
 private struct Confirm: View {
-    let memberId: String
-    let found: MemberLookup
-    let onYes: () -> Void
-    let onNo: () -> Void
+    let step: MemberSignInStep
+    let onPrimary: () -> Void
+    let onSecondary: () -> Void
 
     var body: some View {
         VStack(spacing: Theme.l) {
-            Text(found.exists ? "\(found.name ?? "Member \(memberId)")?" : "We don't know \(memberId). Start a new membership?")
+            Text(step.title)
                 .font(Theme.title).foregroundStyle(Theme.ink).multilineTextAlignment(.center)
             HStack(spacing: Theme.l) {
-                Button(found.exists ? "Not me" : "No", action: onNo)
+                Button(step.secondary, action: onSecondary)
                     .buttonStyle(SecondaryButtonStyle())
-                    .accessibilityIdentifier("member.notMe")
-                Button(found.exists ? "That's me" : "Yes", action: onYes)
+                    .accessibilityIdentifier(step == .unreachable ? "member.offlineGuest" : "member.notMe")
+                Button(step.primary, action: onPrimary)
                     .buttonStyle(PrimaryButtonStyle())
-                    .accessibilityIdentifier(found.exists ? "member.confirm" : "member.create")
+                    .accessibilityIdentifier(primaryId)
             }
         }
         .frame(height: 360)
+    }
+
+    private var primaryId: String {
+        switch step {
+        case .confirm: "member.confirm"
+        case .unknown: "member.create"
+        case .unreachable: "member.retry"
+        }
     }
 }
 

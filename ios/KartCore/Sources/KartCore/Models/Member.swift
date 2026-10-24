@@ -146,3 +146,44 @@ public struct MemberLookup: Codable, Sendable, Equatable {
         self.name = name
     }
 }
+
+/// The sign-in card's confirm step, from `member_lookup`: a known number, an unknown one, or no answer at all.
+public enum MemberSignInStep: Sendable, Equatable {
+    case confirm(name: String)
+    case unknown(memberId: String)
+    case unreachable
+
+    public init(lookup: MemberLookup?, memberId: String) {
+        switch lookup {
+        case let found? where found.exists: self = .confirm(name: found.name ?? "Member \(memberId)")
+        case .some: self = .unknown(memberId: memberId)
+        case nil: self = .unreachable                            // the read failed: not "we don't know you"
+        }
+    }
+
+    public var title: String {
+        switch self {
+        case .confirm(let name): "\(name)?"
+        case .unknown(let id): "We don't know \(id). Start a new membership?"
+        case .unreachable: "I can't check member numbers right now. Try again, or shop as a guest."
+        }
+    }
+
+    /// Starts the trip (confirm, unknown) or asks again (unreachable).
+    public var primary: String {
+        switch self {
+        case .confirm: "That's me"
+        case .unknown: "Yes"
+        case .unreachable: "Try again"
+        }
+    }
+
+    /// Back to the keypad (confirm, unknown) or on as a guest (unreachable).
+    public var secondary: String {
+        switch self {
+        case .confirm: "Not me"
+        case .unknown: "No"
+        case .unreachable: "Shop as guest"
+        }
+    }
+}

@@ -116,3 +116,20 @@ def test_member_rules_cover_the_conversational_moments():
 
 def test_forget_it_answering_a_question_means_no():
     assert '"never mind" or "forget it"' in MEMBER_RULES and "forget everything" in MEMBER_RULES
+
+
+async def test_shop_saved_list_keeps_the_existing_lines_and_their_meal():
+    ctx = member_ctx()
+    ctx["backend"].cart["plan"] = [{"product_id": "kirkland-parmesan", "reason": "deal", "qty": 1,
+                                    "meal": "pasta night for 4"}]
+    await run_tool("shop_saved_list", {"memory_id": 16}, ctx)
+    plan = [params["p_plan"] for name, params in ctx["backend"].calls if name == "set_plan"][-1]
+    assert [(p["product_id"], p["reason"], p.get("meal")) for p in plan] == [
+        ("kirkland-parmesan", "deal", "pasta night for 4"),                 # today's line keeps its label
+        ("barilla-spaghetti", "Leo's soccer party", "Leo's soccer party"),
+        ("rao-marinara", "Leo's soccer party", "Leo's soccer party")]
+    assert ctx.get("meal") is None                                          # the trip's meal isn't renamed
+
+
+def test_mid_trip_memory_moments_carry_on():
+    assert "Mid-trip" in MEMBER_RULES and "don't ask what they're shopping for" in MEMBER_RULES

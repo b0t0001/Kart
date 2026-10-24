@@ -18,6 +18,8 @@ public final class MockKartBackend: KartBackend {
     @ObservationIgnored private var nextTranscriptId: Int64 = 1
     @ObservationIgnored private var members: [String: MockMemberStore] = [:]
     @ObservationIgnored private var forgotten: Set<String> = []   // "Forget me": 1029 doesn't come back seeded
+    /// Mock-only: member writes fail, like a dropped network (tests and the failure rehearsal).
+    @ObservationIgnored public var failMemberWrites = false
     @ObservationIgnored private var nextMemoryId = 100
 
     public init(catalog: Catalog, cartId: String = "7", clock: @escaping @MainActor () -> Date = { .now }) {
@@ -166,6 +168,7 @@ public final class MockKartBackend: KartBackend {
     }
 
     public func forgetMember() async throws {
+        if failMemberWrites { throw KartBackendError.noActiveTrip }
         guard let member = cart.memberId else { return }
         members[member] = nil                                  // deleted, like the backend's row
         forgotten.insert(member)

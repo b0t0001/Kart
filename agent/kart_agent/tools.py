@@ -376,7 +376,8 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
                 basis = item.get("basis")
                 lines.append({"product_id": item["product_id"], "reason": str(item.get("reason", "")), "qty": qty,
                               **({"basis": basis} if isinstance(basis, str) and basis else {}),
-                              **({"meal": meal} if meal else {})})     # each line remembers the meal (for a rejoin)
+                              **({"meal": item.get("meal") or meal} if item.get("meal") or meal else {})})
+                # each line remembers its meal (for a rejoin); a line that names its own keeps it (a saved list)
         cart = await backend.rpc("set_plan", p_cart_id=cart_id, p_plan=lines)
         result: dict[str, Any] = {"planned": planned, "not_in_store": missing, "out_of_stock": sold_out,
                                   "next_step": cart.get("next_step")}
