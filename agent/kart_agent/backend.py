@@ -24,6 +24,12 @@ class SupabaseBackend:
         """Active deals with what they pair with (for "deals that go with your list")."""
         return await self._get("deals", {"select": "id,product_id,label,pairs_with,ends_at", "active": "eq.true"})
 
+    async def get_nearby_stores(self) -> list[dict[str, Any]]:
+        """Other stores nearby (store_info.nearby: name, distance, kind, good_for), for things this store doesn't sell."""
+        rows = await self._get("store_info", {"select": "nearby", "limit": "1"})
+        nearby = rows[0].get("nearby") if rows else None
+        return nearby if isinstance(nearby, list) else []
+
     async def unresolved_events(self, cart_id: str, trip_id: str | None) -> list[dict[str, Any]]:
         params = {"cart_id": f"eq.{cart_id}", "type": "eq.added", "source": "eq.vision", "applied": "is.false",
                   "resolved_at": "is.null", "order": "id"}

@@ -14,6 +14,8 @@ log = logging.getLogger(__name__)
 
 MAX_CROPS = 2  # one per camera: smaller upload, faster answer
 MAX_COUNT = 6
+PERSONAL_HINT = (" If it is clearly the shopper's own belonging rather than store merchandise (a purse, phone, "
+                 "keys, wallet, clothing, a reusable or personal bag), answer \"personal\".")
 COUNT_HINT = (" count is how many identical units of that product the photos show together (1 if you are "
               "unsure or the units differ).")
 MAX_SIDE = 512
@@ -33,6 +35,7 @@ class CloudAnswer:
     confidence: float
     label: str
     count: int = 1  # identical units in the photos (only asked for with claude_count)
+    personal: bool = False  # the shopper's own belonging (only offered with personal_items)
 
 
 def _jpeg_b64(crop: np.ndarray) -> str:
@@ -45,9 +48,11 @@ def _jpeg_b64(crop: np.ndarray) -> str:
 
 
 class CloudIdentifier:
-    def __init__(self, catalog, model: str, timeout_s: float, client=None, count: bool = False):
+    def __init__(self, catalog, model: str, timeout_s: float, client=None, count: bool = False,
+                 personal: bool = False):
         self.catalog = catalog
         self.count = count
+        self.personal = personal
         self.model = model
         self.timeout_s = timeout_s
         self._client = client if client is not None else anthropic.Anthropic()
@@ -56,7 +61,8 @@ class CloudIdentifier:
         schema = {
             "type": "object",
             "properties": {
-                "product_id": {"type": "string", "enum": self.catalog.ids() + ["unknown"]},
+                "product_id": {"type": "string",
+                               "enum": self.catalog.ids() + ["unknown"] + (["personal"] if self.personal else [])},
                 "confidence": {"type": "number"},
                 "label": {"type": "string"},
             },
@@ -77,7 +83,7 @@ class CloudIdentifier:
             resp = self._client.with_options(timeout=self.timeout_s, max_retries=0).messages.create(
                 model=self.model,
                 max_tokens=1024,
-                system=SYSTEM + (COUNT_HINT if self.count else ""),
+                system=SYSTEM + (PERSONAL_HINT if self.personal else "") + (COUNT_HINT if self.count else ""),
                 messages=[{"role": "user", "content": images + [text]}],
                 output_config={"effort": "low", "format": {"type": "json_schema", "schema": self._schema()}},
             )
@@ -107,6 +113,8 @@ class CloudIdentifier:
                 n = min(MAX_COUNT, max(1, int(data.get("count", 1))))
             except (TypeError, ValueError):
                 n = 1
+        if pid == "personal" and self.personal:
+            return CloudAnswer(None, conf, label or "personal item", 1, personal=True)
         if pid == "unknown" or self.catalog.get(pid) is None:
             return CloudAnswer(None, conf, label or "unknown")
         return CloudAnswer(pid, conf, label, n)

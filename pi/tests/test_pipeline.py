@@ -344,3 +344,59 @@ def test_a_wide_angle_camera_with_barrel_distortion_works_in_the_corners(tmp_pat
     corner = Item("red-box", 660, 390, seed=1)  # where the lens shrinks and bends things most
     assert run(p, Script(Scene(fisheye=fe)).still(1.0).drop(corner).take("red-box")) == \
         [("added", "red-box"), ("removed", "red-box")]
+
+
+def _cloud_pipeline(tmp_path, answer, **cfg):
+    from kartcv.identify.hybrid import HybridIdentifier
+    w = world(tmp_path)
+    for k, v in cfg.items():
+        setattr(w.cfg, k, v)
+    calls = []
+
+    class Cloud:
+        def identify(self, crops):
+            calls.append(len(crops))
+            return answer
+
+    sink = MemorySink()
+    p = Pipeline(w.cfg, [0, 1], HybridIdentifier(None, Cloud(), w.catalog, w.cfg), w.features, [sink], tmp_path / "state")
+    return p, sink, calls
+
+
+def test_personal_items_are_remembered_but_never_billed(tmp_path):  # purse, phone, jacket, own bag
+    from kartcv.identify.cloud import CloudAnswer
+    p, sink, _ = _cloud_pipeline(tmp_path, CloudAnswer(None, 0.9, "black leather purse", personal=True),
+                                 personal_items=True)
+    sc = Script(Scene()).still(1.0).drop(RED)
+    assert run(p, sc) == [] and len(p.cart.instances) == 1 and next(iter(p.cart.instances.values())).personal
+    n = len(sc.ticks)
+    sc.take("red-box")
+    assert run(p, sc, n) == [] and len(p.cart.instances) == 0 and sink.events == []
+
+
+def test_thats_mine_marks_an_unknown_personal_so_its_removal_is_silent(tmp_path):
+    from kartcv.identify.cloud import CloudAnswer
+    p, sink, _ = _cloud_pipeline(tmp_path, CloudAnswer(None, 0.3, "a phone?"))
+    sc = Script(Scene()).still(1.0).drop(RED)
+    assert run(p, sc) == [("added", None)]
+    assert p.mark_personal(sink.events[0].event_id) is True and p.mark_personal("no-such-event") is False
+    n = len(sc.ticks)
+    sc.take("red-box")
+    assert run(p, sc, n) == [] and len(p.cart.instances) == 0
+
+
+def test_an_edge_origin_blob_never_goes_to_claude_and_leaves_no_crops(tmp_path):  # a child's hand, held still
+    from kartcv.identify.cloud import CloudAnswer
+    p, sink, calls = _cloud_pipeline(tmp_path, CloudAnswer("green-bag", 0.9, "bag"))
+    run(p, Script(Scene()).still(1.0).hand_rest(5.0))  # arm-like, still past the recheck
+    assert calls == []  # nothing reached Claude
+    adds = [e for e in sink.events if e.type == "added"]
+    assert adds and all(e.product_id is None and e.crops == [] for e in adds)
+    assert not any((tmp_path / "state" / "crops").glob(f"{adds[0].event_id}_*"))
+
+
+def test_edge_privacy_off_restores_claude_for_rechecked_blobs(tmp_path):
+    from kartcv.identify.cloud import CloudAnswer
+    p, sink, calls = _cloud_pipeline(tmp_path, CloudAnswer("green-bag", 0.9, "bag"), edge_privacy=False)
+    run(p, Script(Scene()).still(1.0).drop(TALL).still(4.0))
+    assert calls and sink.events[0].product_id == "green-bag"

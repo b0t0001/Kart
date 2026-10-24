@@ -39,9 +39,11 @@ ev();setInterval(ev,2000);
 class ControlServer:
     def __init__(self, port: int, status_fn: Callable[[], dict], reset_fn: Callable[[], None],
                  frames_fn: Callable[[], dict] | None = None, debug_view: bool = False,
-                 crops_dir: Path | None = None, host: str = "0.0.0.0", overlay_fn: Callable | None = None):
+                 crops_dir: Path | None = None, host: str = "0.0.0.0", overlay_fn: Callable | None = None,
+                 personal_fn: Callable[[str], bool] | None = None):
         self.status_fn, self.reset_fn, self.frames_fn = status_fn, reset_fn, frames_fn
         self.overlay_fn = overlay_fn  # (cam, img) -> img with the ROI outline; only when ?overlay=1
+        self.personal_fn = personal_fn  # POST /personal {"event_id"}: "that's mine" from the iPad/backend
         self.debug_view = debug_view
         self.crops_dir = Path(crops_dir) if crops_dir else None
         self._httpd = ThreadingHTTPServer((host, port), self._handler())
@@ -106,10 +108,19 @@ class ControlServer:
                 return self._404()
 
             def do_POST(self):
-                if urllib.parse.urlparse(self.path).path != "/reset":
-                    return self._404()
-                srv.reset_fn()
-                self._send(200, b'{"ok": true}', "application/json")
+                path = urllib.parse.urlparse(self.path).path
+                if path == "/reset":
+                    srv.reset_fn()
+                    return self._send(200, b'{"ok": true}', "application/json")
+                if path == "/personal" and srv.personal_fn:
+                    try:
+                        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0) or 0)) or b"{}")
+                        event_id = str(body["event_id"])
+                    except (ValueError, KeyError, TypeError):
+                        return self._send(400, b'{"ok": false}', "application/json")
+                    ok = bool(srv.personal_fn(event_id))
+                    return self._send(200, json.dumps({"ok": ok}).encode(), "application/json")
+                return self._404()
 
         return Handler
 

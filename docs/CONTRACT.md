@@ -1,4 +1,4 @@
-# KART integration contract — v0.14 (DRAFT)
+# KART integration contract — v0.16 (DRAFT)
 
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
@@ -186,6 +186,9 @@ Spec: `docs/specs/2026-10-24-member-memory-design.md`. Flag: `member_memory`. Ro
 - **iPad:** reads `member_id`, `member_rev`, `demo_date` and `features.member_memory`. The member UI is shown only when the flag is on.
 - **Privacy** (Visa trust): demo IDs only, guest by default, sign-in lasts one trip, a "What Kart remembers" sheet with a one-tap Forget per memory, and **Forget me** (touch-only, with a confirmation).
 
+### "That's mine" / personal items: DROPPED (v0.16)
+Dylan decided physical edge cases like personal items aren't in scope. Nothing was built in the backend or iPad. CV's `personal_items` (off) and `edge_privacy` (**off**) flags stay in `pi/`, unused.
+
 ### Shared hosted project rules (v0.11)
 
 - **Only the demo operator runs `db.py reset-demo` on hosted**, right before judging. It re-seeds the catalog, wipes the merchant change log, and resets cart 7 for everyone.
@@ -350,3 +353,5 @@ All three feature chats work in the **same main checkout**, so stay inside your 
 - v0.12 — Quantity nudges (beta, behind the `quantity_nudges` flag, off by default): `carts.nudge`, `plan[].basis`, `dismiss_nudge`, `set_feature`, `carts.features`; CV `claude_count` (off by default). The stable rollback point is tag `stable-pre-nudges`.
 - v0.13 — short_name becomes a natural spoken name (≤ 16 chars). Quantity nudges pass the on-device voice test (beta, still off by default); a combined checkout nudge is in progress.
 - v0.14 — Member memory (beta, flag `member_memory`, off by default) recorded from the member chat's proposal. It's built on branch `member-memory` and merged by the manager.
+- v0.15 — "That's mine": `cart_events.resolution`, RPC `mark_personal`, an iPad button and voice phrase, and the CV watcher. CV flags `personal_items` (off) and `edge_privacy` (on).
+- v0.16 — "That's mine" DROPPED (out of scope per Dylan). `edge_privacy` goes back to off by default.

@@ -18,7 +18,7 @@ class _Fixed:
     def __init__(self, product_id: str, name: str):
         self.answer = Identification(product_id, 1.0, "local", name)
 
-    def identify(self, crops, cloud_crops=None) -> Identification:
+    def identify(self, crops, cloud_crops=None, allow_cloud=True) -> Identification:
         return self.answer
 
 

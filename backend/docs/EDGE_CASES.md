@@ -1,5 +1,7 @@
 # Real-world edge cases: market backend (pricing, deals, stock, routing, checkout, data, merchant)
 
+> Set aside: this is a backend-robustness list. Dylan's "edge cases" are shopper conversations with Kart, covered in `SHOPPER_INTERACTIONS.md`. It's kept here for later.
+
 Each case below was checked against the code as built (2026-10-24), not against intent. Nothing
 here is implemented yet; the manager picks. Cost: **S** ≈ under 1 h with tests, **M** ≈ 1–3 h,
 **L** = a feature.

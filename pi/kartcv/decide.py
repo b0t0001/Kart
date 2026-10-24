@@ -37,6 +37,8 @@ class Decision:
     instance_id: str | None = None                       # removed / moved
     awaiting: dict[int, list] = field(default_factory=dict)  # added: cameras whose view was held back
     count: int = 1  # added: identical units in this blob (claude_count beta); one event and one unit each
+    personal: bool = False  # the shopper's own belonging: memory only, no event
+    private: bool = False   # came in from the frame edge: its photos never leave the cart (edge_privacy)
 
 
 def _iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
@@ -113,18 +115,23 @@ def _views(blobs: list[Blob], features) -> dict[int, View]:
     return {b.cam: View(b.cam, b.box, features(b.after_core).tolist()) for b in blobs}
 
 
-def _decide_added(added: dict[int, list[Blob]], identifier, features) -> list[Decision]:
+def _decide_added(added: dict[int, list[Blob]], identifier, features, cfg) -> list[Decision]:
     if not added:
         return []
     n = max(len(bs) for bs in added.values())
     if n == 1:  # the common case: both cameras saw the same single item
         # biggest view first: if one camera's blob is spurious (a shadow), the good view leads (Claude gets ≤ 2)
         blobs = sorted((bs[0] for bs in added.values()), key=lambda b: -b.area_frac)
-        ident = identifier.identify([b.after_core for b in blobs], cloud_crops=[b.after for b in blobs])
+        private = cfg.edge_privacy and any(b.edge for b in blobs)
+        ident = identifier.identify([b.after_core for b in blobs], cloud_crops=[b.after for b in blobs],
+                                    allow_cloud=not private)
         return [Decision("added", ident.product_id, ident.confidence, ident.method, ident.label,
-                         sorted(b.cam for b in blobs), blobs, _views(blobs, features), count=max(1, ident.count))]
+                         sorted(b.cam for b in blobs), blobs, _views(blobs, features), count=max(1, ident.count),
+                         personal=ident.personal, private=private)]
 
-    idents = {id(b): identifier.identify([b.after_core], cloud_crops=[b.after]) for bs in added.values() for b in bs}
+    idents = {id(b): identifier.identify([b.after_core], cloud_crops=[b.after],
+                                         allow_cloud=not (cfg.edge_privacy and b.edge))
+              for bs in added.values() for b in bs}
     by_pid: dict[str, dict[int, list[Blob]]] = {}
     for cam, bs in added.items():
         for b in bs:
@@ -145,14 +152,15 @@ def _decide_added(added: dict[int, list[Blob]], identifier, features) -> list[De
     for conf, pid, unit in candidates[:n]:
         first = idents[id(unit[0])]
         decisions.append(Decision("added", pid, conf, first.method, first.label,
-                                  sorted(b.cam for b in unit), unit, _views(unit, features), count=max(1, first.count)))
+                                  sorted(b.cam for b in unit), unit, _views(unit, features), count=max(1, first.count),
+                                  private=cfg.edge_privacy and any(b.edge for b in unit)))
         used.update(id(b) for b in unit)
 
     busiest = max(added, key=lambda c: len(added[c]))
     for b in [b for b in added[busiest] if id(b) not in used][: n - len(decisions)]:
         ident = idents[id(b)]
-        decisions.append(Decision("added", None, ident.confidence, "none", ident.label, [b.cam], [b],
-                                  _views([b], features)))
+        decisions.append(Decision("added", None, ident.confidence, ident.method, ident.label, [b.cam], [b],
+                                  _views([b], features), personal=ident.personal, private=cfg.edge_privacy and b.edge))
     return decisions
 
 
@@ -212,7 +220,7 @@ def _decide_removed(removed: dict[int, list[Blob]], cart: CartMemory, features, 
         inst: Instance = cart.instances[iid]
         blobs = best_blobs[iid]
         out.append(Decision("removed", inst.product_id, min(1.0, max(0.0, best_sim[iid])), "memory", inst.label,
-                            sorted(blobs), list(blobs.values()), {}, iid))
+                            sorted(blobs), list(blobs.values()), {}, iid, personal=inst.personal))
     return out
 
 
@@ -276,7 +284,7 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
     # cameras that had a clean look this settle: earlier held-back spots in them have had their chance
     cart.expire_awaiting({r.cam for r in results if r.status in ("blobs", "none") and not r.deferred})
 
-    decisions = _decide_added(added, identifier, features) + _decide_removed(removed, cart, features, cfg)
+    decisions = _decide_added(added, identifier, features, cfg) + _decide_removed(removed, cart, features, cfg)
     held = {r.cam: list(r.deferred) for r in results if r.deferred}
     for d in decisions:
         if d.kind == "added":
@@ -286,7 +294,7 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
 
 def apply_decision(cart: CartMemory, d: Decision) -> Instance | None:
     if d.kind == "added":
-        return cart.add(d.product_id, d.label, d.views, d.awaiting)
+        return cart.add(d.product_id, d.label, d.views, d.awaiting, personal=d.personal)
     if d.kind == "removed":
         return cart.remove(d.instance_id) if d.instance_id in cart.instances else None
     if d.kind == "moved":

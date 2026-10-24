@@ -15,23 +15,26 @@ class Identification:
     method: str  # "local" | "cloud" | "none"
     label: str
     count: int = 1  # identical units in this blob (claude_count beta)
+    personal: bool = False  # the shopper's own belonging: remember it, never bill it (personal_items)
 
 
 class HybridIdentifier:
     def __init__(self, gallery, cloud, catalog, cfg):
         self.gallery, self.cloud, self.catalog, self.cfg = gallery, cloud, catalog, cfg
 
-    def _oversized(self, pid: str, crops: list[np.ndarray]) -> bool:
+    def _oversized(self, pid: str, crops: list[np.ndarray], allow_cloud: bool = True) -> bool:
         """claude_count: is this blob much bigger than that product's enrolled single-unit photos?"""
-        if not (self.cfg.claude_count and self.cloud is not None and crops):
+        if not (allow_cloud and self.cfg.claude_count and self.cloud is not None and crops):
             return False
         typical = getattr(self.gallery, "typical_area", lambda _: None)(pid)
         if not typical:
             return False
         return max(c.shape[0] * c.shape[1] for c in crops) >= OVERSIZE * typical
 
-    def identify(self, crops: list[np.ndarray], cloud_crops: list[np.ndarray] | None = None) -> Identification:
-        """`crops` are tight (what the gallery holds); `cloud_crops` may be padded for Claude's context."""
+    def identify(self, crops: list[np.ndarray], cloud_crops: list[np.ndarray] | None = None,
+                 allow_cloud: bool = True) -> Identification:
+        """`crops` are tight (what the gallery holds); `cloud_crops` may be padded for Claude's context.
+        allow_cloud=False keeps the photos on the cart (an arm-like change: maybe a child's hand)."""
         ranked = self.gallery.score(crops) if self.gallery is not None else []
         # A gallery product the merchant removed must never be billed.
         ranked = [(pid, s) for pid, s in ranked if self.catalog.get(pid) is not None]
@@ -42,7 +45,7 @@ class HybridIdentifier:
             margin = top - ranked[1][1] if len(ranked) > 1 else top
             if top >= self.cfg.local_min_score and margin >= self.cfg.local_min_margin:
                 local = Identification(top_pid, top, "local", self.catalog.name(top_pid))
-                if not self._oversized(top_pid, crops):
+                if not self._oversized(top_pid, crops, allow_cloud):
                     return local
                 # claude_count: much bigger than one enrolled unit, so maybe several. Let Claude count.
                 a = self.cloud.identify(cloud_crops or crops)
@@ -51,8 +54,10 @@ class HybridIdentifier:
                 return local
 
         cloud_label = None
-        if self.cloud is not None and (cloud_crops or crops):
+        if allow_cloud and self.cloud is not None and (cloud_crops or crops):
             a = self.cloud.identify(cloud_crops or crops)
+            if a.personal and self.cfg.personal_items:
+                return Identification(None, a.confidence, "personal", a.label or "personal item", personal=True)
             if a.product_id is not None and self.catalog.get(a.product_id) and a.confidence >= self.cfg.cloud_min_conf:
                 return Identification(a.product_id, a.confidence, "cloud", self.catalog.name(a.product_id),
                                       a.count if self.cfg.claude_count else 1)

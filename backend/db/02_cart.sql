@@ -543,7 +543,10 @@ begin
   end if;
 
   if p_resolves_event_id is not null then
-    update cart_events set resolved_at = now()
+    -- "Yes" / "Something else" add the real product (confirmed); "Remove" or the item leaving the
+    -- basket is a removal (removed)
+    update cart_events set resolved_at = now(),
+                           resolution = case when p_type = 'removed' then 'removed' else 'confirmed' end
     where event_id = p_resolves_event_id and cart_id = p_cart_id and resolved_at is null;
   end if;
 
@@ -603,6 +606,21 @@ begin
   where c.cart_id = p_cart_id and o.cart_id = c.cart_id and o.trip_id = c.trip_id
     and o.deal_id = c.suggestion->>'deal_id' and o.dismissed_at is null;
   update carts set suggestion = null where cart_id = p_cart_id;
+  return recompute_cart(p_cart_id);
+end $$;
+
+-- "That's mine" (v0.15): the unrecognized thing is the shopper's own (a phone, a bag, a water
+-- bottle). Resolves that unknown add without billing anything, so checkout isn't blocked.
+create or replace function mark_personal(p_cart_id text, p_event_id uuid)
+returns carts language plpgsql security definer set search_path = public as $$
+begin
+  perform 1 from carts where cart_id = p_cart_id for update;
+  update cart_events set resolved_at = now(), resolution = 'personal'
+  where event_id = p_event_id and cart_id = p_cart_id
+    and type = 'added' and product_id is null and resolved_at is null;
+  if not found then
+    raise exception 'not an unresolved unknown item on cart %: %', p_cart_id, p_event_id;
+  end if;
   return recompute_cart(p_cart_id);
 end $$;
 
@@ -701,4 +719,5 @@ grant execute on function set_plan(text, jsonb)          to anon, authenticated,
 grant execute on function reset_cart(text)               to anon, authenticated, service_role;
 grant execute on function dismiss_suggestion(text)       to anon, authenticated, service_role;
 grant execute on function set_feature(text, text, boolean)  to anon, authenticated, service_role;
+grant execute on function mark_personal(text, uuid)         to anon, authenticated, service_role;
 grant execute on function dismiss_nudge(text, text)         to anon, authenticated, service_role;

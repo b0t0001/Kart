@@ -1,6 +1,6 @@
 # KART edge-case catalog
 
-**Focus (Dylan, 2026-10-24): real-world SHOPPER INTERACTIONS with Kart.** Editing the list Kart makes, changing plans, constraints, questions mid-trip, and fixing mistakes, all handled seamlessly. That's the moat, and it doubles as **judge Q&A prep** ("what if I say…?"). The technical robustness work is in the appendix.
+**Focus (Dylan, 2026-10-24): real-world SHOPPER INTERACTIONS with Kart, i.e. conversations only.** Physical edge cases (bags, personal items, camera quirks) are OUT of scope. Editing the list Kart makes, changing plans, constraints, questions mid-trip, and fixing mistakes, all handled seamlessly. That's the moat, and it doubles as **judge Q&A prep** ("what if I say…?"). The technical robustness work is in the appendix.
 
 Owned by the manager. Status: **good** · **weak** · **broken** · **building**. Cost: S / M / L.
 
@@ -14,7 +14,7 @@ The voice chat is running each scenario against the real model and recording Kar
 | **Constraints** | gluten-free / vegetarian / no dairy · "keep it under $30" · "what's cheapest?" | testing |
 | **Questions mid-trip** | where is X · what's next · how much is X · what's on sale · what's in my cart · my total · did you get the chips · quick recipe help | testing |
 | **Conversation control** | say that again · slower · stop talking / be quiet · off-topic question · mumbled request · Spanish | testing |
-| **Cart mismatches** | "that's the wrong salsa" · "I put that back" · "I'm not buying that anymore" · personal item in the basket → **"that's mine"** | testing / building |
+| **Cart mismatches** | "that's the wrong salsa" · "I put that back" · "I'm not buying that anymore" | testing |
 | **Member moments** (beta) | "not me" after the greeting · "forget me" · "don't remember that" · "what did I buy last time?" · "what do you know about me?" | building (member chat) |
 
 ---
