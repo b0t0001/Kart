@@ -28,7 +28,7 @@ from kartcv.roi import draw_outline  # noqa: E402
 from kartcv.server import ControlServer  # noqa: E402
 from kartcv.sinks import ConsoleSink, HttpSink, JsonlSink  # noqa: E402
 from kartcv.sources import iter_ticks, load_recording, open_cameras  # noqa: E402
-from kartcv.trip import TripWatcher  # noqa: E402
+from kartcv.trip import PersonalWatcher, TripWatcher  # noqa: E402
 
 log = logging.getLogger("kart")
 TICK_S = 0.1
@@ -132,6 +132,9 @@ def start_extras(cfg, env, pipeline) -> list:
                 log.info("catalog refreshed: %d products", len(fresh.ids()))
 
         extras.append(TripWatcher(url, key, cfg.cart_id, pipeline.state_dir / "trip.json", on_new_trip))
+        if cfg.personal_items:  # beta: "That's mine" from the iPad / voice agent; its later removal emits nothing
+            extras.append(PersonalWatcher(url, key, cfg.cart_id, pipeline.state_dir / "personal.json",
+                                          pipeline.mark_personal))
     return extras
 
 
