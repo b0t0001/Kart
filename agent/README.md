@@ -36,12 +36,19 @@ Live checks against the local Supabase (`backend/docs/LOCAL_SUPABASE.md`): expor
 
 ## Deploy (needs your keys)
 
-1. Install the Cartesia CLI and sign in: `cartesia auth login`.
-2. `cd agent && cartesia init`, then create a new agent named `kart`.
-3. Set its environment: `cartesia env set ANTHROPIC_API_KEY=… SUPABASE_URL=… SUPABASE_ANON_KEY=… CART_ID=7` (use the hosted Supabase values; the cloud can't reach your Mac's localhost).
-4. `cartesia deploy`.
-5. Put the agent id in the repo `.env` as `CARTESIA_AGENT_ID` (plus `CARTESIA_API_KEY`), and redeploy the backend's `voice-token` function (`backend/deploy_functions.sh`), so the iPad can get a token.
-6. Launch the iPad app with `-KartVoice line`.
+`agent/scripts/deploy-line.sh` does steps 2–6 for you: run it yourself, since it signs in with your key and accepts Cartesia's terms. The steps, by hand:
+
+1. Create a Cartesia API key at play.cartesia.ai/keys (pick your organization) and put it in the repo `.env` as `CARTESIA_API_KEY`.
+2. Install the Cartesia CLI: `curl -fsSL https://cartesia.sh | sh`. Running it accepts Cartesia's terms.
+3. `cd agent && cartesia auth login`, and paste the same API key when it asks.
+4. `cartesia init`: create a new agent named `kart` in your organization.
+5. Give the agent only what it needs. Don't use `cartesia env set --from ../.env`: that would upload the service-role key too.
+
+   ```bash
+   set -a && . ../.env && set +a && cartesia env set ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" CART_ID=7
+   ```
+6. `cartesia deploy`, then `cartesia status` prints the agent id. Put it in the repo `.env` as `CARTESIA_AGENT_ID`, and redeploy the backend's `voice-token` function (`backend/deploy_functions.sh`), so the iPad can get a token.
+7. On the iPad: demo controls (three-finger long press) → **Use Kart's real voice, Cartesia (relaunch)**, then quit and reopen the app. From Xcode, `-KartVoice line` does the same for one run.
 
 Try it locally first: run `.venv/bin/python main.py` with the same env vars plus `PORT=8000`, then `cartesia chat 8000`.
 

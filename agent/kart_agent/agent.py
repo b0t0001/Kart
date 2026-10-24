@@ -17,12 +17,15 @@ SPEAKING_EVENTS = {"suggestion", "deal_changed", "cart_changed"}
 class KartAgent:
     """One per call. `run_filter` decides which events start a turn (a new turn cuts off the current one)."""
 
-    def __init__(self, backend: Any, brain: Brain, cart_id: str = "7", coalesce_seconds: float = 0.6):
+    def __init__(self, backend: Any, brain: Brain, cart_id: str = "7", coalesce_seconds: float = 0.6,
+                 context_wait_seconds: float = 1.0):
         self.backend = backend
         self.brain = brain
-        self.cart_id = cart_id
+        self.cart_id = cart_id                      # the default; the iPad's trip_context names the real one
         self.trip_id: str | None = None
         self.coalesce_seconds = coalesce_seconds    # an "added" line waits this long for a paired suggestion
+        self.context_wait_seconds = context_wait_seconds   # how long the greeting waits for the iPad's trip_context
+        self._context = asyncio.Event()
         self._plan: list[dict[str, Any]] = []
         self._items: list[dict[str, Any]] = []
         self._catalog: list[dict[str, Any]] = []
@@ -39,6 +42,7 @@ class KartAgent:
             if meta.get("type") == "trip_context":       # state only: never interrupt Kart for it
                 self.cart_id = str(meta.get("cart_id") or self.cart_id)
                 self.trip_id = meta.get("trip_id") or self.trip_id
+                self._context.set()
                 return False
             if meta.get("type") not in SPEAKING_EVENTS:
                 return False
@@ -58,6 +62,10 @@ class KartAgent:
 
     async def process(self, env: Any, event: Any) -> AsyncIterator[AgentSendText]:
         if isinstance(event, CallStarted):
+            try:                                         # the iPad says which cart right after the call starts
+                await asyncio.wait_for(self._context.wait(), self.context_wait_seconds)
+            except TimeoutError:
+                pass
             await self._refresh()
             if self._plan or self._items:                # rejoining a trip in progress (app relaunch, reconnect)
                 return

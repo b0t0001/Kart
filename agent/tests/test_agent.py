@@ -1,3 +1,5 @@
+import asyncio
+
 from line.events import AgentSendText, CallStarted, UserCustomSent, UserTextSent, UserTurnEnded, UserTurnStarted
 
 from kart_agent.agent import GREETING, KartAgent
@@ -12,8 +14,12 @@ async def run(agent, event):
 
 def make(turns=()):
     backend = FakeBackend()
-    agent = KartAgent(backend=backend, brain=Brain(llm=FakeLLM(list(turns))), cart_id="7")
+    agent = KartAgent(backend=backend, brain=Brain(llm=FakeLLM(list(turns))), cart_id="7", context_wait_seconds=0.01)
     return agent, backend
+
+
+def captioned_carts(backend):
+    return [params["p_cart_id"] for name, params in backend.calls if name == "append_transcript"]
 
 
 async def test_greets_on_call_start_and_writes_caption():
@@ -84,3 +90,19 @@ async def test_no_greeting_when_rejoining_a_trip_in_progress():
     agent, backend = make()
     backend.cart["plan"] = [{"product_id": "rao-marinara", "reason": "pasta", "done": False}]
     assert await run(agent, CallStarted()) == []
+
+
+async def test_the_greeting_goes_to_the_ipads_cart_not_the_default_one():
+    backend = FakeBackend()
+    agent = KartAgent(backend=backend, brain=Brain(llm=FakeLLM([])), cart_id="7", context_wait_seconds=1.0)
+    greeting = asyncio.create_task(run(agent, CallStarted()))
+    await asyncio.sleep(0.05)                              # the iPad's trip_context lands just after the call starts
+    agent.run_filter(UserCustomSent(metadata={"type": "trip_context", "cart_id": "ipad-voice", "trip_id": "t"}))
+    assert await greeting == [GREETING]
+    assert captioned_carts(backend) == ["ipad-voice"]
+
+
+async def test_without_trip_context_it_greets_on_its_own_cart_after_a_short_wait():
+    agent, backend = make()
+    assert await run(agent, CallStarted()) == [GREETING]
+    assert captioned_carts(backend) == ["7"]
