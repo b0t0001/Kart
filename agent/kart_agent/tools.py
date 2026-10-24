@@ -153,6 +153,9 @@ def _str(args: dict[str, Any], key: str) -> str:
 
 
 async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any:
+    from .memory import MEMBER_TOOL_NAMES, member_dispatch   # member memory beta (memory imports this module)
+    if name in MEMBER_TOOL_NAMES:
+        return await member_dispatch(name, args, ctx)
     backend, cart_id = ctx["backend"], ctx["cart_id"]
     if name == "search_catalog":
         query = _tokens(_str(args, "query"))
