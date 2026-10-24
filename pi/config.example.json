@@ -37,7 +37,7 @@
   "cloud_min_conf": 0.6,
   "claude_count": false,
   "personal_items": false,
-  "edge_privacy": true,
+  "edge_privacy": false,
   "cloud_timeout_s": 6.0,
   "catalog_path": "data/store.json",
   "state_dir": "pi/state",

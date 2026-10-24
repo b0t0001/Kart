@@ -53,7 +53,7 @@ class Config:
     cloud_min_conf: float = 0.6
     claude_count: bool = False  # BETA (contract v0.12): Claude counts identical units in one blob
     personal_items: bool = False  # Claude may answer "personal" (purse, phone…): remembered, never billed
-    edge_privacy: bool = True  # a change that came in from the frame edge (an arm, a child's hand) never goes to Claude
+    edge_privacy: bool = False  # on: a change that came in from the frame edge (an arm, a child's hand) never goes to Claude
     cloud_timeout_s: float = 6.0  # Haiku vision + upload over a phone hotspot regularly exceeds 3 s
 
     # files, relative to the repo root unless absolute
