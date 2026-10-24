@@ -109,3 +109,20 @@ def test_reset_restart_and_missing_camera(tmp_path):
     for t in sc.ticks:
         t[1] = None
     assert run(p3, sc) == [("added", "red-box")]
+
+
+def test_event_reaches_sinks_before_cart_memory_changes(tmp_path):  # review I6: crash-safe ordering
+    seen = []
+
+    class Probe:
+        def send(self, ev):
+            seen.append((ev.type, len(p.cart.instances)))
+
+        def close(self):
+            pass
+
+    p, _ = make(tmp_path)
+    p.sinks.append(Probe())
+    sc = Script(Scene()).still(1.0).drop(RED).take("red-box")
+    run(p, sc)
+    assert seen == [("added", 0), ("removed", 1)]  # memory changes only after the event is safely queued

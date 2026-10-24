@@ -147,12 +147,14 @@ class Pipeline:
                 ev.crops.append(rel)
                 if b.cam in d.views:
                     d.views[b.cam].crop_path = rel
-            apply_decision(self.cart, d)
+            # Queue the event (outbox) before changing memory: if the process dies in between, the
+            # backend still gets the event and memory catches up on the next settle, not the reverse.
             for s in self.sinks:
                 try:
                     s.send(ev)
                 except Exception:  # one broken sink must not stop the cart
                     log.exception("sink %s failed", type(s).__name__)
+            apply_decision(self.cart, d)
             with self._lock:
                 self._last_events.append(ev.to_json())
             events.append(ev)
