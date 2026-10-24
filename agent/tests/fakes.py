@@ -112,7 +112,9 @@ class FakeBackend:
                 self.cart["budget_left"] = round(self.cart["budget"] - self.cart.get("total", 0), 2)
         if name == "set_cart_status":
             self.cart["status"] = params["p_status"]
-        if name == "dismiss_suggestion":
+        if name == "dismiss_suggestion":                  # v0.20: a shopper's no quiets the trip's deal cards
+            if params.get("p_quiet", True) and self.cart.get("suggestion") is not None:
+                self.cart["deals_quiet"] = True
             self.cart["suggestion"] = None
         if name == "append_transcript":
             self.transcript.append((params["p_role"], params["p_text"]))

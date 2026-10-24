@@ -398,7 +398,10 @@ class KartAgent:
                 await asyncio.sleep(self.coalesce_seconds)   # a paired deal suggestion arriving now replaces this line
             await self._refresh()
             if meta.get("type") == "suggestion" and self._avoided(meta.get("product_id")):
-                await run_tool("dismiss_suggestion", {}, self._ctx())   # its card goes away; never offered again
+                try:                                     # its card goes away; the shopper never heard it, so
+                    await self.backend.rpc("dismiss_suggestion", p_cart_id=self.cart_id, p_quiet=False)   # not quiet
+                except Exception:
+                    pass
                 add, self._last_add = self._last_add, None
                 got = proactive_line(add[0], self._catalog, self._plan, self._items, self._meal, self._nudges) \
                     if add and time.monotonic() - add[1] < ADD_THEN_DEAL_SECONDS else None
@@ -450,6 +453,8 @@ class KartAgent:
         if self._quiet:                                  # "be quiet": the cards will still show at the shelf
             return
         await self._refresh()
+        if self._cart.get("deals_quiet"):                # the shopper said "No thanks" to a card: no more offers
+            return
         deals = await self._relevant_deals()
         if not deals:
             return

@@ -608,7 +608,7 @@ async def test_a_deal_that_breaks_the_diet_is_never_read_out_and_its_card_goes_a
     no_dairy(agent)
     assert agent.run_filter(UserCustomSent(metadata=PARM_OFFER))         # handled, quietly
     assert await run(agent, UserCustomSent(metadata=PARM_OFFER)) == []
-    assert ("dismiss_suggestion", {"p_cart_id": "7"}) in backend.calls and agent._offer is None
+    assert ("dismiss_suggestion", {"p_cart_id": "7", "p_quiet": False}) in backend.calls and agent._offer is None
 
 
 async def test_the_deals_question_leaves_out_deals_that_break_the_diet():
@@ -626,7 +626,7 @@ async def test_a_deal_on_something_taken_off_the_list_is_not_offered():
         ["Sure.", " Took parmesan off your list."]
     assert agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
     assert await run(agent, UserCustomSent(metadata=PARM_OFFER)) == []     # "we have some at home": no deal on it
-    assert ("dismiss_suggestion", {"p_cart_id": "7"}) in backend.calls
+    assert ("dismiss_suggestion", {"p_cart_id": "7", "p_quiet": False}) in backend.calls
 
 
 async def test_each_turn_carries_the_live_cart_so_simple_questions_need_no_tool():
@@ -666,3 +666,24 @@ async def test_a_guests_bare_yeah_answers_the_question_claude_just_asked():
     await run(agent, UserTurnEnded(content=[UserTextSent(content="What was that deal again?")]))
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Yeah.")])) == ["Done."]   # not dropped as filler
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Okay.")])) == []         # nothing asked: still quiet
+
+
+QUESO_OFFER = {"type": "suggestion", "deal_id": "d-queso-1off", "product_id": "queso", "text": "Queso is $1 off in Aisle 5. Want it?"}
+
+
+async def test_an_avoided_card_cleared_for_the_shopper_does_not_quiet_the_other_deals():
+    agent, backend = make()
+    await agent._refresh()
+    no_dairy(agent)
+    backend.cart["suggestion"] = {k: PARM_OFFER[k] for k in ("deal_id", "product_id", "text")}   # the card is up
+    await run(agent, UserCustomSent(metadata=PARM_OFFER))       # cheese: cleared quietly, p_quiet false
+    assert not backend.cart.get("deals_quiet")
+    assert agent.run_filter(UserCustomSent(metadata=QUESO_OFFER))
+    assert await run(agent, UserCustomSent(metadata=QUESO_OFFER)) == ["Queso is $1 off in Aisle 5. Want it?"]
+
+
+async def test_after_no_thanks_kart_asks_about_no_more_deals_this_trip():
+    agent, backend = planned_agent()
+    backend.cart["deals_quiet"] = True                            # the shopper said "No thanks" to a card
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    assert cards(outs) == []                                      # no "one deal goes with your list"
