@@ -22,6 +22,8 @@ public enum DemoScript {
         "No thanks",
         "Taco night for eight.",
         "I'm done.",
+        "Hey Kart",                                             // member memory beta (after the pasta lines,
+        "I'm hosting Friendsgiving next Saturday, ten people.", // so their debug ids stay put)
     ]
 }
 

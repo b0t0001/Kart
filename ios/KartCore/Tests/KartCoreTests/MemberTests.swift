@@ -292,3 +292,43 @@ struct MemberContractTests {
         #expect(LineCodec.metadata(.memberIdle)["type"] as? String == "member_idle")
     }
 }
+
+/// The scripted Kart (offline demo mode) plays the member beat too.
+@MainActor struct MockMemberVoiceTests {
+    let clock = ManualClock(now: Date(timeIntervalSince1970: 1_792_868_400))
+
+    func setup(member: String? = "1029") async throws -> (MockKartBackend, MockAgentBrain) {
+        let b = MockKartBackend(catalog: try Fixtures.catalog(), clock: { [clock] in clock.now })
+        try await b.setFeature("member_memory", on: true)
+        try await b.startTrip()
+        if let member { try await b.signIn(memberId: member) }
+        return (b, MockAgentBrain(backend: b))
+    }
+
+    @Test func greetsAMemberWithTheirEvent() async throws {
+        let (_, brain) = try await setup()
+        #expect(brain.greeting() == "Welcome back, Dylan! Leo's soccer party is tomorrow. Want me to put up the list?")
+        let (_, guest) = try await setup(member: nil)
+        #expect(guest.greeting() == DemoScript.greeting)
+    }
+
+    @Test func heyKartAsksOncePerTrip() async throws {
+        let (_, brain) = try await setup()
+        #expect(await brain.respond(to: "Hey Kart") == "Any fun plans coming up I can help you shop for?")
+        #expect(await brain.respond(to: "Hey Kart") != "Any fun plans coming up I can help you shop for?")
+    }
+
+    @Test func friendsgivingIsRememberedWithAList() async throws {
+        let (b, brain) = try await setup()
+        #expect(await brain.respond(to: "I'm hosting Friendsgiving next Saturday, ten people.")
+                == "Ooh, fun. I'll remember that, and I started a list for it.")
+        let saved = try #require(b.memberProfile?.memories.first { $0.title == "Friendsgiving" })
+        #expect(saved.eventDate == "2026-10-31" && saved.items?.map(\.productId) == ["barilla-spaghetti", "rao-marinara", "french-baguette"])
+    }
+
+    @Test func yesShopsTheSavedList() async throws {
+        let (b, brain) = try await setup()
+        #expect(await brain.respond(to: "Yes") == "Done. Your Leo's soccer party list is up.")
+        #expect(Set(b.cart.plan.map(\.productId)) == ["barilla-spaghetti", "rao-marinara", "french-baguette"])
+    }
+}

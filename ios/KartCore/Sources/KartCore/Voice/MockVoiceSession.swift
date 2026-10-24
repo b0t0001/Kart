@@ -38,7 +38,7 @@ public final class MockVoiceSession: VoiceSession {
         guard !forcedOffline else { state = .offline; return }
         started = true
         state = .connecting
-        await speak(DemoScript.greeting)
+        await speak(brain.greeting())                           // a signed-in member hears their own
     }
 
     /// Rejoins a trip that's already under way (a demo scenario, an app relaunch) without greeting again.
