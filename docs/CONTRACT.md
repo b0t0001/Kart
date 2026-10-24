@@ -1,4 +1,4 @@
-# KART integration contract — v0.12 (DRAFT)
+# KART integration contract — v0.13 (DRAFT)
 
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
@@ -67,7 +67,7 @@ Rules: every physical demo prop (~10–15 real items at the table) has exactly o
 
 **Published (v0.4):** `data/store.json` v1 is on `main` (commit `e44879c`): 18 products, 5 deals, aisles `A1`–`A9` plus checkout zone `CK`. **Use it instead of the example above.** It adds these fields; all are additive, so ignoring them breaks nothing:
 - top-level `version` (int)
-- `products[].short_name` (≤ 11 chars, e.g. `"Parmesan"`): use it for `lcd_line1`, `next_step` and spoken lines
+- `products[].short_name` (e.g. `"Parmesan"`): use it for `next_step` and spoken lines. **v0.13: it's a natural spoken name, ≤ 16 chars** (e.g. `"Taco Seasoning"`). `lcd_line1` truncates on its own, and the LCD is deferred anyway.
 - `products[].stock` (int)
 - `deals[].ends_at` (ISO timestamp or null)
 - `deals[].type` can also be `"percent_off"` (`value` = percent). Only the backend does price math; readers display `label`.
@@ -300,3 +300,4 @@ All three feature chats work in the **same main checkout**, so stay inside your 
 - v0.10 — CV events gain `resolves_event_id`: a vision removal of an unknown unit resolves it, so checkout isn't blocked by a stray hand. Overnight as-built notes for CV.
 - v0.11 — Hosted is live (`go_live.sh` PASS). Shared hosted rules: only the demo operator runs `reset-demo`, and tests and rehearsals use throwaway carts. The merchant agent passed its real-Claude smoke test (`merchant/smoke.py`).
 - v0.12 — Quantity nudges (beta, behind the `quantity_nudges` flag, off by default): `carts.nudge`, `plan[].basis`, `dismiss_nudge`, `set_feature`, `carts.features`; CV `claude_count` (off by default). The stable rollback point is tag `stable-pre-nudges`.
+- v0.13 — short_name becomes a natural spoken name (≤ 16 chars). Quantity nudges pass the on-device voice test (beta, still off by default); a combined checkout nudge is in progress.
