@@ -737,3 +737,22 @@ Merge `main` into the branch first. Run `cd ios && xcodegen generate` after merg
   - the flag-off snapshot diff (empty);
   - the steps Dylan needs: the agent redeploy (`agent/scripts/deploy-line.sh`), plus `members.py seed` and turning the flag on for the demo cart;
   - the final RPC signatures, including `member_forget` returning jsonb.
+
+---
+
+## Addendum: demo v2 (Dylan, 2026-10-24, via the manager), as built
+
+- **Seed:** history only by default; `--with-party` adds Leo's party next Saturday (spaghetti ×3, marinara ×2).
+- **Agent:**
+  - a 2-week calendar in the member section ("next Saturday" = the first one after today);
+  - a readback from `save_for_later`;
+  - a fixed greeting line for an event within 2 days that has a saved list, with a deterministic yes (`shop_saved_list` plus the first stop) or no;
+  - a member's plain "yeah" after Kart's own question reaches Claude;
+  - a rejoined member call doesn't re-greet;
+  - `scripts/member_demo.py`, an in-process run with real Claude.
+- **iPad:**
+  - the mock has no party, and the scripted Kart plays Act 1 and Act 2;
+  - `AppModel.fastForward()` and `fastForwardLabel`: the day before the next event, then a new trip that is ended, so the iPad is back on Welcome signed out;
+  - the debug button "Fast-forward to … (day before …)";
+  - the UI test follows Act 1 → Act 2.
+- **Picks:** open slots never take a second item from the same saved list.

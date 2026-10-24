@@ -61,6 +61,7 @@ public enum LineCodec {
                   let text = meta["text"] as? String else { return .other }
             return .prompt(.digestDeal(dealId: dealId, productId: productId, text: text))
         case "digest_done": return .prompt(nil)
+        case "show_memories": return .prompt(.showMemories)
         default: return .other
         }
     }
@@ -80,8 +81,16 @@ public enum LineCodec {
     /// The agent reads these in `kart_agent/agent.py` and `lines.py`.
     public static func metadata(_ event: VoiceEvent) -> [String: Any] {
         switch event {
-        case .tripContext(let cartId, let tripId):
-            return ["type": "trip_context", "cart_id": cartId, "trip_id": tripId.uuidString.lowercased()]
+        case .tripContext(let cartId, let tripId, let memberId):
+            var meta: [String: Any] = ["type": "trip_context", "cart_id": cartId, "trip_id": tripId.uuidString.lowercased()]
+            if let memberId { meta["member_id"] = memberId }
+            return meta
+        case .lull:
+            return ["type": "lull"]
+        case .memberForgotten:
+            return ["type": "member_forgotten"]
+        case .memberIdle:
+            return ["type": "member_idle"]
         case .cartChanged(.added(let productId)):
             return ["type": "cart_changed", "change": "added", "product_id": productId]
         case .cartChanged(.removed(let productId)):
@@ -180,6 +189,9 @@ public final class LineVoiceSession: VoiceSession {
     @ObservationIgnored private var receiver: Task<Void, Never>?
     @ObservationIgnored private var ackWaiter: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var trip: (cartId: String, tripId: UUID)?
+    /// Member memory beta: the member the iPad last named for a trip, so every new call's own trip_context
+    /// (the first one, a reconnect, a wake from pause) still names them.
+    @ObservationIgnored private var member: (tripId: UUID, memberId: String)?
     @ObservationIgnored private var reconnecting = false
     @ObservationIgnored private let wakeAfter: Duration
     @ObservationIgnored private var paused = false
@@ -253,6 +265,8 @@ public final class LineVoiceSession: VoiceSession {
     }
 
     public func send(_ event: VoiceEvent) {
+        if case .tripContext(_, let tripId, let memberId) = event { member = memberId.map { (tripId, $0) } }
+        if case .memberForgotten = event { member = nil }        // a reconnect must not bring them back
         if case .tripContext = event {} else { lastActiveAt = Date() }
         guard let streamId, state != .offline else {
             if case .tripContext = event { return }            // every new call sends its own
@@ -312,7 +326,8 @@ public final class LineVoiceSession: VoiceSession {
             return false
         }
         state = .listening
-        send(.tripContext(cartId: trip.cartId, tripId: trip.tripId))   // a fresh call knows nothing yet
+        send(.tripContext(cartId: trip.cartId, tripId: trip.tripId,   // a fresh call knows nothing yet
+                          memberId: member?.tripId == trip.tripId ? member?.memberId : nil))
         if let unanswered = announce {
             announce = nil
             send(.reconnected(unanswered: unanswered))

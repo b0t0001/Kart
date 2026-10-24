@@ -17,6 +17,12 @@ struct ReceiptView: View {
                 Text("\(receipt.itemCount) \(receipt.itemCount == 1 ? "item" : "items") · \(Money.format(receipt.total))")
                     .font(Theme.body).foregroundStyle(Theme.inkSecondary)
             }
+            if let member = model.member {                    // member memory beta
+                Label(member.member.name.map { "Saved to \($0)'s history." } ?? "Saved to your history.",
+                      systemImage: "sparkles")
+                    .font(Theme.body).foregroundStyle(Theme.brandDeep)
+                    .accessibilityIdentifier("receipt.memberLine")
+            }
             Button {
                 Task { await model.finishTrip() }
             } label: {

@@ -31,6 +31,28 @@ commands run from the repo root. `P=backend/.venv/bin/python` is shorthand below
    It affects every team, so nobody else runs it or `reset-demo` on hosted. Rehearsals reset only
    their own cart: `$P backend/cart.py reset --cart <id>`.
 
+## Member memory beat (BETA, only if it ships)
+
+Spec §2. It needs `pre_judging.sh --members`, which seeds member 1029, "Dylan", with ten weeks of history and
+no party, and the flag on for cart 7: `$P backend/cart.py feature member_memory on`, or the iPad's demo switch.
+
+**Act 1: memory, made live.** Signed in as Dylan, mid-trip:
+1. On Welcome, tap **Member? Sign in** → `1029` → **That's me**.
+2. Say: "Oh, next Saturday is Leo's soccer team party, we'll need pasta for 12."
+   Kart: "Got it, I'll remember Leo's party on Saturday. Want me to save a list for it?"
+3. Say: "Yes." Kart: "Saved: three boxes of spaghetti and two jars of marinara for Leo's soccer team party."
+   The Parmesan stays off the list, so its deal card still fires.
+
+**Act 2: the fast-forward.**
+1. Open the demo controls (three-finger long press) and tap **Fast-forward to <the day before the party>**. The
+   cart's date moves, the trip ends, and the iPad goes back to Welcome, signed out.
+2. Sign in as 1029 again. Kart: "Welcome back, Dylan!" and then "Leo's soccer team party is tomorrow. Want the
+   list you saved?"
+3. Say: "Yes." Kart: "Done, it's on your list. First stop: …" From here the pasta demo carries on as usual.
+4. Optional: say "What do you know about me?" to open the memory sheet, where any memory can be forgotten.
+
+Afterwards: **Demo date → Today**. Rehearsals that skip Act 1: `members.py seed --with-party`.
+
 ## After the receipt (Dylan's actual purchases)
 
 Edit `data/store.json` with the exact names, sizes, shelf prices and camera descriptions, and set

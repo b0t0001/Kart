@@ -45,6 +45,12 @@ public final class AppModel {
     @ObservationIgnored private var announcedDeals: Set<String> = []
     @ObservationIgnored private var pendingDeals: [(deal: Deal, due: Date)] = []
     @ObservationIgnored private var lastActivity: Date
+    /// Member memory beta: the lull was sent this trip / the For you card was dismissed this trip.
+    @ObservationIgnored private var lullSent = false
+    private var forYouDismissed = false
+    /// "Still shopping, Dylan?" was asked (3 quiet minutes while signed in); any activity clears it.
+    public private(set) var stillThereAsked = false
+    private var memoriesOpenedByTap = false
     @ObservationIgnored private var bindings: [Task<Void, Never>] = []
 
     public static let dealAnnouncementGrace: TimeInterval = 1.5
@@ -124,6 +130,7 @@ public final class AppModel {
             lastActivity = clock()
             return
         }
+        if previous.memberId != cart.memberId { resendTripContext() }   // signed out by Kart ("not me") or elsewhere
         let changes = CartDiff.changes(from: previous, to: cart)
         for change in changes {
             switch change {
@@ -200,19 +207,26 @@ public final class AppModel {
 
     // MARK: Intents
 
-    public func startTrip() async {
+    public func startTrip(memberId: String? = nil) async {
         resetLocalTripState()
         do { try await backend.startTrip() } catch { return }
+        if let memberId, backend.cart.memberMemoryOn {
+            try? await backend.signIn(memberId: memberId)      // the beta switched off mid-session: shop as a guest
+        }
         lastCart = backend.cart
         baselineDeals = Dictionary(backend.catalog.deals.map { ($0.id, $0.label) }, uniquingKeysWith: { first, _ in first })
         lastActivity = clock()
         react(.wave)
         guard let tripId = backend.cart.tripId else { return }
+        // Also before the call starts: Kart's first words wait for it, and a member must be named in them.
+        voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId, memberId: backend.cart.memberId))
         await voice.start(cartId: backend.cart.cartId, tripId: tripId)
-        voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId))
+        voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId, memberId: backend.cart.memberId))
     }
 
     private func resetLocalTripState() {
+        lullSent = false
+        forYouDismissed = false
         locallyResolved = []
         acknowledgedNewDeals = []
         paymentState = .idle
@@ -322,8 +336,9 @@ public final class AppModel {
 
     public func retryVoice() async {
         guard let tripId = backend.cart.tripId else { return }
+        voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId, memberId: backend.cart.memberId))
         await voice.start(cartId: backend.cart.cartId, tripId: tripId)
-        voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId))
+        voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId, memberId: backend.cart.memberId))
     }
 
     public func clearCelebration() {
@@ -336,6 +351,7 @@ public final class AppModel {
 
     public func noteActivity() {
         lastActivity = clock()
+        stillThereAsked = false
         if voice.state == .paused { Task { await voice.resume() } }   // a tap wakes Kart
     }
 
@@ -355,6 +371,176 @@ public final class AppModel {
         await retryVoice()
     }
 
+    // MARK: Member memory (v0.14 beta)
+
+    /// The signed-in member's profile, only while the cart's beta is on.
+    public var member: MemberProfile? {
+        backend.cart.memberMemoryOn && backend.cart.memberId != nil ? backend.memberProfile : nil
+    }
+
+    private var onListOrInCart: Set<String> {
+        Set(backend.cart.plan.map(\.productId) + backend.cart.items.map(\.productId))
+    }
+
+    /// This week's picks not yet on the list or in the cart; empty once dismissed this trip.
+    public var forYouPicks: [MemberPick] {
+        guard !forYouDismissed, let member else { return [] }
+        return member.picks.filter { !onListOrInCart.contains($0.productId) }
+    }
+
+    /// The nearest coming event with a saved list that isn't all on today's list yet.
+    public var savedEvent: MemberMemory? {
+        guard !forYouDismissed, let member else { return nil }
+        let listed = Set(backend.cart.plan.map(\.productId))
+        return member.memories.first { memory in
+            memory.kind == "event" && memory.isUpcoming
+                && (memory.items ?? []).contains { !listed.contains($0.productId) }
+        }
+    }
+
+    public func addPick(_ pick: MemberPick) async {
+        noteActivity()
+        await addToPlan(pick.productId, reason: "for you")
+    }
+
+    /// "Shop it": the saved list joins today's, keeping what's already there.
+    public func shopSavedList(_ memory: MemberMemory) async {
+        noteActivity()
+        let listed = Set(backend.cart.plan.map(\.productId))
+        let added = (memory.items ?? []).filter { !listed.contains($0.productId) }
+            .map { PlanItem(productId: $0.productId, reason: memory.title, qty: $0.qty) }
+        guard !added.isEmpty else { return }
+        try? await backend.setPlan(backend.cart.plan + added)
+    }
+
+    public func dismissForYou() {
+        forYouDismissed = true
+    }
+
+    /// The last tap, cart change or word from the shopper (talking with Kart is activity too).
+    private var lastHeard: Date {
+        max(lastActivity, backend.transcript.last(where: { $0.role == .user })?.createdAt ?? .distantPast)
+    }
+
+    /// 40 quiet seconds while a member shops, with nothing on screen: Kart may ask its one question (once per trip).
+    public func lullDue(now: Date) -> Bool {
+        member != nil && !lullSent && backend.cart.status == .shopping && visibleCard == nil
+            && now.timeIntervalSince(lastHeard) >= 40
+    }
+
+    public func sendLullIfDue(now: Date) {
+        guard lullDue(now: now) else { return }
+        lullSent = true
+        voice.send(.lull)
+    }
+
+    /// Signed in on this cart (the profile may still be loading).
+    private var signedIn: Bool { backend.cart.memberMemoryOn && backend.cart.memberId != nil }
+
+    private func resendTripContext() {
+        guard let tripId = backend.cart.tripId else { return }
+        voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId, memberId: backend.cart.memberId))
+    }
+
+    public func lookUpMember(_ id: String) async -> MemberLookup? {
+        await backend.lookUpMember(id)
+    }
+
+    /// Signed out (the memory sheet, or walking away); Kart drops the member silently.
+    public func signOut() async {
+        try? await backend.signOut()
+        stillThereAsked = false
+        resendTripContext()
+    }
+
+    /// "Forget me": everything goes, and Kart lets go at once (and says so).
+    public func forgetMember() async {
+        try? await backend.forgetMember()
+        voice.send(.memberForgotten)
+    }
+
+    public func forgetMemory(id: Int) async {
+        try? await backend.forgetMemory(id: id)
+        resendTripContext()                                     // same member, same trip: Kart reloads what it knows
+    }
+
+    public enum MemberIdle: Sendable, Equatable {
+        case none, ask, signOut
+    }
+
+    /// Walking away signed in: ask at 3 quiet minutes, sign out at 5 (the trip stays).
+    public func memberIdleStage(now: Date) -> MemberIdle {
+        guard signedIn, backend.cart.status == .shopping else { return .none }
+        let quiet = now.timeIntervalSince(lastHeard)
+        return quiet >= 300 ? .signOut : quiet >= 180 ? .ask : .none
+    }
+
+    public func handleMemberIdle(now: Date) async {
+        switch memberIdleStage(now: now) {
+        case .ask where !stillThereAsked:
+            stillThereAsked = true
+            voice.send(.memberIdle)
+        case .signOut:
+            await signOut()
+        default:
+            break
+        }
+    }
+
+    /// The memory sheet: opened by the member chip, or by Kart ("what do you know about me?").
+    public var showingMemories: Bool { memoriesOpenedByTap || voice.agentPrompt == .showMemories }
+
+    public func openMemories() {
+        memoriesOpenedByTap = true
+    }
+
+    public func closeMemories() {
+        memoriesOpenedByTap = false
+        if voice.agentPrompt == .showMemories { voice.clearAgentPrompt() }
+    }
+
+    /// "Fri, Oct 30 · demo date" while the demo fast-forward is set.
+    public var demoDateLabel: String? {
+        guard let day = backend.cart.demoDate.flatMap(StoreDay.day(iso:)) else { return nil }
+        return "\(StoreDay.format(day, "EEE, MMM d")) · demo date"
+    }
+
+    public enum DemoJump: Sendable, Equatable {
+        case today, plusDays(Int)
+    }
+
+    /// The nearest event at least two days off (so "the day before" is still ahead).
+    private var nextEvent: (title: String, day: Int)? {
+        guard let member, let today = StoreDay.day(iso: member.today) else { return nil }
+        return member.memories.compactMap { m -> (String, Int)? in
+            guard m.kind == "event", let day = m.eventDate.flatMap(StoreDay.day(iso:)), day - today >= 2 else { return nil }
+            return (m.title, day)
+        }.min { $0.1 < $1.1 }
+    }
+
+    /// The demo's Act 2 button: "Fast-forward to Fri, Oct 30 (day before Leo's soccer team party)".
+    public var fastForwardLabel: String? {
+        nextEvent.map { "Fast-forward to \(StoreDay.format($0.day - 1, "EEE, MMM d")) (day before \($0.title))" }
+    }
+
+    /// Act 2: the day before the next event, on a new trip that starts signed out (back on Welcome to sign in).
+    public func fastForward() async {
+        guard let event = nextEvent else { return }
+        try? await backend.setDemoDate(StoreDay.iso(event.day - 1))
+        try? await backend.startTrip()                          // a new trip: the member is signed out
+        await finishTrip()                                      // ...and the cart waits on Welcome
+    }
+
+    public func jumpDemoDate(to jump: DemoJump) async {
+        let base = backend.cart.demoDate.flatMap(StoreDay.day(iso:)) ?? StoreDay.day(clock())
+        let target: Int?
+        switch jump {
+        case .today: target = nil
+        case .plusDays(let n): target = base + n
+        }
+        try? await backend.setDemoDate(target.map(StoreDay.iso))
+    }
+
     // MARK: Helpers
 
     /// Hides the card at once; if the backend refuses, the card comes back (it still blocks checkout there).
@@ -365,9 +551,9 @@ public final class AppModel {
         }
     }
 
-    private func addToPlan(_ productId: String) async {
+    private func addToPlan(_ productId: String, reason: String = "deal") async {
         guard !backend.cart.plan.contains(where: { $0.productId == productId }) else { return }
-        try? await backend.setPlan(backend.cart.plan + [PlanItem(productId: productId, reason: "deal")])
+        try? await backend.setPlan(backend.cart.plan + [PlanItem(productId: productId, reason: reason)])
     }
 
     private func react(_ reaction: AvatarReaction) {

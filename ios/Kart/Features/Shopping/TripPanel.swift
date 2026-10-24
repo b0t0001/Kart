@@ -11,6 +11,7 @@ struct TripPanel: View {
     var body: some View {
         VStack(spacing: Theme.xl) {
             NextStopCard(model: model)
+            ForYouCard(model: model)                          // member memory beta; nothing for a guest
             HStack(alignment: .top, spacing: Theme.xl) {
                 ListColumn(plan: cart.plan, items: cart.items, catalog: catalog,
                            onAdjust: cart.quantityNudgesOn ? { id, delta in Task { await model.adjust(id, by: delta) } } : nil)
@@ -20,6 +21,8 @@ struct TripPanel: View {
             TotalFooter(model: model)
         }
         .overlay(alignment: .top) { CelebrationToast(model: model) }
+        .animation(Theme.spring, value: model.forYouPicks.map(\.productId))
+        .animation(Theme.spring, value: model.savedEvent?.id)
     }
 }
 

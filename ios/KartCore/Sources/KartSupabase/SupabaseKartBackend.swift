@@ -12,6 +12,10 @@ public final class SupabaseKartBackend: KartBackend {
     public private(set) var transcript: [TranscriptLine] = []
     public private(set) var connection: ConnectionState = .reconnecting
     public private(set) var receipt: Receipt?
+    /// v0.14 beta: the signed-in member's profile, refetched when the cart's member, `member_rev` or demo date change.
+    public private(set) var memberProfile: MemberProfile?
+    /// The profile read in flight: never awaited by the trip (memory arrives when it arrives); tests await it.
+    @ObservationIgnored var profileLoad: Task<Void, Never>?
     /// The last read that failed (network or a row that didn't decode), for the debug panel. Cleared on success.
     public private(set) var lastError: String?
 
@@ -137,6 +141,54 @@ public final class SupabaseKartBackend: KartBackend {
         await refreshTranscript()
     }
 
+    // MARK: Member memory (v0.14 beta)
+
+    public func signIn(memberId: String) async throws {
+        try await memberRPC("set_member", ["p_cart_id": .string(cartId), "p_member_id": .string(memberId)])
+        await refreshCart(force: true)                          // a new member: the profile loads in the background
+    }
+
+    public func signOut() async throws {
+        try await rest.rpc("set_member", ["p_cart_id": .string(cartId), "p_member_id": .null])
+        await refreshCart(force: true)
+    }
+
+    public func refreshMemberProfile() async {
+        guard let member = cart.memberId else { memberProfile = nil; return }
+        memberProfile = try? await rest.rpc("member_profile", ["p_member_id": .string(member), "p_cart_id": .string(cartId)],
+                                            as: MemberProfile.self)
+    }
+
+    public func forgetMemory(id: Int) async throws {
+        guard let member = cart.memberId else { return }
+        try await rest.rpc("member_forget", ["p_member_id": .string(member), "p_memory_id": .number(Decimal(id))])
+        await refreshCart(force: true)                          // member_rev moved: the profile reloads
+    }
+
+    public func forgetMember() async throws {
+        guard let member = cart.memberId else { return }
+        try await rest.rpc("member_forget", ["p_member_id": .string(member), "p_memory_id": .null])
+        await refreshCart(force: true)                          // the member is gone, so the cart is signed out
+    }
+
+    public func setDemoDate(_ date: String?) async throws {
+        try await memberRPC("set_demo_date", ["p_cart_id": .string(cartId), "p_date": .optional(date)])
+        await refreshCart(force: true)
+    }
+
+    public func lookUpMember(_ id: String) async -> MemberLookup? {
+        try? await rest.rpc("member_lookup", ["p_member_id": .string(id)], as: MemberLookup.self)
+    }
+
+    /// A member RPC; the backend's `feature_off: member_memory` becomes `.featureOff`.
+    private func memberRPC(_ name: String, _ params: [String: JSONValue]) async throws {
+        do {
+            try await rest.rpc(name, params)
+        } catch let error as PostgRESTError where error.message.hasPrefix("feature_off") {
+            throw KartBackendError.featureOff
+        }
+    }
+
     // MARK: Debug levers (the Pi's call)
 
     public func simulateVision(_ type: CartEventType, productId: String?, confidence: Double, label: String) async {
@@ -198,7 +250,9 @@ public final class SupabaseKartBackend: KartBackend {
         let tripChanged = fresh.tripId != cart.tripId
         // Overlapping refetches (a burst of row updates per event) can finish out of order: never step back in time.
         if !tripChanged, !force, let shown = cart.updatedAt, let updated = fresh.updatedAt, updated < shown { return }
+        let memberChanged = (fresh.memberId, fresh.memberRev, fresh.demoDate) != (cart.memberId, cart.memberRev, cart.demoDate)
         cart = fresh
+        if memberChanged { profileLoad = Task { await self.refreshMemberProfile() } }
         if tripChanged || force {
             await refreshEvents()
             await refreshTranscript()

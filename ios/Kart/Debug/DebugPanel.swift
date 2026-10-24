@@ -34,12 +34,27 @@ struct DebugPanel: View {
                         get: { world.backend.cart.quantityNudgesOn },
                         set: { on in Task { try? await world.backend.setFeature("quantity_nudges", on: on) } }))
                         .accessibilityIdentifier("debug.quantityNudges")
+                    Toggle("Member memory (beta)", isOn: Binding(
+                        get: { world.backend.cart.memberMemoryOn },
+                        set: { on in Task { try? await world.backend.setFeature("member_memory", on: on) } }))
+                        .accessibilityIdentifier("debug.memberMemory")
                     Toggle("Hold to talk (for a loud store)", isOn: Binding(
                         get: { world.voice.holdToTalk },
                         set: { world.voice.holdToTalk = $0; LaunchPreferences.persistHoldToTalk($0, defaults: .standard) }))
                         .accessibilityIdentifier("debug.holdToTalk")
                     if let error = world.supabase?.lastError {
                         Text("Last backend error: \(error)").foregroundStyle(.red).font(.footnote)
+                    }
+                }
+                if world.backend.cart.memberMemoryOn {
+                    Section("Demo date") {
+                        Text(world.model.demoDateLabel ?? "Today (real date)")
+                        row("Today", id: "debug.date.today") { await world.model.jumpDemoDate(to: .today) }
+                        row("+1 day", id: "debug.date.plus1") { await world.model.jumpDemoDate(to: .plusDays(1)) }
+                        row("+1 week", id: "debug.date.plus7") { await world.model.jumpDemoDate(to: .plusDays(7)) }
+                        if let label = world.model.fastForwardLabel {     // Act 2: a new trip, back on Welcome
+                            row(label, id: "debug.date.beforeEvent") { await world.model.fastForward() }
+                        }
                     }
                 }
                 Section("Trip") {

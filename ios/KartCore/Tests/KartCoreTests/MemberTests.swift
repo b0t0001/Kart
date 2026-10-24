@@ -1,0 +1,424 @@
+import Foundation
+import Testing
+@testable import KartCore
+
+/// Member memory (contract v0.14, beta): the models, the cart's member fields, and what the agent hears.
+struct MemberContractTests {
+    @Test func profileDecodesBackendJSON() throws {
+        let p = try KartJSON.decoder().decode(MemberProfile.self, from: Data(Fixtures.memberProfileJSON.utf8))
+        #expect(p.member.name == "Dylan" && p.member.trips == 15 && p.weekday == "Saturday")
+        #expect(p.picks.map(\.kind) == [.event, .due])
+        #expect(p.picks[0].reason == "Leo's soccer party · tomorrow" && p.picks[0].memoryId == 16)
+        #expect(p.usuals.first?.everyDays == 7)
+        let party = try #require(p.memories.first)
+        #expect(party.isUpcoming && party.title == "Leo's soccer party" && party.items?.first?.qty == 1)
+        #expect(!p.memories[1].isUpcoming && p.memories[1].items == nil)
+        #expect(p.lastTrip?.items == ["Milk", "Tortillas"] && p.lastTrip?.total == Decimal(string: "51.2"))
+    }
+
+    @Test func cartDecodesMemberFieldsWithDefaults() throws {
+        let row = #"{"cart_id": "7", "member_id": "1029", "member_rev": 3, "demo_date": "2026-10-30", "features": {"member_memory": true}}"#
+        let cart = try KartJSON.decoder().decode(CartState.self, from: Data(row.utf8))
+        #expect(cart.memberId == "1029" && cart.memberRev == 3 && cart.demoDate == "2026-10-30" && cart.memberMemoryOn)
+        let bare = try KartJSON.decoder().decode(CartState.self, from: Data(#"{"cart_id": "7"}"#.utf8))
+        #expect(bare.memberId == nil && bare.memberRev == 0 && bare.demoDate == nil && !bare.memberMemoryOn)
+    }
+
+    @Test func tripContextMetadataIncludesMemberOnlyWhenSet() {
+        let trip = UUID(uuidString: "6F9619FF-8B86-D011-B42D-00C04FC964FF")!
+        #expect(LineCodec.metadata(.tripContext(cartId: "7", tripId: trip, memberId: "1029"))["member_id"] as? String == "1029")
+        #expect(LineCodec.metadata(.tripContext(cartId: "7", tripId: trip))["member_id"] == nil)
+    }
+
+    @Test func lullMetadata() {
+        #expect(LineCodec.metadata(.lull)["type"] as? String == "lull")
+    }
+}
+
+/// The mock imitates the backend's member memory, so the offline demo mode rehearses the whole beat.
+@MainActor struct MockMemberTests {
+    /// Saturday 2026-10-24, noon in the store's time zone.
+    let clock = ManualClock(now: Date(timeIntervalSince1970: 1_792_868_400))
+
+    func backend(flag: Bool = true) async throws -> MockKartBackend {
+        let b = MockKartBackend(catalog: try Fixtures.catalog(), clock: { [clock] in clock.now })
+        if flag { try await b.setFeature("member_memory", on: true) }
+        try await b.startTrip()
+        return b
+    }
+
+    func picks(_ b: MockKartBackend) -> [[String]] {
+        (b.memberProfile?.picks ?? []).map { [$0.productId, $0.kind.rawValue, $0.reason] }
+    }
+
+    @Test func signInNeedsFlag() async throws {
+        let b = try await backend(flag: false)
+        await #expect(throws: KartBackendError.featureOff) { try await b.signIn(memberId: "1029") }
+        #expect(b.cart.memberId == nil && b.memberProfile == nil)
+    }
+
+    @Test func profilePicksForDylan() async throws {
+        let b = try await backend()
+        try await b.signIn(memberId: "1029")
+        #expect(b.cart.memberId == "1029" && b.memberProfile?.member.name == "Dylan")
+        #expect(b.memberProfile?.weekday == "Saturday" && b.memberProfile?.today == "2026-10-24")
+        #expect(picks(b) == [["whole-milk", "due", "every week · last Sat"],          // no party: it's told live
+                             ["mission-tortillas", "usual", "your Saturday usual"]])
+        #expect(b.memberProfile?.memories.map(\.text) == ["Likes the Marinara here"])
+    }
+
+    @Test func startTripClearsMember() async throws {
+        let b = try await backend()
+        try await b.signIn(memberId: "1029")
+        try await b.startTrip()
+        #expect(b.cart.memberId == nil && b.memberProfile == nil)
+    }
+
+    @Test func fastForwardShowsSavedEventAndDueMilk() async throws {
+        let b = try await backend()
+        try await b.signIn(memberId: "1029")
+        try await b.remember(kind: "event", text: "Leo's soccer team party, pasta for 12", eventDate: "2026-10-31",
+                             items: [PlanItem(productId: "barilla-spaghetti", reason: "Leo", qty: 3),
+                                     PlanItem(productId: "rao-marinara", reason: "Leo", qty: 2)])
+        try await b.applyManualEvent(.added, productId: "whole-milk", resolving: nil)
+        _ = try await b.checkout(provider: "simulated")
+        try await b.setDemoDate("2026-10-30")
+        try await b.startTrip()
+        try await b.signIn(memberId: "1029")
+        #expect(b.memberProfile?.today == "2026-10-30")
+        #expect(picks(b).first == ["barilla-spaghetti", "event", "Leo's soccer team party · tomorrow"])
+        #expect(picks(b).contains(["whole-milk", "due", "every week · last Sat"]))
+    }
+
+    @Test func unknownNumberIsANewMember() async throws {
+        let b = try await backend()
+        try await b.signIn(memberId: "4321")
+        #expect(b.memberProfile?.member.name == nil && b.memberProfile?.member.trips == 0 && picks(b).isEmpty)
+    }
+
+    @Test func forgetAllSignsOut() async throws {
+        let b = try await backend()
+        try await b.signIn(memberId: "1029")
+        try await b.forgetMember()
+        #expect(b.cart.memberId == nil && b.memberProfile == nil)
+        try await b.signIn(memberId: "1029")
+        #expect(b.memberProfile?.member.name == nil && b.memberProfile?.memories.isEmpty == true)
+    }
+
+    @Test func forgetOneMemory() async throws {
+        let b = try await backend()
+        try await b.signIn(memberId: "1029")
+        let party = try #require(b.memberProfile?.memories.first)
+        let rev = b.cart.memberRev
+        try await b.forgetMemory(id: party.id)
+        #expect(b.memberProfile?.memories.contains { $0.id == party.id } == false && b.cart.memberRev == rev + 1)
+    }
+}
+
+/// What the screen does with member memory: sign-in order, For you, the lull, the demo date.
+@MainActor struct AppModelMemberTests {
+    func rig(flag: Bool = true) async throws -> TestRig {
+        let t = try make()
+        t.clock.now = Date(timeIntervalSince1970: 1_792_868_400)       // Saturday 2026-10-24, noon (store time)
+        if flag { try await t.backend.setFeature("member_memory", on: true) }
+        return t
+    }
+
+    @Test func signInThenTripContextCarriesMember() async throws {
+        let t = try await rig()
+        await t.model.startTrip(memberId: "1029")
+        #expect(t.backend.cart.memberId == "1029" && t.model.member?.member.name == "Dylan")
+        #expect(t.voice.sent.first == .tripContext(cartId: "7", tripId: try #require(t.backend.cart.tripId), memberId: "1029"))
+    }
+
+    @Test func signInWithFlagOffStartsGuestTrip() async throws {
+        let t = try await rig(flag: false)
+        await t.model.startTrip(memberId: "1029")
+        #expect(t.backend.cart.memberId == nil && t.model.member == nil && t.model.screen != .welcome)
+        #expect(t.voice.sent.first == .tripContext(cartId: "7", tripId: try #require(t.backend.cart.tripId)))
+    }
+
+    @Test func lullOnceAfter40sNotWithCard() async throws {
+        let t = try await rig()
+        await t.model.startTrip(memberId: "1029")
+        t.clock.now += 39
+        #expect(!t.model.lullDue(now: t.clock.now))
+        await t.backend.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "spaghetti")
+        t.clock.now += 41
+        #expect(t.model.visibleCard != nil && !t.model.lullDue(now: t.clock.now))   // a deal card is up
+        try await t.backend.dismissSuggestion()
+        #expect(t.model.visibleCard == nil && t.model.lullDue(now: t.clock.now))
+        t.model.sendLullIfDue(now: t.clock.now)
+        t.model.sendLullIfDue(now: t.clock.now + 60)
+        #expect(t.voice.sent.filter { $0 == .lull }.count == 1)
+    }
+
+    @Test func lullNeverForGuests() async throws {
+        let t = try await rig()
+        await t.model.startTrip()
+        #expect(!t.model.lullDue(now: t.clock.now + 600))
+    }
+
+    @Test func forYouHidesPicksOnPlanAndAfterDismiss() async throws {
+        let t = try await rig()
+        await t.model.startTrip(memberId: "1029")
+        #expect(t.model.forYouPicks.map(\.productId) == ["whole-milk", "mission-tortillas"])
+        try await t.backend.setPlan([PlanItem(productId: "whole-milk", reason: "milk")])
+        #expect(t.model.forYouPicks.map(\.productId) == ["mission-tortillas"])
+        await t.model.addPick(t.model.forYouPicks[0])
+        #expect(t.backend.cart.plan.contains { $0.productId == "mission-tortillas" && $0.reason == "for you" })
+        t.model.dismissForYou()
+        #expect(t.model.forYouPicks.isEmpty && t.model.savedEvent == nil)
+    }
+
+    @Test func shopSavedListAppendsItems() async throws {
+        let t = try await rig()
+        await t.model.startTrip(memberId: "1029")
+        try await t.backend.setPlan([PlanItem(productId: "whole-milk", reason: "milk")])
+        let b = t.backend
+        try await b.remember(kind: "event", text: "Leo's soccer team party, pasta for 12", eventDate: "2026-10-31",
+                             items: [PlanItem(productId: "barilla-spaghetti", reason: "Leo", qty: 3),
+                                     PlanItem(productId: "rao-marinara", reason: "Leo", qty: 2)])
+        let party = try #require(t.model.savedEvent)
+        #expect(party.title == "Leo's soccer team party")
+        await t.model.shopSavedList(party)
+        #expect(t.backend.cart.plan.map { "\($0.productId)×\($0.qty)" } == ["whole-milk×1", "barilla-spaghetti×3", "rao-marinara×2"])
+        #expect(t.backend.cart.plan.last?.reason == "Leo's soccer team party" && t.model.savedEvent == nil)
+    }
+
+    @Test func fastForwardEndsTheTripOnTheDayBeforeTheEvent() async throws {
+        let t = try await rig()
+        await t.model.startTrip(memberId: "1029")
+        #expect(t.model.fastForwardLabel == nil)                        // nothing coming up yet
+        let b = t.backend
+        try await b.remember(kind: "event", text: "Leo's soccer team party, pasta for 12", eventDate: "2026-10-31",
+                             items: [PlanItem(productId: "barilla-spaghetti", reason: "Leo", qty: 3),
+                                     PlanItem(productId: "rao-marinara", reason: "Leo", qty: 2)])
+        #expect(t.model.fastForwardLabel == "Fast-forward to Fri, Oct 30 (day before Leo's soccer team party)")
+        let trip = b.cart.tripId
+        await t.model.fastForward()
+        #expect(b.cart.demoDate == "2026-10-30" && b.cart.status == .idle && t.model.screen == .welcome)
+        #expect(b.cart.memberId == nil && b.cart.tripId != trip && t.voice.stopCount == 1)   // a new trip, signed out
+    }
+
+    @Test func demoDateSteps() async throws {
+        let t = try await rig()
+        await t.model.startTrip(memberId: "1029")
+        await t.model.jumpDemoDate(to: .plusDays(1))
+        #expect(t.backend.cart.demoDate == "2026-10-25")
+        await t.model.jumpDemoDate(to: .plusDays(7))
+        #expect(t.backend.cart.demoDate == "2026-11-01")
+        await t.model.jumpDemoDate(to: .today)
+        #expect(t.backend.cart.demoDate == nil)
+    }
+
+    @Test func demoDateLabel() async throws {
+        let t = try await rig()
+        #expect(t.model.demoDateLabel == nil)
+        try await t.backend.setDemoDate("2026-10-30")
+        #expect(t.model.demoDateLabel == "Fri, Oct 30 · demo date")
+    }
+}
+
+@MainActor @Test func memberScenariosSeedTheBeat() async throws {
+    func run(_ s: DemoScenario) async throws -> MockKartBackend {
+        let clock = ManualClock()
+        let b = MockKartBackend(catalog: try Fixtures.catalog(), clock: { clock.now })
+        try await s.apply(to: b, clock: clock)
+        return b
+    }
+    let welcome = try await run(.memberWelcome)
+    #expect(welcome.cart.status == .idle && welcome.cart.memberMemoryOn)
+    let member = try await run(.member)
+    #expect(member.cart.memberId == "1029" && member.memberProfile?.picks.count == 2)
+    #expect(member.transcript.contains { $0.text.hasPrefix("Welcome back, Dylan!") })
+    #expect(TripRouter.screen(cart: member.cart, transcript: member.transcript) == .shopping)
+}
+
+/// Edge cases (spec §3.9): Kart lets go at once, the cart signs out when left, "what do you know about me".
+@MainActor struct MemberEdgeCaseTests {
+    func signedIn() async throws -> TestRig {
+        let t = try make()
+        t.clock.now = Date(timeIntervalSince1970: 1_792_868_400)
+        try await t.backend.setFeature("member_memory", on: true)
+        await t.model.startTrip(memberId: "1029")
+        t.voice.sent = []
+        return t
+    }
+
+    @Test func forgetMemberSendsMemberForgotten() async throws {
+        let t = try await signedIn()
+        await t.model.forgetMember()
+        #expect(t.backend.cart.memberId == nil && t.voice.sent == [.memberForgotten])
+    }
+
+    @Test func forgetOneMemoryResendsTripContext() async throws {
+        let t = try await signedIn()
+        let party = try #require(t.model.member?.memories.first)
+        await t.model.forgetMemory(id: party.id)
+        #expect(t.model.member?.memories.contains { $0.id == party.id } == false)
+        #expect(t.voice.sent == [.tripContext(cartId: "7", tripId: try #require(t.backend.cart.tripId), memberId: "1029")])
+    }
+
+    @Test func signOutSendsTripContextWithoutMember() async throws {
+        let t = try await signedIn()
+        await t.model.signOut()
+        #expect(t.backend.cart.memberId == nil)
+        #expect(t.voice.sent == [.tripContext(cartId: "7", tripId: try #require(t.backend.cart.tripId))])
+    }
+
+    @Test func memberIdleAsksAt180SignsOutAt300() async throws {
+        let t = try await signedIn()
+        #expect(t.model.memberIdleStage(now: t.clock.now + 179) == .none)
+        await t.model.handleMemberIdle(now: t.clock.now + 181)
+        await t.model.handleMemberIdle(now: t.clock.now + 200)
+        #expect(t.voice.sent == [.memberIdle] && t.model.stillThereAsked)
+        t.model.noteActivity()
+        #expect(!t.model.stillThereAsked)
+        await t.model.handleMemberIdle(now: t.clock.now + 301)
+        #expect(t.backend.cart.memberId == nil && t.backend.cart.status == .shopping)   // the trip stays; the member goes
+    }
+
+    @Test func idleRulesIgnoreGuests() async throws {
+        let t = try make()
+        await t.model.startTrip()
+        #expect(t.model.memberIdleStage(now: t.clock.now + 600) == .none)
+    }
+
+    @Test func showMemoriesPromptOpensTheSheet() async throws {
+        let t = try await signedIn()
+        #expect(!t.model.showingMemories)
+        t.voice.agentPrompt = .showMemories
+        #expect(t.model.showingMemories)
+        t.model.closeMemories()
+        #expect(!t.model.showingMemories && t.voice.agentPrompt == nil)
+        if case .prompt(.showMemories) = LineCodec.prompt(["type": "show_memories"]) {} else { Issue.record("show_memories isn't parsed") }
+    }
+
+    @Test func lookupMock() async throws {
+        let t = try await signedIn()
+        #expect(await t.model.lookUpMember("1029") == MemberLookup(exists: true, name: "Dylan"))
+        #expect(await t.model.lookUpMember("4321") == MemberLookup(exists: false))
+        await t.model.forgetMember()
+        #expect(await t.model.lookUpMember("1029") == MemberLookup(exists: false))
+    }
+
+    @Test func idleAndForgottenMetadata() {
+        #expect(LineCodec.metadata(.memberForgotten)["type"] as? String == "member_forgotten")
+        #expect(LineCodec.metadata(.memberIdle)["type"] as? String == "member_idle")
+    }
+}
+
+/// The scripted Kart (offline demo mode) plays the member beat too.
+@MainActor struct MockMemberVoiceTests {
+    let clock = ManualClock(now: Date(timeIntervalSince1970: 1_792_868_400))
+
+    func setup(member: String? = "1029") async throws -> (MockKartBackend, MockAgentBrain) {
+        let b = MockKartBackend(catalog: try Fixtures.catalog(), clock: { [clock] in clock.now })
+        try await b.setFeature("member_memory", on: true)
+        try await b.startTrip()
+        if let member { try await b.signIn(memberId: member) }
+        return (b, MockAgentBrain(backend: b))
+    }
+
+    @Test func greetsAMemberWithTheirEvent() async throws {
+        let (b, brain) = try await setup()
+        #expect(brain.greeting() == "Welcome back, Dylan! What are we shopping for today?")
+        try await b.remember(kind: "event", text: "Leo's soccer team party, pasta for 12", eventDate: "2026-10-25",
+                             items: [PlanItem(productId: "barilla-spaghetti", reason: "Leo", qty: 3)])
+        #expect(brain.greeting() == "Welcome back, Dylan! Leo's soccer team party is tomorrow. Want the list you saved?")
+        let (_, guest) = try await setup(member: nil)
+        #expect(guest.greeting() == DemoScript.greeting)
+    }
+
+    @Test func heyKartAsksOncePerTrip() async throws {
+        let (_, brain) = try await setup()
+        #expect(await brain.respond(to: "Hey Kart") == "Any fun plans coming up I can help you shop for?")
+        #expect(await brain.respond(to: "Hey Kart") != "Any fun plans coming up I can help you shop for?")
+    }
+
+    @Test func leosPartyIsRememberedThenItsListSaved() async throws {
+        let (b, brain) = try await setup()
+        #expect(await brain.respond(to: "Oh, next Saturday is Leo's soccer team party, we'll need pasta for 12.")
+                == "Got it, I'll remember Leo's party on Saturday. Want me to save a list for it?")
+        let party = try #require(b.memberProfile?.memories.first { $0.title == "Leo's soccer team party" })
+        #expect(party.eventDate == "2026-10-31" && party.items == nil)
+        #expect(await brain.respond(to: "Yes.")
+                == "Saved: three boxes of spaghetti and two jars of marinara for Leo's soccer team party.")
+        let saved = try #require(b.memberProfile?.memories.first { $0.id == party.id })
+        #expect(saved.items?.map { "\($0.productId)×\($0.qty)" } == ["barilla-spaghetti×3", "rao-marinara×2"])
+    }
+
+    @Test func yesShopsTheSavedList() async throws {
+        let (b, brain) = try await setup()
+        try await b.remember(kind: "event", text: "Leo's soccer team party, pasta for 12", eventDate: "2026-10-25",
+                             items: [PlanItem(productId: "barilla-spaghetti", reason: "Leo", qty: 3),
+                                     PlanItem(productId: "rao-marinara", reason: "Leo", qty: 2)])
+        #expect(await brain.respond(to: "Yes").hasPrefix("Done, it's on your list."))
+        #expect(Set(b.cart.plan.map(\.productId)) == ["barilla-spaghetti", "rao-marinara"])
+    }
+}
+
+/// A new Kart call (the first one, a reconnect, a wake from pause) sends its own trip_context: it must name the
+/// member the iPad signed in, or Kart greets Dylan as a guest and forgets him after every drop.
+@MainActor @Test func theCallsOwnTripContextCarriesTheMember() async throws {
+    let transport = FakeTransport(), audio = FakeAudio()
+    let voice = LineVoiceSession(tokens: FakeTokens(), transport: transport, audio: audio)
+    let trip = UUID()
+    voice.send(.tripContext(cartId: "7", tripId: trip, memberId: "1029"))   // the AppModel's, before the call starts
+    let starting = Task { await voice.start(cartId: "7", tripId: trip) }
+    await settle()
+    let streamId = try #require(transport.events("start").first?["stream_id"] as? String)
+    transport.receive(#"{"event":"ack","stream_id":"\#(streamId)","config":{}}"#)
+    await starting.value
+    await settle()
+    let contexts = transport.events("custom").compactMap { $0["metadata"] as? [String: Any] }
+        .filter { $0["type"] as? String == "trip_context" }
+    #expect(!contexts.isEmpty && contexts.allSatisfy { $0["member_id"] as? String == "1029" })
+}
+
+// ── Review fixes: a forgotten or signed-out member stays gone; talking counts as activity ──
+
+@MainActor @Test func theCallsMemberIsForgottenWithTheMember() async throws {
+    let transport = FakeTransport(), audio = FakeAudio()
+    let voice = LineVoiceSession(tokens: FakeTokens(), transport: transport, audio: audio)
+    let trip = UUID()
+    voice.send(.tripContext(cartId: "7", tripId: trip, memberId: "1029"))
+    voice.send(.memberForgotten)                                       // "Forget me", then the call (re)connects
+    let starting = Task { await voice.start(cartId: "7", tripId: trip) }
+    await settle()
+    let streamId = try #require(transport.events("start").first?["stream_id"] as? String)
+    transport.receive(#"{"event":"ack","stream_id":"\#(streamId)","config":{}}"#)
+    await starting.value
+    await settle()
+    let contexts = transport.events("custom").compactMap { $0["metadata"] as? [String: Any] }
+        .filter { $0["type"] as? String == "trip_context" }
+    #expect(!contexts.isEmpty && contexts.allSatisfy { $0["member_id"] == nil })
+}
+
+@MainActor struct MemberReviewFixTests {
+    func signedIn() async throws -> TestRig {
+        let t = try make()
+        t.clock.now = Date(timeIntervalSince1970: 1_792_868_400)
+        try await t.backend.setFeature("member_memory", on: true)
+        await t.model.startTrip(memberId: "1029")
+        t.voice.sent = []
+        return t
+    }
+
+    @Test func aSignOutFromKartReachesTheVoiceSession() async throws {
+        let t = try await signedIn()
+        try await t.backend.signOut()                                  // the agent's sign_out: set_member(cart, null)
+        t.model.ingest(cart: t.backend.cart)
+        #expect(t.voice.sent == [.tripContext(cartId: "7", tripId: try #require(t.backend.cart.tripId))])
+    }
+
+    @Test func talkingCountsForTheLullAndTheIdleSignOut() async throws {
+        let t = try await signedIn()
+        t.clock.now += 170
+        try await t.backend.appendTranscript(.user, "And where's the parmesan?")   // the shopper is talking with Kart
+        #expect(!t.model.lullDue(now: t.clock.now + 30))
+        #expect(t.model.memberIdleStage(now: t.clock.now + 30) == .none)
+        #expect(t.model.memberIdleStage(now: t.clock.now + 181) == .ask)
+    }
+}

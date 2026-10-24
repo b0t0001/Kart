@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, AsyncIterator, Protocol
 
+from .memory import MEMBER_TOOLS
 from .tools import TOOLS, run_tool
 
 SYSTEM_PROMPT = """You are Kart, the voice of a smart shopping cart in a warehouse store. The shopper is pushing you \
@@ -111,7 +112,10 @@ class Brain:
         self.base_system = system
         self.llm = llm
         self.system = system
+        self.tools = TOOLS
         self.messages: list[dict[str, Any]] = []
+        self._catalog_text = ""
+        self._member_text = ""                           # member memory beta: what Kart remembers about this shopper
 
     def remember(self, user_text: str, said: str) -> None:
         """A turn the agent answered itself (a yes/no to a deal), so Claude keeps the thread."""
@@ -138,7 +142,14 @@ class Brain:
         """Product ids and names only (no prices, deals or stock: those change), so a plan needs no search round."""
         lines = [f"- {p['id']}: {p.get('short_name') or p['name']}, {p['name']} ({p.get('category') or 'other'})"
                  for p in products]
-        self.system = self.base_system + "\n\nStore products (id: what you call it, the package as sold (kind)):\n" + "\n".join(lines)
+        self._catalog_text = "\n\nStore products (id: what you call it, the package as sold (kind)):\n" + "\n".join(lines)
+        self.system = self.base_system + self._catalog_text + self._member_text
+
+    def set_member(self, section: str | None) -> None:
+        """A signed-in member's memory (or None for a guest): the prompt section and the member-only tools."""
+        self._member_text = "\n\n" + section if section else ""
+        self.tools = TOOLS + MEMBER_TOOLS if section else TOOLS
+        self.system = self.base_system + self._catalog_text + self._member_text
 
     async def respond(self, user_text: str, ctx: dict[str, Any]) -> AsyncIterator[str]:
         self.messages.append({"role": "user", "content": user_text})
@@ -148,7 +159,7 @@ class Brain:
             stop_reason = "end_turn"
             streamed: list[str] = []
             held: list[str] = []                         # text that might still turn out to be <quiet>
-            async for item in self.llm.stream(system=self.system, messages=self.messages, tools=TOOLS):
+            async for item in self.llm.stream(system=self.system, messages=self.messages, tools=self.tools):
                 if item[0] == "text" and not streamed and QUIET.startswith(("".join(held) + item[1]).strip()):
                     held.append(item[1])                 # don't speak it yet
                     continue

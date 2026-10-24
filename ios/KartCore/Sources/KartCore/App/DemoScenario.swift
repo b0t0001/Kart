@@ -4,6 +4,8 @@ import Foundation
 /// Nothing is spoken: transcript lines are written directly.
 public enum DemoScenario: String, CaseIterable, Sendable {
     case welcome, greeting, shopping, deal, confirm, crowded, talkative, amounts, nudge, checkoutShort, checkout, checkoutUnresolved, receipt
+    /// Member memory beta (v0.14): Welcome with the sign-in pill, and Dylan signed in with his picks.
+    case memberWelcome, member
 
     static let unsureLabel = "red jar of marinara sauce"
     static let crowdedProducts = [
@@ -15,12 +17,18 @@ public enum DemoScenario: String, CaseIterable, Sendable {
 
     /// `clock` must be the clock `backend` was built with.
     @MainActor public func apply(to backend: MockKartBackend, clock: ManualClock) async throws {
-        guard self != .welcome else { return }
+        if self == .memberWelcome || self == .member { try await backend.setFeature("member_memory", on: true) }
+        guard self != .welcome, self != .memberWelcome else { return }
         try await backend.startTrip()
         try await backend.appendTranscript(.agent, DemoScript.greeting)
         switch self {
-        case .welcome, .greeting:
+        case .welcome, .greeting, .memberWelcome:
             return
+        case .member:
+            try await backend.signIn(memberId: "1029")
+            try await backend.appendTranscript(.agent, "Welcome back, Dylan! What are we shopping for today?")
+            try await backend.appendTranscript(.user, "Hey Kart")
+            try await backend.appendTranscript(.agent, "Any fun plans coming up I can help you shop for?")
         case .shopping, .deal, .confirm:
             try await Self.pastaTrip(backend)
             if self != .deal { try await backend.dismissSuggestion() }
