@@ -108,8 +108,13 @@ class Pipeline:
             self.references.setdefault(c, f.image)
 
         moving = {c: self.motion[c].update(f.image) for c, f in frames.items()}
-        if not self.settle.update(min(f.ts for f in frames.values()), moving):
+        was = self.settle.state
+        settled = self.settle.update(min(f.ts for f in frames.values()), moving)
+        if was == "idle" and self.settle.state == "motion":
+            log.info("MOTION")
+        if not settled:
             return []
+        log.info("SETTLED")
 
         results = []
         for c, f in frames.items():

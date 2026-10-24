@@ -1,0 +1,115 @@
+# pi/ — KART cart vision
+
+Two webcams look down into the basket. When something goes in or comes out, the cart waits until
+motion stops (~1 s), compares each camera's picture with the last still one, figures out what
+changed, names the product, and sends **one event per item** to the backend (Supabase
+`apply_cart_event`). The iPad shows the live bill from there.
+
+- Design: [`docs/specs/2026-10-24-cv-pipeline-design.md`](docs/specs/2026-10-24-cv-pipeline-design.md)
+- Overnight build notes and open decisions: [`docs/OVERNIGHT.md`](docs/OVERNIGHT.md)
+
+**Identification** is on-device first (a gallery of photos of our props, ~50 ms), then Claude
+(`claude-haiku-5-5`) only when the cart isn't sure, then "unknown" (the iPad asks the shopper).
+Only a crop of the item ever leaves the cart.
+
+---
+
+## On the Pi (hardware teammate: start here)
+
+Install and autostart belong to `hardware/`. See [`hardware/README.md`](../hardware/README.md):
+`hardware/setup_pi.sh` (venv + `pi/requirements-pi.txt`) and `hardware/install_service.sh`
+(systemd running `pi/main.py live`). CV adds only these one-time steps, from `~/kart`:
+
+```bash
+~/venv/bin/python tools/fetch_model.py          # on-device feature model, ~9 MB
+cp pi/config.example.json pi/config.json        # camera paths are already the measured USB ports
+```
+
+- Put the shared env file at **`~/kart/.env`** (Dylan has the values: `ANTHROPIC_API_KEY`,
+  `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `CART_ID=7`). Without it the cart still runs: local
+  matching only, events logged to `pi/state/events.jsonl`.
+- **The cart floor needs a solid mat or cardboard.** A wire bottom shows the store floor sliding
+  by, which looks like everything changed.
+- **Start with the cart empty.** On first start the cart photographs the empty basket as its
+  reference. If it started with items inside, empty it and reset (below).
+- If the USB cables moved: `~/venv/bin/python tools/snap.py --list` and fix `cameras` in
+  `pi/config.json` (use the `-video-index0` paths).
+
+### Run it by hand
+
+```bash
+sudo systemctl stop kart-cv                      # the service holds the cameras
+~/venv/bin/python pi/main.py live --debug-view   # Ctrl-C to stop
+```
+
+Open **http://smartcart.local:8080** on the laptop for the debug page (both camera feeds plus
+the last events with their crops). Debug view shows full frames, so leave it off for the demo.
+Without `--debug-view` you still get `http://smartcart.local:8080/status`.
+
+Reset (cart must be empty): `~/venv/bin/python pi/main.py reset`, or `curl -X POST
+http://smartcart.local:8080/reset`. A new trip started on the iPad also resets the cart
+automatically (it watches `carts.trip_id`).
+
+Logs from the service: `journalctl -u kart-cv -f`.
+
+### Milestone checks: do this, and you should see that
+
+| # | Do this | You should see |
+|---|---|---|
+| 1 | `~/venv/bin/python tools/snap.py` | `cam0: OK (720, 1280, 3) …` and `cam1: OK …`; open `tools/out/cam0.jpg` and `cam1.jpg`: both look into the basket |
+| 2 | `pi/main.py live`, wave a hand over the basket, then hold still | `MOTION` when you wave, `SETTLED` about 1 s after you stop, and **no** `ADDED` |
+| 3 | Drop one item in, wait, take it out | `ADDED …` then `REMOVED …` (before enrollment and without a key the name is `? "…"`); crops in `pi/state/crops/` |
+| 4 | Put `ANTHROPIC_API_KEY` in `~/kart/.env`, restart, drop 5 different props | each prints `ADDED <product-id> (cloud 0.xx)` with the right id |
+| 5 | Enroll the props (below), then drop them again | `ADDED <product-id> (local 0.xx)`, instantly, no network needed |
+| 6 | With Supabase in `.env`, add/remove items; then turn the hotspot off, add one, turn it back on | the iPad / `carts` row updates; the offline item arrives once Wi-Fi is back (no double count) |
+| 7 | From the laptop: `curl http://smartcart.local:8080/status` | JSON with `items`, `state`, `last_events` |
+| 8 | `bash hardware/install_service.sh --now`, then unplug and replug the Pi | it starts watching by itself (`journalctl -u kart-cv -f`) |
+
+### Teach it the props (enrollment, ~1 min each)
+
+```bash
+sudo systemctl stop kart-cv
+~/venv/bin/python tools/enroll.py kirkland-parmesan      # ids: data/store.json, or the tool lists them
+```
+
+Cart empty → put the item in → wait for `captured 1/5: take it out` → take it out → repeat with
+a different pose (side, upright, label down). Photos land in `pi/gallery/<product-id>/`. Commit
+and push `pi/gallery/` so every machine gets them. Products the store owner adds live (merchant
+agent) need no enrollment: they go to Claude using their `vision_hint`.
+
+### Record and replay (for tuning)
+
+```bash
+~/venv/bin/python tools/record.py --seconds 60       # → tools/out/rec-YYYYmmdd-HHMMSS/
+~/venv/bin/python pi/main.py replay tools/out/rec-…  # same pipeline, on the recording
+```
+
+Record a few real add/remove/hand/bump clips. They become regression tests and the material for
+tuning the knobs below.
+
+### If something looks wrong
+
+| Symptom | Likely cause → fix |
+|---|---|
+| Items added when nothing happened | Floor visible through the cart, or strong flicker → mat on the floor; raise `change_thresh` (30 → 40) |
+| Real items missed | Item very small or same color as the mat → lower `min_blob_frac` (0.004 → 0.002) or use a contrasting mat |
+| Removed items show as added | The empty-basket picture is stale (cart wasn't empty at reset) → empty it, `pi/main.py reset` |
+| Wrong product, method `local` | Look-alike props → enroll more poses, or raise `local_min_margin` (0.08 → 0.12) so Claude decides |
+| `local-only mode` in the log | No `ANTHROPIC_API_KEY` in `~/kart/.env` |
+| `cam1: could not open …` | Cable or port moved → `tools/snap.py --list`, fix `pi/config.json` |
+
+Every knob lives in `pi/config.json` (defaults in `pi/config.example.json`).
+
+---
+
+## On a Mac (development)
+
+```bash
+/opt/homebrew/bin/python3.12 -m venv pi/.venv && pi/.venv/bin/pip install -r pi/requirements.txt
+pi/.venv/bin/python tools/fetch_model.py
+pi/.venv/bin/python -m pytest pi/tests -q        # no camera, network or API key needed
+```
+
+The tests drive the real pipeline with synthetic two-camera scenes (`kartcv/synth.py`): items
+dropped and taken out by a hand, hands that drop nothing, lighting changes, camera bumps, stacked
+items, a camera that's blocked, and restarts.

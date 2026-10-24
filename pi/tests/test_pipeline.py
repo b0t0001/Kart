@@ -35,6 +35,15 @@ def test_first_run_resets_then_add_and_remove(tmp_path):
     assert sink.events[0].crops and all((tmp_path / c).exists() for c in sink.events[0].crops)
 
 
+def test_logs_motion_then_settled(tmp_path, caplog):  # spec §14 milestone 2 check
+    import logging
+    p, _ = make(tmp_path)
+    with caplog.at_level(logging.INFO, logger="kartcv.pipeline"):
+        run(p, Script(Scene()).still(1.0).hand_pass())
+    msgs = [r.getMessage() for r in caplog.records]
+    assert "MOTION" in msgs and "SETTLED" in msgs and msgs.index("MOTION") < msgs.index("SETTLED")
+
+
 def test_no_false_events(tmp_path):
     p, _ = make(tmp_path)
     sc = Script(Scene()).still(1.0).hand_pass().set(brightness=1.3).set(shift={0: (2, 1)}).set(shift={0: (60, 30)})
