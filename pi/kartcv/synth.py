@@ -166,6 +166,7 @@ class Scene:
     edge_object: bool = False                                        # something static over the rim (a strap)
     room_shift: tuple[int, int] = (0, 0)                             # the room behind the mesh slides (cart rolling)
     sun: tuple | None = None  # (x, y, w, h, gain) image-px patch of sunlight through blinds, soft-edged
+    fisheye: dict[int, float] = field(default_factory=dict)  # per-camera barrel distortion strength (wide lens)
 
     def copy(self) -> Scene:
         return copy.deepcopy(self)
@@ -203,16 +204,52 @@ class Scene:
             m = np.float32([[1, 0, dx], [0, 1, dy]])
             img = cv2.warpAffine(img, m, CAM_SIZE, borderMode=cv2.BORDER_REPLICATE)
 
+        k = self.fisheye.get(cam, 0.0)
+        if k:
+            mx, my = _fisheye_maps(k)
+            img = cv2.remap(img, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(20, 20, 20))
+
         noise = _NOISE[cam][noise_seed % len(_NOISE[cam])]
         return np.clip(img.astype(np.int16) + noise, 0, 255).astype(np.uint8)
 
 
-def mat_roi(cam: int, inset: float = 0.01) -> list[list[float]]:
-    """The basket floor as camera `cam` sees it, as a normalized polygon (the config's "roi" shape)."""
+_FISHEYE_MAPS: dict[float, tuple[np.ndarray, np.ndarray]] = {}
+
+
+def _fisheye_maps(k: float):
+    """Barrel distortion: an output pixel at normalized radius r samples the undistorted image at r(1 + k r²)."""
+    if k not in _FISHEYE_MAPS:
+        w, h = CAM_SIZE
+        xs, ys = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
+        cx, cy, f = w / 2, h / 2, w / 2
+        nx, ny = (xs - cx) / f, (ys - cy) / f
+        scale = 1 + k * (nx * nx + ny * ny)
+        _FISHEYE_MAPS[k] = ((nx * scale * f + cx).astype(np.float32), (ny * scale * f + cy).astype(np.float32))
+    return _FISHEYE_MAPS[k]
+
+
+def distort_point(k: float, xy: tuple[float, float]) -> tuple[float, float]:
+    """Where an undistorted image point lands in the barrel-distorted view (inverse of the map, by iteration)."""
+    w, h = CAM_SIZE
+    cx, cy, f = w / 2, h / 2, w / 2
+    ux, uy = (xy[0] - cx) / f, (xy[1] - cy) / f
+    dx, dy = ux, uy
+    for _ in range(20):
+        s = 1 + k * (dx * dx + dy * dy)
+        dx, dy = ux / s, uy / s
+    return dx * f + cx, dy * f + cy
+
+
+def mat_roi(cam: int, inset: float = 0.01, fisheye: float = 0.0, per_edge: int = 1) -> list[list[float]]:
+    """The basket floor as camera `cam` sees it, as a normalized polygon (the config's "roi" shape). With a
+    fisheye lens the edges curve, so trace each edge with `per_edge` points, as one would by hand."""
     q = _QUADS[cam]
     c = q.mean(axis=0)
     q = c + (q - c) * (1.0 - inset)
-    return [[round(float(x) / CAM_SIZE[0], 4), round(float(y) / CAM_SIZE[1], 4)] for x, y in q]
+    pts = [q[i] + (q[(i + 1) % 4] - q[i]) * t / per_edge for i in range(4) for t in range(per_edge)]
+    if fisheye:
+        pts = [distort_point(fisheye, (float(x), float(y))) for x, y in pts]
+    return [[round(float(x) / CAM_SIZE[0], 4), round(float(y) / CAM_SIZE[1], 4)] for x, y in pts]
 
 
 def project(cam: int, xy: tuple[float, float]) -> tuple[int, int]:

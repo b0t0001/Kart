@@ -333,3 +333,14 @@ def test_claude_count_bills_each_unit_in_a_clump_and_removes_them_all(tmp_path):
 def test_claude_count_off_bills_one_unit(tmp_path):  # flag off: the stable behavior
     p, _ = _counting_pipeline(tmp_path, False)
     assert run(p, Script(Scene()).still(1.0).drop(RED)) == [("added", "green-bag")]
+
+
+def test_a_wide_angle_camera_with_barrel_distortion_works_in_the_corners(tmp_path):  # locked layout: cam1 is a fisheye
+    from kartcv.synth import mat_roi
+    fe = {1: 0.35}
+    p, _ = make(tmp_path)
+    p.cfg.roi = {"0": mat_roi(0), "1": mat_roi(1, fisheye=0.35, per_edge=8)}  # a polygon around the curved floor edge
+    p.apply_roi()
+    corner = Item("red-box", 660, 390, seed=1)  # where the lens shrinks and bends things most
+    assert run(p, Script(Scene(fisheye=fe)).still(1.0).drop(corner).take("red-box")) == \
+        [("added", "red-box"), ("removed", "red-box")]
