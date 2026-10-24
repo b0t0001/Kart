@@ -1,0 +1,100 @@
+"""Per-camera change detection between two settled frames (spec §5.2)."""
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, field
+
+import cv2
+import numpy as np
+
+_OPEN = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+_CLOSE = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+
+
+def lab_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Per-pixel color distance in 8-bit LAB, with lightness weighted half (shadows matter less)."""
+    d = cv2.cvtColor(a, cv2.COLOR_BGR2LAB).astype(np.float32) - cv2.cvtColor(b, cv2.COLOR_BGR2LAB).astype(np.float32)
+    d[..., 0] *= 0.5
+    return np.sqrt((d * d).sum(axis=2))
+
+
+def match_gain(img: np.ndarray, target: np.ndarray) -> np.ndarray:
+    """Scale `img` so its grayscale median matches `target`'s (cancels global brightness changes)."""
+    m_img = float(np.median(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)))
+    m_tgt = float(np.median(cv2.cvtColor(target, cv2.COLOR_BGR2GRAY)))
+    if m_img < 1.0:
+        return img
+    return np.clip(img.astype(np.float32) * (m_tgt / m_img), 0, 255).astype(np.uint8)
+
+
+def translate(img: np.ndarray, dx: float, dy: float) -> np.ndarray:
+    m = np.float32([[1, 0, dx], [0, 1, dy]])
+    return cv2.warpAffine(img, m, (img.shape[1], img.shape[0]), borderMode=cv2.BORDER_REPLICATE)
+
+
+@dataclass
+class Blob:
+    cam: int
+    box: tuple[int, int, int, int]  # x, y, w, h in full-res pixels, padded and clipped
+    area_frac: float
+    before: np.ndarray
+    after: np.ndarray
+
+
+@dataclass
+class ChangeResult:
+    cam: int
+    status: str  # "none" | "disturbed" | "blobs"
+    blobs: list[Blob] = field(default_factory=list)
+    changed_frac: float = 0.0
+    shift: tuple[float, float] = (0.0, 0.0)  # camera shift, full-res px (+x = content moved right)
+    frame: np.ndarray | None = None
+    reference: np.ndarray | None = None
+
+
+def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg) -> ChangeResult:
+    w, h = cfg.diff_size
+    full_h, full_w = current.shape[:2]
+    sx, sy = full_w / w, full_h / h
+    ref_s = cv2.resize(reference, (w, h), interpolation=cv2.INTER_AREA)
+    cur_s = cv2.resize(current, (w, h), interpolation=cv2.INTER_AREA)
+
+    def result(status, blobs=(), frac=0.0, shift=(0.0, 0.0)):
+        return ChangeResult(cam, status, list(blobs), frac, shift, current, reference)
+
+    # 1. Did the camera itself move (bumped)? Then nothing can be compared pixel by pixel.
+    g_ref = cv2.cvtColor(ref_s, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    g_cur = cv2.cvtColor(cur_s, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    window = cv2.createHanningWindow((w, h), cv2.CV_32F)
+    (dx, dy), _ = cv2.phaseCorrelate(g_ref, g_cur, window)
+    shift = (dx * sx, dy * sy)
+    if math.hypot(dx, dy) > cfg.max_shift_px:
+        return result("disturbed", shift=shift)
+
+    # 2. Brightness-normalized color difference, cleaned up.
+    cur_s = match_gain(cur_s, ref_s)
+    dist = lab_distance(cv2.GaussianBlur(ref_s, (7, 7), 0), cv2.GaussianBlur(cur_s, (7, 7), 0))
+    mask = (dist > cfg.change_thresh).astype(np.uint8) * 255
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, _OPEN)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, _CLOSE)
+    frac = float(mask.mean()) / 255.0
+    if frac > cfg.disturbed_frac:
+        return result("disturbed", frac=frac, shift=shift)
+
+    # 3. Solid blobs only.
+    n, _, stats, _ = cv2.connectedComponentsWithStats(mask)
+    min_area = cfg.min_blob_frac * w * h
+    blobs = []
+    for i in range(1, n):
+        bx, by, bw, bh, area = stats[i]
+        if area < min_area:
+            continue
+        x0, y0, x1, y1 = bx * sx, by * sy, (bx + bw) * sx, (by + bh) * sy
+        px, py = (x1 - x0) * cfg.crop_pad, (y1 - y0) * cfg.crop_pad
+        x0, y0 = max(0, int(x0 - px)), max(0, int(y0 - py))
+        x1, y1 = min(full_w, int(math.ceil(x1 + px))), min(full_h, int(math.ceil(y1 + py)))
+        blobs.append(Blob(cam, (x0, y0, x1 - x0, y1 - y0), area / (w * h),
+                          reference[y0:y1, x0:x1].copy(), current[y0:y1, x0:x1].copy()))
+    if not blobs:
+        return result("none", frac=frac, shift=shift)
+    return result("blobs", blobs, frac, shift)
