@@ -1,7 +1,9 @@
 """Frame sources behind one shape: live cameras, recordings on disk, and in-memory lists (tests)."""
 from __future__ import annotations
 
+import glob
 import logging
+import os
 import sys
 import threading
 import time
@@ -26,6 +28,25 @@ class Frame:
 
 
 Tick = dict  # dict[int, Frame | None]: one frame (or None) per camera for one loop step
+
+
+def camera_paths(paths: list[str] | None = None, realpath=os.path.realpath) -> list[str]:
+    """One stable /dev/v4l/by-path node per USB camera, ordered by USB port.
+
+    udev adds both a usb- and a usbv2- link for each camera; keep the first (usb-). Non-USB video
+    nodes (the Pi's mailbox codec) are left out.
+    """
+    if paths is None:
+        paths = glob.glob("/dev/v4l/by-path/*usb*-video-index0")
+    seen, cams = set(), []
+    for p in sorted(paths):
+        if "usb" not in os.path.basename(p) or not p.endswith("-video-index0"):
+            continue
+        real = realpath(p)
+        if real not in seen:
+            seen.add(real)
+            cams.append(p)
+    return cams
 
 
 def _default_capture(source: int | str):

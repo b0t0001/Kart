@@ -57,7 +57,9 @@ sudo systemctl stop kart-cv                      # the service holds the cameras
 ~/venv/bin/python pi/main.py live --debug-view   # Ctrl-C to stop
 ```
 
-Open **http://smartcart.local:8080** on the laptop for the debug page (both camera feeds plus
+Open **http://smartcart.local:8080** on the laptop for the debug page. If `smartcart.local` stops
+resolving (it can after the hotspot restarts), use the Pi's IP from the hotspot's "Devices connected"
+list instead, e.g. **http://192.168.137.127:8080**, and the same IP in every command below (both camera feeds plus
 the last events with their crops). Debug view shows full frames, so leave it off for the demo.
 Without `--debug-view` you still get `http://smartcart.local:8080/status`.
 

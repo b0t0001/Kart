@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import argparse
-import glob
 import shutil
 import subprocess
 import sys
@@ -17,13 +16,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pi"))
 
 from kartcv.config import REPO_ROOT, load_config  # noqa: E402
-from kartcv.sources import snap_all  # noqa: E402
+from kartcv.sources import camera_paths, snap_all  # noqa: E402
 
 
 def list_cameras() -> None:
-    paths = sorted(glob.glob("/dev/v4l/by-path/*-video-index0"))
+    paths = camera_paths()
     if paths:
-        print("Stable camera paths (put these in pi/config.json \"cameras\"):")
+        print("Stable camera paths, one per USB camera (put these in pi/config.json \"cameras\"):")
         for p in paths:
             print("  " + p)
     else:

@@ -61,3 +61,17 @@ def test_live_camera_warmup_and_no_buffersize():
     assert f is not None and f.image.shape == (720, 1280, 3) and cam.healthy
     assert cv2.CAP_PROP_BUFFERSIZE not in caps[0].props and cv2.CAP_PROP_FOURCC in caps[0].props
     cam.close()
+
+
+def test_camera_paths_one_per_usb_camera():  # hardware note: usb-/usbv2- duplicates and the mailbox node
+    from kartcv.sources import camera_paths
+    base = "/dev/v4l/by-path/platform-fd500000.pcie-pci-0000:01:00.0-"
+    links = {
+        base + "usb-0:1.1:1.0-video-index0": "/dev/video0",
+        base + "usbv2-0:1.1:1.0-video-index0": "/dev/video0",
+        base + "usb-0:1.3:1.0-video-index0": "/dev/video2",
+        base + "usbv2-0:1.3:1.0-video-index0": "/dev/video2",
+        "/dev/v4l/by-path/platform-fe00b840.mailbox-video-index0": "/dev/video10",
+    }
+    assert camera_paths(sorted(links), realpath=links.get) == [base + "usb-0:1.1:1.0-video-index0",
+                                                               base + "usb-0:1.3:1.0-video-index0"]

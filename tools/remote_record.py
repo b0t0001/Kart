@@ -3,6 +3,7 @@
 
 On the Pi:      ~/venv/bin/python pi/main.py live --debug-view      (or the service with debug_view on)
 On the laptop:  python tools/remote_record.py --seconds 30           # → tools/out/rec-remote-…/
+                (if smartcart.local doesn't resolve: --host 192.168.137.127, the IP on the hotspot page)
 Then:           python pi/main.py replay tools/out/rec-remote-…      # same pipeline, on the recording
 """
 from __future__ import annotations
