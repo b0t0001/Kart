@@ -125,7 +125,7 @@ def test_checkout_twice_returns_the_same_receipt(cart, conn):
 def test_checkout_blocks_on_unresolved_items(cart):
     add(cart, "bananas")
     eid = unknown_event(cart)
-    with pytest.raises(psycopg.errors.RaiseException, match="unresolved_items"):
+    with pytest.raises(psycopg.errors.RaiseException, match=r"^unresolved_items: 1 "):  # iPad matches this prefix
         cart("checkout", p_provider="simulated")
     cart("apply_cart_event", p_type="removed", p_product_id=None, p_confidence=1.0,
          p_source="manual", p_label="not an item", p_resolves_event_id=eid)
