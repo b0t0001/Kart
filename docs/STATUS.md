@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 night · member memory merged, nudges on
+- Member memory merged to main (flag off; tag `stable-pre-memory`). Quantity nudges ON by default (the 2nd spaghetti box → "Keep the extra?"). Script route 6 → 4 → 9. Guests' bare "yeah" fixed. Voice agent redeploy pending.
+
 ### 2026-10-24 evening · final demo script, conversation fixes
 - **Final demo** (`docs/DEMO_PLAN.md`): one natural pasta trip, plus a member Act 2 (capture Leo's party live → fast-forward). Shopping: 4 items, ~$16 at Target Berkeley Central.
 - **Voice:** list editing is live. Interaction catalog: 52 scenarios run against the real model. Fixes landing: replan keeps the cart, diet guard, "how much is this?", and more.
