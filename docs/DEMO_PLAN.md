@@ -1,5 +1,8 @@
 # KART end-to-end demo plan
 
+> **2026-10-24 — ONE end-to-end demo: Meal A (pasta night for 4) only.** Meal B (nachos) is **dropped from the demo**. Kart still plans it if a judge asks, but we don't buy or rehearse it. Shopping list = spaghetti ×3, marinara ×1, Parmesan shaker ×1 (~$12 at Target, all in Aisle A12). See [TARGET_SHOPPING_CHECKLIST.md](TARGET_SHOPPING_CHECKLIST.md).
+
+
 The single source for **what we buy, how each item is set up in the catalog, and exactly where it appears in the demo.** It covers two shelf-stable meals and nothing that needs a fridge. Owned by the manager; the backend runbook (`backend/docs/DEMO.md`) follows this script.
 
 **Meals:**
