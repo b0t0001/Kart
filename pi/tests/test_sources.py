@@ -75,3 +75,10 @@ def test_camera_paths_one_per_usb_camera():  # hardware note: usb-/usbv2- duplic
     }
     assert camera_paths(sorted(links), realpath=links.get) == [base + "usb-0:1.1:1.0-video-index0",
                                                                base + "usb-0:1.3:1.0-video-index0"]
+
+
+def test_save_tick_can_shrink_frames_for_sharing(tmp_path):
+    big = np.full((720, 1280, 3), 120, np.uint8)
+    save_tick(tmp_path, {0: Frame(big, 1.0, 0)}, scale=0.5, quality=85)
+    [f] = [s.read() for s in load_recording(tmp_path)]
+    assert f.image.shape == (360, 640, 3) and abs(f.ts - 1.0) < 1e-6

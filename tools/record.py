@@ -3,6 +3,9 @@
 
   python tools/record.py --seconds 30
   python pi/main.py replay tools/out/rec-...      # run the pipeline on it
+
+  # a clip to share through git (≈ 4 MB per 15 s): half size, 5 Hz
+  python tools/record.py --seconds 15 --hz 5 --scale 0.5 --quality 85 --out hardware/clips/<name>
 """
 from __future__ import annotations
 
@@ -24,6 +27,8 @@ def main() -> int:
     ap.add_argument("--seconds", type=float, default=30.0)
     ap.add_argument("--hz", type=float, default=10.0)
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--scale", type=float, default=1.0, help="0.5 = half-size frames, for sharing")
+    ap.add_argument("--quality", type=int, default=95, help="JPEG quality")
     args = ap.parse_args()
     cfg = load_config(args.config)
     out = args.out or REPO_ROOT / "tools/out" / f"rec-{datetime.now():%Y%m%d-%H%M%S}"
@@ -42,7 +47,7 @@ def main() -> int:
             for c in cams:
                 f = c.read()
                 tick[c.cam] = Frame(f.image, ts, c.cam) if f is not None else None  # same ts per tick
-            save_tick(out, tick)
+            save_tick(out, tick, scale=args.scale, quality=args.quality)
             n += 1
             time.sleep(max(0.0, 1.0 / args.hz - (time.monotonic() - t0)))
     except KeyboardInterrupt:

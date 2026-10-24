@@ -113,6 +113,19 @@ agent) need no enrollment: they go to Claude using their `vision_hint`.
 Record a few real add/remove/hand/bump clips. They become regression tests and the material for
 tuning the knobs below.
 
+`replay` is a rehearsal: it uses a scratch state folder (never the live cart's memory) and sends
+nothing to the backend, so it's safe to run on the Pi while the cart is set up.
+
+**Sharing clips with the CV chat** (it can't reach the Pi; it works from clips in git):
+
+```bash
+~/venv/bin/python tools/record.py --seconds 15 --hz 5 --scale 0.5 --quality 85 --out hardware/clips/<name>
+~/venv/bin/python pi/main.py replay hardware/clips/<name> --no-cloud    # note the events it prints
+```
+
+Half-size clips are about 4–6 MB per 15 s and replay the same for detection. Commit
+`hardware/clips/` with a line per clip saying what actually happened, then push.
+
 ### If something looks wrong
 
 | Symptom | Likely cause → fix |

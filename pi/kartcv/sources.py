@@ -160,13 +160,18 @@ class FrameListSource:
         return Frame(image, ts, self.cam) if image is not None else None
 
 
-def save_tick(root: Path, tick: Tick) -> None:
+def save_tick(root: Path, tick: Tick, scale: float = 1.0, quality: int = 95) -> None:
+    """Write one tick as cam{k}/<ts_ms>.jpg. scale < 1 shrinks frames for clips meant to be shared:
+    detection runs at 640×360 anyway, so half-size clips replay the same (identification is coarser)."""
     for cam, frame in tick.items():
         if frame is None:
             continue
         d = Path(root) / f"cam{cam}"
         d.mkdir(parents=True, exist_ok=True)
-        cv2.imwrite(str(d / f"{round(frame.ts * 1000):013d}.jpg"), frame.image)
+        img = frame.image
+        if scale != 1.0:
+            img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        cv2.imwrite(str(d / f"{round(frame.ts * 1000):013d}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, quality])
 
 
 def load_recording(root: Path) -> list[FrameListSource]:
