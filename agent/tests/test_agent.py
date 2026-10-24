@@ -244,3 +244,14 @@ async def test_the_nudge_names_the_trips_meal():
     nudge = {"type": "nudge", "product_id": "barilla-spaghetti", "kind": "over", "have": 2, "need": 1, "text": "x"}
     assert await run(agent, UserCustomSent(metadata=nudge)) == [
         "That's two pounds of spaghetti in the cart, and pasta night for 4 needs one. Keep the extra?"]
+
+
+async def test_at_checkout_skip_it_or_go_get_it_by_voice():
+    agent, backend = make()
+    short = {"type": "nudge", "product_id": "barilla-spaghetti", "kind": "under", "have": 0, "need": 1, "text": "x"}
+    agent.run_filter(UserCustomSent(metadata=short))
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Um, I'll go get it.")])) == ["Okay, it's in Aisle 6."]
+    assert ("set_cart_status", {"p_cart_id": "7", "p_status": "shopping"}) in backend.calls          # back to the aisle
+    agent.run_filter(UserCustomSent(metadata={**short, "product_id": "rao-marinara"}))
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Skip it.")])) == ["Got it."]
+    assert [p["p_action"] for name, p in backend.calls if name == "dismiss_nudge"] == ["ok", "ok"]

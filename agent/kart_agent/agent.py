@@ -114,9 +114,16 @@ class KartAgent:
             nudge_reply = nudge_answer(text) if self._nudge and (self._last_asked == "nudge" or not self._offer) else None
             if nudge_reply:                              # "keep it" / "got it": dismiss_nudge, no Claude round
                 await self._caption("user", text)
-                self._nudge = None
-                await run_tool("dismiss_nudge", {"action": nudge_reply}, ctx)
+                nudge, self._nudge = self._nudge, None
+                await run_tool("dismiss_nudge", {"action": "keep" if nudge_reply == "keep" else "ok"}, ctx)
                 line = KEEP_LINE if nudge_reply == "keep" else NUDGE_OK_LINE
+                if nudge_reply == "fetch":                   # short at checkout: back to shopping, and where to go
+                    try:
+                        await self.backend.rpc("set_cart_status", p_cart_id=self.cart_id, p_status="shopping")
+                    except Exception:
+                        pass
+                    aisle = next((p.get("aisle") for p in self._catalog if p["id"] == nudge.get("product_id")), None)
+                    line = f"Okay, it's in {aisle}." if aisle else "Okay, go grab it."
                 self.brain.remember(text, line)
                 async for out in self._say([line], interruptible=False):
                     yield out

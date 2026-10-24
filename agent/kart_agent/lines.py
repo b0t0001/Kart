@@ -129,11 +129,14 @@ NUDGE_OK_LINE = "Got it."
 _KEEP = {"keep it", "keep", "keep them", "keep both", "keeping it", "i'll keep it", "i'll keep them", "yes keep it",
          "yeah keep it", "i want it", "i want them"}
 _NUDGE_OK = {"ok", "okay", "got it", "gotcha", "i'll put it back", "put it back", "putting it back", "no",
-             "nope", "nah", "fine", "right", "my bad", "oops"}
+             "nope", "nah", "fine", "right", "my bad", "oops", "skip it", "skip", "skip that", "never mind", "it's fine"}
+_FETCH = ("go get it", "i'll get it", "i'll go get it", "i'll grab it", "let me get it", "let me grab it", "go back",
+          "i'll go back", "get it")
 
 
 def nudge_answer(text: str) -> str | None:
-    """A plain spoken answer to a quantity nudge: 'keep' or 'ok' (dismiss_nudge), else None for Claude."""
+    """A plain spoken answer to a quantity nudge: 'keep', 'ok' (dismiss_nudge) or 'fetch' (short: go back for it),
+    else None for Claude."""
     if "?" in text:
         return None
     words = re.sub(r"[^a-z' ]", " ", text.lower()).split()
@@ -144,6 +147,8 @@ def nudge_answer(text: str) -> str | None:
         return None
     if phrase in _KEEP or "keep" in words:
         return "keep"
+    if phrase in _FETCH or phrase.startswith(("i'll go get", "i'll grab", "i'll get", "let me get", "let me grab")):
+        return "fetch"
     if phrase in _NUDGE_OK or phrase.startswith(("okay", "ok ", "got it", "i'll put", "put it back")):
         return "ok"
     return None
