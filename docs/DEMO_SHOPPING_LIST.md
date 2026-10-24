@@ -1,5 +1,46 @@
 # Demo shopping list
 
+## LEAN LIST (recommended): 7 shelf-stable items, ~$35–40, nothing to refrigerate
+
+| Buy | Qty | ~Cost | Covers |
+|---|---|---|---|
+| Barilla Spaghetti, 1 lb (blue box) | **3** | $6 | Pasta scenario, add/remove, **the "too much" nudge** (the 3rd box), **counting identical items** |
+| Marinara, jar (any brand; a plastic jar is safer than glass) | 1 | $4–9 | Pasta. **Triggers the Parmesan deal** |
+| Grated Parmesan shaker (e.g. the Kraft green can; shelf-stable) | 1 | $4 | **The headline deal card:** "Parmesan is $3 off" |
+| Tortilla chips, big bag | 1 | $5 | **A second deal card** (chips $1.50 off), a big and light item that's safe to drop |
+| Salsa, jar | 1 | $4 | Triggers the chips deal |
+| Taco seasoning packet | 1 | $1.50 | The **small-item** test |
+| Flour tortillas, soft taco pack *(optional)* | 2 | $8 | Taco scenario plus a second identical pair |
+
+**Free, already on hand:**
+- **apple:** not in the catalog, so it shows the **"Is this…?"** card (the trust story);
+- **Tide bottle:** the **tall item**, either as an unknown or added live in the merchant console to show a new product with zero training.
+
+**Don't buy, on purpose:**
+- **ground beef, cheese, sour cream, avocados, milk, eggs, bananas.** Kart still plans them ("taco night for 4" → beef, cheese, sour cream…), and leaving them out is **exactly what triggers the "Before you go: you still need ground beef and sour cream" checkout reminder.**
+
+**How every feature is still covered:**
+| Feature | Shown with |
+|---|---|
+| Voice planning, routing, captions | Any request ("pasta night for 4") |
+| Add → live bill; remove → total drops | Spaghetti, chips |
+| Deal at the moment of decision | Marinara → **Parmesan $3 off**; salsa → **chips $1.50 off** |
+| Unknown item → "Is this…?" → checkout blocked until it's answered | The apple |
+| Tall item (billed after a 3 s stillness check) | The Tide bottle |
+| Small item | The taco seasoning packet |
+| "Too much" nudge (beta) | The 3rd spaghetti box |
+| "Still short" checkout reminder (beta) | Everything you didn't buy |
+| Counting identical items (beta) | 2–3 spaghetti boxes dropped together |
+| Merchant console (housekeeping) | Live price/aisle/deal edits, adding the Tide as a product |
+
+**Skipped from the full list, with what you'd lose:** a big-item test (the chips bag is close enough), produce with no package (bananas), and a few staples. None of these are demo features.
+
+After shopping, send the manager the exact items. The backend then changes `kirkland-parmesan` into the grated shaker (name, size, price, camera description) and sets stock to how many you bought.
+
+---
+
+## Full list (original, for reference)
+
 These props cover three demo scenarios plus the camera and quantity tests. Every item maps to a product already in the catalog (`data/store.json`), so its deals and aisles already work. **Buy normal grocery sizes.** After shopping, send the manager the exact items, and the backend updates names, sizes, shelf prices, camera descriptions and **stock = how many you bought**.
 
 ## The list
