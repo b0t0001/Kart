@@ -7,7 +7,7 @@
 > | # | Shopper | Kart / cart | Shows |
 > |---|---|---|---|
 > | 0 | *(if the member beta is ready)* sign in as Dylan → "Yes, but it's 6 of us now." | "Welcome back, Dylan! Leo's team pasta dinner is tomorrow. Want that list?" → rescales the list | Personalization + editing quantities by voice |
-> | 1 | *(otherwise)* "Pasta night for my family of 4." → "Not now." | Lists spaghetti, marinara, garlic bread → "One deal goes with your list. Want to hear it?" → "I'll tell you at the shelf." | Voice planning |
+> | 1 | *(otherwise)* "Pasta night for my family of 4." → "Not now." | Lists spaghetti, marinara, garlic bread; "First stop is Aisle 6 for the spaghetti." → "One deal goes with your list. Want to hear it?" → "I'll tell you at the shelf." | Voice planning |
 > | 2 | "We've got garlic bread at home, take it off." | "Took garlic bread off your list." | Remove by voice |
 > | 3 | "Add something chocolate for dessert." | "Added Hershey's XL, Aisle 7 (A3 at Target)." | Add by voice from the store's catalog |
 > | 4 | Drop **spaghetti** → "Yes" → drop the **Parmesan** | "Got the Spaghetti. Parmesan is $1 off in Aisle 4. Want it?" → bill shows "saved $1" | Live bill + deal at the moment of decision |
