@@ -59,7 +59,7 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 | `d-baguette-1off` | Garlic bread, $1 off | spaghetti, marinara | Shows on the list row; never bought |
 
 **Kart's lists** (the voice agent is tuned to produce exactly these):
-- **A. "Pasta night for 4"** → **spaghetti ×1, marinara ×1, garlic bread ×1**. The Parmesan is left for the deal card. Basis: "1 lb serves 4".
+- **A. "Pasta night for 4"** → **spaghetti ×1, marinara ×1, garlic bread ×1** (verified 3/3 runs with the real model). The Parmesan is left for the deal card. Basis: "1 lb serves 4".
 - **B. "Game-night nachos for 6"** → **salsa ×1, queso ×1, black beans ×1, jalapeños ×1, sour cream ×1**. The chips are left OFF the list on purpose: cards never show for listed items, so the chips deal card offers them when the salsa or queso goes in.
 
 ---
@@ -71,7 +71,7 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 ### Meal A: pasta night (headline)
 | # | Action | Item | What the cameras do | iPad / bill | Kart says |
 |---|---|---|---|---|---|
-| 1 | Tap start, say *"Pasta night for my family of 4"* | — | — | List: Spaghetti, Marinara, Garlic Bread; next stop A6 | "Pasta night for four… spaghetti, marinara and garlic bread. Head to Aisle 6." |
+| 1 | Tap start, say *"Pasta night for my family of 4"* | — | — | List: Spaghetti, Marinara, Garlic Bread; next stop A6 | "Pasta night for four… spaghetti, marinara and garlic bread. First stop is aisle 2 for the garlic bread." (The presenter heads to pasta in Aisle 6; garlic bread is deliberately skipped) |
 | 1b | Kart asks *"By the way, one deal goes with your list. Want to hear it?"* → say **"Not now"** | — | — | — | Skips the deal walk-through. **The deal is still spoken at the shelf** (step 3) — Dylan's rule: "not now" = tell me at the shelf |
 | 2 | Drop **spaghetti box 1** | `barilla-spaghetti` | settle → identify (local match, ~1.5 s) → 1 add | Bill: Spaghetti $x; list row ✓; **Parmesan deal card** | "Got the spaghetti." then **"Parmesan is $1 off in Aisle 4. Want it?"** |
 | 3 | Say *"Yes"*, drop **marinara** | `rao-marinara` | 1 add | Bill +marinara; Parmesan joins the list with $1 off | "Added Parmesan to your list." |
@@ -112,3 +112,6 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 5. **CV:** replays the clips and reports recognition accuracy for each bought item.
 6. **Whole team:** rehearse Meal A three times, on cart 7 or a test cart. Rehearsals use placeholder stock (20).
 7. **Right before judging (operator):** one command, `backend/pre_judging.sh` (add `--members` if the member beta ships). It shows the target database and asks you to type `judging`, then sets the real stock counts, resets the demo and seeds the member. See `backend/docs/DEMO.md`.
+
+
+> **Beta nudges (2026-10-24):** only "Keep the extra?" (too much) and the single "Before you go" checkout list fire. Mid-trip "you're short" nudges are off.
