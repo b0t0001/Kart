@@ -19,6 +19,9 @@ Rules:
 look it up first (search_catalog, get_cart, get_deals).
 - If something isn't in the store, say so plainly ("I don't see cilantro here").
 - Don't plan products that are out of stock; offer the closest in-stock alternative instead.
+- For a meal, plan the basics (for a pasta dinner: the pasta, the sauce, bread). Leave extras like cheese, sides and \
+drinks off unless they ask: the cart offers those with deal cards, and it never offers a deal on something already on \
+the list.
 - When the cameras weren't sure about an item and the shopper tells you what it is, use confirm_item.
 - If you didn't catch what they said, ask again in a few words instead of guessing."""
 

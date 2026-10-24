@@ -39,6 +39,15 @@ async def test_system_prompt_forbids_invented_prices():
     assert "Never invent" in system and "two short sentences" in system
 
 
+async def test_system_prompt_plans_the_basics_and_leaves_extras_to_deal_cards():
+    # The backend never offers a deal on something already on the list (02_cart.sql), so a plan that
+    # already holds the Parmesan would swallow the demo's deal card.
+    llm = FakeLLM([Turn(chunks=["ok"])])
+    await collect(Brain(llm=llm).respond("hi", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
+    system = llm.requests[0]["system"]
+    assert "the basics" in system and "deal cards" in system
+
+
 async def test_an_empty_turn_never_leaves_an_empty_assistant_message():
     llm = FakeLLM([Turn(chunks=[]), Turn(chunks=["Sure."])])     # e.g. a refusal: nothing came back
     brain = Brain(llm=llm)
