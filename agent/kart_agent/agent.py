@@ -58,6 +58,7 @@ class KartAgent:
         self.digest_delay_seconds = digest_delay_seconds   # the pause after reading the list before asking about deals
         self._digest: dict[str, Any] | None = None  # "N deals go with your list": asked, then walked one at a time
         self._digest_asked: set[str] = set()       # deals already asked about in a walk-through this trip
+        self._digest_due = False                   # a new list's deals question, held while Kart asked its own
         self._context = asyncio.Event()
         self._plan: list[dict[str, Any]] = []
         self._items: list[dict[str, Any]] = []
@@ -88,7 +89,7 @@ class KartAgent:
                 if meta.get("trip_id") and meta.get("trip_id") != self.trip_id:   # a new trip starts fresh
                     self._said, self._meal, self._offer, self._nudge = set(), None, None, None
                     self._undo, self._latest_added, self._unknown_open = [], None, False
-                    self._digest, self._digest_asked = None, set()
+                    self._digest, self._digest_asked, self._digest_due = None, set(), False
                 self.trip_id = meta.get("trip_id") or self.trip_id
                 self._context.set()
                 return False
@@ -220,11 +221,15 @@ class KartAgent:
                 self._offer = None
             elif _POINTING.search(text) and (seen := await self._what_this_is()):
                 heard = f"({seen}) {text}"
+            said = []
             async for out in self._say(self._caption_first(text, self.brain.respond(heard, ctx)), interruptible=self.barge_in):
+                said.append(out.text)
                 yield out
             self._meal = ctx.get("meal") or self._meal
             await self._refresh()                        # Claude's tools may have changed the list
-            if ctx.get("planned"):                       # a new list: ask about its deals (new ones only), after a beat
+            self._digest_due = self._digest_due or bool(ctx.get("planned"))   # a new list: ask about its deals
+            if self._digest_due and not "".join(said).rstrip().endswith("?"):  # ...once Kart's own question is answered
+                self._digest_due = False
                 async for out in self._offer_digest():
                     yield out
         elif isinstance(event, UserCustomSent):

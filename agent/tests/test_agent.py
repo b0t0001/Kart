@@ -535,3 +535,14 @@ async def test_a_rejoined_call_remembers_the_meal_and_the_conversation():
     assert agent.brain.llm.requests[-1]["messages"][:3] == [
         {"role": "user", "content": "Pasta night for 4."}, {"role": "assistant", "content": "You're set with spaghetti."},
         {"role": "user", "content": "Where's the spaghetti?"}]
+
+
+async def test_the_deals_question_waits_while_kart_has_asked_its_own():
+    tacos = ToolUse("t1", "set_plan", {"meal": "tacos", "items": [{"product_id": "barilla-spaghetti", "reason": "pasta"}]})
+    agent, backend = make([Turn(chunks=["One sec."], tools=[tacos]),
+                           Turn(chunks=["Tacos it is. The salsa's already in your cart. Keep it?"]),
+                           Turn(chunks=["Okay, take it out when you can."])])
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="actually make it tacos")]))
+    assert cards(outs) == []                                   # "Keep it?" is still open: no second question
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="No, I'll put it back.")]))
+    assert spoken(outs)[0] == "Okay, take it out when you can." and cards(outs) == [{"type": "deal_digest", "count": 1}]
