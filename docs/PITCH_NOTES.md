@@ -23,6 +23,13 @@ Talking points for the pitch, the Devpost write-up and judge Q&A. Owned by the m
 - Claude accuracy on real props: ___ (12/12 on printed-name test crops, median 1.6 s)
 - drop → iPad latency: ___ (expected ~1.5 s local, ~3 s with Claude)
 
+## Voice (Cartesia track: voice is the main interface, not an add-on)
+- Kart is a **Cartesia Line** hosted agent with **Claude** inside. Your hands stay on the cart: you just talk, and you can interrupt.
+- **About 2 s from the moment you stop talking to Kart's first words** (measured on hosted; it was 9–10 s before tuning). Kart opens with a few words while it plans, and the catalog is in its prompt, so it can plan without searching first.
+- Measured: "I'm making a pasta dinner for my family" → *"Pasta night, nice… I put spaghetti, Rao's sauce and a baguette on your list. Head to aisle 2 first for the baguette, which is $1 off right now."* The list lands on the cart, and both sides are captioned on the iPad.
+- Kart leaves the Parmesan to the deal card, so the store-owner moment still lands.
+- The Cartesia key never touches the iPad: a Supabase function hands out short-lived tokens.
+
 ## Trust: where the AI could be wrong, and what we did about it
 *(Anthropic asks this directly; Visa scores "trust & responsibility" at 15%.)*
 - **Cameras point into the basket, never at people.** Only crops of the changed region go to Claude, and no faces are stored.
