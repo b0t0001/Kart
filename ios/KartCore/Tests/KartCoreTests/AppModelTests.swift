@@ -82,6 +82,9 @@ import Testing
     await t.backend.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")
     await t.model.respond(to: try #require(t.model.visibleCard), with: .yes)
     #expect(t.backend.cart.plan.contains { $0.productId == "kirkland-parmesan" && $0.reason == "deal" })
+    #expect(t.model.visibleCard == nil)                     // on the list now, so the card goes away
+
+    await t.model.startTrip()                                // "No thanks" on a fresh trip
     await t.backend.simulateVision(.added, productId: "tostitos-salsa", confidence: 0.9, label: "salsa")   // suggests chips
     await t.model.respond(to: try #require(t.model.visibleCard), with: .no)
     #expect(t.backend.cart.suggestion == nil)
@@ -169,4 +172,13 @@ import Testing
     #expect(t.sounds.played.isEmpty && t.voice.sent.isEmpty)   // nothing re-announced
     #expect(!t.model.cards.contains { $0.id.hasPrefix("newdeal-") })
     #expect(t.model.cards.map(\.id).first == "confirm-2")       // still-open cards still show
+}
+
+@MainActor @Test func plannedProductSuggestionIsNotAnnounced() async throws {
+    let t = try make(); await t.model.startTrip()
+    try await t.backend.setPlan([PlanItem(productId: "kirkland-parmesan", reason: "pasta dinner")]); t.model.ingest(cart: t.backend.cart)
+    await t.backend.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s"); t.model.ingest(cart: t.backend.cart)
+    #expect(t.backend.cart.suggestion?.dealId == "d-parm-3off")
+    #expect(!t.voice.sent.contains { if case .suggestion = $0 { true } else { false } })
+    #expect(!t.sounds.played.contains(.card) && t.model.visibleCard == nil)
 }

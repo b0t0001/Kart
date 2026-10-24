@@ -19,11 +19,14 @@ public final class MockVoiceSession: VoiceSession {
     @ObservationIgnored private var started = false
     @ObservationIgnored private var tail: Task<Void, Never>?
     @ObservationIgnored private var levelTask: Task<Void, Never>?
+    @ObservationIgnored private let animatesLevel: Bool
 
-    public init(brain: MockAgentBrain, backend: any KartBackend, speech: any SpeechOutput) {
+    /// `animatesLevel: false` keeps the mouth still (UI tests need the app to go idle while Kart talks).
+    public init(brain: MockAgentBrain, backend: any KartBackend, speech: any SpeechOutput, animatesLevel: Bool = true) {
         self.brain = brain
         self.backend = backend
         self.speech = speech
+        self.animatesLevel = animatesLevel
     }
 
     public func start(cartId: String, tripId: UUID) async {
@@ -90,6 +93,7 @@ public final class MockVoiceSession: VoiceSession {
 
     private func animateLevel() {
         levelTask?.cancel()
+        guard animatesLevel else { return }
         levelTask = Task { @MainActor [weak self] in
             let start = Date.now
             while !Task.isCancelled {

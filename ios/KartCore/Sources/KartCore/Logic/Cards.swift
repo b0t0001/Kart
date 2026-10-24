@@ -95,7 +95,8 @@ public enum CardDeriver {
     }
 
     private static func dealCards(_ ctx: CardContext) -> [Card] {
-        guard let suggestion = ctx.cart.suggestion else { return [] }
+        guard let suggestion = ctx.cart.suggestion,
+              !ctx.cart.plan.contains(where: { $0.productId == suggestion.productId }) else { return [] }
         return [Card(id: "deal-\(suggestion.dealId)", kind: .deal(suggestion), title: suggestion.text, actions: [.yes, .no])]
     }
 

@@ -169,7 +169,8 @@ public final class AppModel {
 
     private func announceSuggestion(_ suggestion: Suggestion) {
         pendingDeals.removeAll { $0.deal.id == suggestion.dealId }
-        guard !announcedDeals.contains(suggestion.dealId) else { return }
+        guard !announcedDeals.contains(suggestion.dealId),
+              !backend.cart.plan.contains(where: { $0.productId == suggestion.productId }) else { return }
         announcedDeals.insert(suggestion.dealId)
         sounds.play(.card)
         voice.send(.suggestion(suggestion))

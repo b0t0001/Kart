@@ -49,9 +49,6 @@ public final class MockKartBackend: KartBackend {
 
     public func setPlan(_ plan: [PlanItem]) async throws {
         cart.plan = plan
-        if let suggestion = cart.suggestion, plan.contains(where: { $0.productId == suggestion.productId }) {
-            cart.suggestion = nil
-        }
         recompute()
     }
 
@@ -193,9 +190,9 @@ public final class MockKartBackend: KartBackend {
 
     private func isEligible(_ deal: Deal) -> Bool {
         let active = deal.endsAt.map { $0 > now } ?? true
+        // As the backend (§3a): the plan doesn't matter, only "not in the cart" and "not offered yet".
         return active
             && !cart.items.contains { $0.productId == deal.productId }
-            && !cart.plan.contains { $0.productId == deal.productId }
             && !cart.suggestedDeals.contains(deal.id)
     }
 

@@ -56,3 +56,11 @@ private func unknown(id: Int64, label: String) -> CartEvent {
     c.catalog.deals[c.catalog.deals.count - 1].endsAt = c.now.addingTimeInterval(-60)
     #expect(CardDeriver.cards(c).isEmpty)                            // expired
 }
+
+@Test func noDealCardForAProductAlreadyOnTheList() throws {
+    var c = try ctx()
+    c.cart.suggestion = Suggestion(productId: "kirkland-parmesan", dealId: "d-parm-3off", text: "Parmesan is $3 off in Aisle 4. Want it?")
+    #expect(CardDeriver.cards(c).map(\.id) == ["deal-d-parm-3off"])
+    c.cart.plan = [PlanItem(productId: "kirkland-parmesan", reason: "deal")]
+    #expect(CardDeriver.cards(c).isEmpty)                    // "Yes" by tap or by voice puts it on the list
+}
