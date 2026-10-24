@@ -3,20 +3,24 @@ KART iPad mount: parametric Fusion 360 script
 =============================================
 
 What it builds (in a NEW Fusion document, every run):
-  * Bracket_L / Bracket_R: mirrored "bookends", one per side of the iPad.
-    Three jobs, nothing else: a channel that holds one short edge of the
-    iPad (ledge, side wall, front lips on the bezel, back plate), a curved
-    arch that hangs on the cart handle (opens downward), and a hook that
-    wraps the top-basket wire from the shopper's side (opens toward the
-    basket). Straight struts tie them into triangles: an upper strut from
-    the top of the channel to the arch, a rib from the arch down the back
-    plate to the channel bottom, and a lower strut from there to the hook.
-    To fit it: hang the arch on the handle with the bottom swung toward
-    you and let go: gravity swings the hook onto the wire. The hook's jaws
-    stop it lifting, the arch stops it sliding, and the only free move is
-    swinging the screen up toward you, which gravity resists. Nothing
-    passes through the basket mesh. Zip-tie routing is parked (TIES) until
-    the profile is signed off.
+  * Bracket_L / Bracket_R: the "L", one print per side of the iPad. One
+    leg of the L is the channel that holds a short edge of the iPad (ledge,
+    side wall, front lips on the bezel, back plate). The other is a straight
+    leg from the bottom of the channel down to a foot that sits on top of
+    the top-basket wire. A curved arch on the back of the channel hangs on
+    the cart handle, and an upper strut ties the top of the channel to the
+    arch. The arch and the foot both open downward, so it hangs on in one
+    move.
+  * Brace_L / Brace_R: a flat bar bolted across the corner of the L (the
+    triangle). Bolt it on at the bench, before hanging the bracket.
+  * Cap_L / Cap_R: a small strap bolted to the foot under the wire, so the
+    bracket can't lift off. With the cap on nothing moves: the foot and cap
+    hold the wire on every side, and the arch's two sides stop it swinging
+    about the wire.
+    To fit it: bolt the brace on, drop a nut into each slot in the foot,
+    hold the bracket 2 cm high, slide it toward the cart until the arch is
+    over the handle and the foot over the wire, set it down, then bolt the
+    cap on under the wire (heads outside). check/check.py has the hand calcs.
   * TEST_Profile / TEST_Corner: quick fit-test prints (README, "Fit test").
   * REF_ components: handle, wire and iPad envelopes. Don't print them.
 
@@ -24,7 +28,12 @@ The iPad (landscape, no case) hangs on the shopper's side of the handle. It
 slides down into the two channels from above and rests on the ledges; lift it
 straight up to take it out. Windows in the side walls leave the USB-C port,
 speakers, mics and front camera clear, and the charging cable plugs in
-through one of them. No screws anywhere: zip ties are the only hardware.
+through one of them.
+
+Hardware: 8 x 10-32 x 1/2" bolts and 8 x 10-32 hex nuts (2 per brace, 2 per
+cap). Each nut drops into a slot in the L, which stops it turning, so you
+only turn the bolt. One zip tie between the two upper struts, behind the
+iPad, stops the brackets spreading along the handle.
 
 Two ways to change the model:
   1. Edit PARAMS below and re-run (fastest for big changes).
@@ -57,7 +66,6 @@ except NameError:
     STL_DIR = ''
 AUTO_FILLET = True      # CAD rule 3: fillet every corner by size, chamfer bed edges
 BUILD_TESTS = True      # TEST_Profile and TEST_Corner fit-test prints
-TIES = False            # zip-tie tunnels: parked until the side profile is signed off
 SHOW_REFERENCE = True   # grey REF_ envelopes (handle, wire, iPad); don't print
 
 # ============================================================== PARAMETERS
@@ -68,6 +76,7 @@ PARAMS = [
     ('ipad_w',      '247.6 mm', 'mm', 'iPad long side = width in landscape (Apple: 247.6)'),
     ('ipad_h',      '178.5 mm', 'mm', 'iPad short side = height in landscape (Apple: 178.5)'),
     ('ipad_d',      '5.9 mm',   'mm', 'iPad thickness, not counting the camera bump (Apple: 5.9)'),
+    ('ipad_g',      '473',      '',   'iPad mass in grams, for the hand calcs (Apple: 471-473)'),
     ('ipad_r',      '10 mm',    'mm', 'MEASURE: iPad corner radius seen from the front (rough is fine)'),
     ('bump_zone',   '45 mm',    'mm', 'MEASURE: rear camera bump, far edge from the nearest long edge + 5 mm. The back rest stays out of this band at top and bottom'),
     ('bump_relief', '2 mm',     'mm', 'MEASURE: camera bump height + 0.5 mm (back plate gap outside the rest band)'),
@@ -79,7 +88,7 @@ PARAMS = [
 
     # Cart
     ('handle_d',    '29 mm',    'mm', 'MEASURE: handle tube diameter where the brackets sit (~29 by ruler; calipers please)'),
-    ('handle_fit',  '0.5 mm',   'mm', 'Arch bore clearance per side (the zip tie pulls it snug)'),
+    ('handle_fit',  '0.5 mm',   'mm', 'Arch bore clearance per side'),
     ('rim_d',       '5.5 mm',   'mm', 'MEASURE: top-basket wire diameter (~5.5 by ruler; calipers please)'),
     ('rim_fit',     '0.3 mm',   'mm', 'Wire notch clearance per side'),
     ('drop_tops',   '155 mm',   'mm', 'MEASURE (eyeballed): top of handle straight down to top of the wire'),
@@ -99,7 +108,7 @@ PARAMS = [
     ('screen_angle', '40 deg',  'deg', 'Screen angle to the ground (90 = vertical); 35-45 reads well standing at the cart'),
     ('tilt',        '90 deg - screen_angle', 'deg', 'derived: screen lean-back from vertical (top edge toward the cart)'),
     ('v_h',         '70 mm',    'mm', 'Handle height behind the screen, measured up from the iPad bottom edge'),
-    ('hook_gap',    '3 mm',     'mm', 'Gap between back plate and handle tube (a zip tie runs through it)'),
+    ('hook_gap',    '3 mm',     'mm', 'Gap between back plate and handle tube'),
 
     # Channel (holds one short edge of the iPad)
     ('wall_t',      '4 mm',     'mm', 'Side wall thickness (the face that sits on the print bed)'),
@@ -116,21 +125,43 @@ PARAMS = [
     ('rest_lo',     'bump_zone', 'mm', 'Back rest band start (up from the iPad bottom edge)'),
     ('rest_hi',     'ipad_h - bump_zone', 'mm', 'Back rest band end'),
 
-    # Hanger: arch on the handle, struts, hook on the wire
+    # Hanger: arch on the handle, upper strut, back rib, leg
     ('sad_t',       '6 mm',     'mm', 'Arch wall thickness over the handle tube'),
     ('arm_w',       '30 mm',    'mm', 'Arch width along the handle (resists twisting)'),
     ('strut_t',     '30 mm',    'mm', 'Strut and rib width along the handle (resists twisting)'),
-    ('strut_w',     '12 mm',    'mm', 'Strut width in the side view (where it meets the back plate)'),
+    ('strut_w',     '12 mm',    'mm', 'Upper strut and leg width in the side view (where they meet the back plate)'),
     ('rib_d',       '8 mm',     'mm', 'Back rib depth behind the back plate, at the channel bottom'),
     ('top_v',       'ipad_h - 25 mm', 'mm', 'Upper strut meets the back plate this far up the screen'),
     ('top_a0',      '25 deg',   'deg', 'Upper strut lands on the arch between these angles (0 = basket side)'),
     ('top_a1',      '70 deg',   'deg', 'Upper strut lands on the arch between these angles'),
-    ('low_v',       '2 mm - (clr + ledge_t)', 'mm', 'Rib and lower strut root on the back plate (just above the ledge underside)'),
-    ('hook_w',      '17 mm',    'mm', 'Wire hook width: must fit between the mesh wires'),
-    ('pad_wall',    '6 mm',     'mm', 'Wire hook wall around the notch'),
-    ('zt_w',        '5.6 mm',   'mm', 'Zip-tie tunnel width (4.8 mm ties)'),
-    ('zt_h',        '2.2 mm',   'mm', 'Zip-tie tunnel height'),
-    ('tun_floor',   '1.4 mm',   'mm', 'Plastic between the wire tie tunnel and the notch'),
+    ('low_v',       '2 mm - (clr + ledge_t)', 'mm', 'Rib and leg root on the back plate (just above the ledge underside)'),
+
+    # Foot on the wire, and the cap that bolts to it under the wire
+    ('hook_w',      '17 mm',    'mm', 'Foot width along the handle: must fit between the mesh wires'),
+    ('cb_dz',       '8.5 mm',   'mm', 'Cap bolts sit this far above the wire centre, one each side of it'),
+    ('cap_r',       '6 mm',     'mm', 'Cap bolt boss radius (and half the width of each cap arm)'),
+    ('cap_t',       '6 mm',     'mm', 'Cap thickness along the handle'),
+    ('cap_wall',    '5 mm',     'mm', 'Cap material under the wire'),
+    ('foot_up',     '6.5 mm',   'mm', 'Foot top above the cap bolts'),
+    ('nut_wall',    '2.5 mm',   'mm', 'Plastic beyond the nut slots at the ends of the foot'),
+
+    # Brace: separate print, bolted across the corner of the L
+    ('brace_t',     '6 mm',     'mm', 'Brace thickness along the handle'),
+    ('brace_w',     '12 mm',    'mm', 'Brace width in the side view'),
+    ('boss_d',      '18 mm',    'mm', 'Boss diameter round each brace bolt'),
+    ('joint_t',     '12 mm',    'mm', 'Depth of the L\'s brace bosses, in from its outer face'),
+    ('j_drop',      '4 mm',     'mm', 'Brace top joint: this far down the screen from the handle centre'),
+    ('web_gap',     '2 mm',     'mm', 'Web from the brace top joint to the end of the arch stays this far outside the arch bore'),
+    ('leg_f',       '0.5',      '',   'Brace bottom joint: this fraction of the way down the leg'),
+
+    # Hardware: 10-32 x 1/2" bolts, 10-32 hex nuts
+    ('bolt_len',    '12.7 mm',  'mm', 'Bolt length under the head (1/2")'),
+    ('bolt_hole',   '5.2 mm',   'mm', 'Bolt clearance hole (#10 thread = 4.83 mm)'),
+    ('head_h',      '4.8 mm',   'mm', 'Bolt head height (socket head; clearance checks only)'),
+    ('nut_af',      '9.53 mm',  'mm', 'Nut across flats (3/8")'),
+    ('nut_t',       '3.18 mm',  'mm', 'Nut thickness (1/8")'),
+    ('nut_fit',     '0.3 mm',   'mm', 'Nut slot clearance'),
+    ('nut_s',       '2.5 mm',   'mm', 'Plastic between the brace or cap and the nut (the bolt has to reach through the nut)'),
 
     # Derived: don't edit, change the inputs above
     ('bx_o',        'ipad_w/2 + clr + wall_t', 'mm', 'derived: bracket outer face |X|'),
@@ -156,8 +187,31 @@ PARAMS = [
     ('v_c1',        '(n_p*sin(tilt) + r_sad - ipad_z0)/cos(tilt)', 'mm', 'derived: back plate height at the arch top'),
     ('arch_a1',     '180 deg - tilt + 20 deg', 'deg', 'derived: the arch runs from the basket side (0) over the top to here, into the back plate'),
     ('r_wb',        'rim_d/2 + rim_fit', 'mm', 'derived: wire notch radius'),
-    ('r_pad',       'r_wb + pad_wall', 'mm', 'derived: wire pad half size'),
-    ('tie_x',       'arm_w/2', 'mm', 'derived: tie tunnel centre, in from the outer face'),
+    ('nut_w',       'nut_af + nut_fit', 'mm', 'derived: nut slot width (across flats, so the nut can\'t turn)'),
+    ('nut_sl',      'nut_t + nut_fit', 'mm', 'derived: nut slot thickness'),
+    ('nut_c',       'nut_af/sqrt(3) + nut_fit/2', 'mm', 'derived: nut corner, from its centre'),
+    ('cb1_y',       'rim_dy - r_wb - 0.5 mm - cap_r', 'mm', 'derived: shopper-side cap bolt Y'),
+    ('cb2_y',       'rim_dy + r_wb + 0.5 mm + cap_r', 'mm', 'derived: basket-side cap bolt Y'),
+    ('cb_z',        '-(rim_drop) + cb_dz', 'mm', 'derived: cap bolt Z'),
+    ('ft_y0',       'cb1_y - nut_w/2 - nut_wall', 'mm', 'derived: foot shopper face'),
+    ('ft_y1',       'cb2_y + nut_w/2 + nut_wall', 'mm', 'derived: foot basket face'),
+    ('ft_z1',       'cb_z + foot_up', 'mm', 'derived: foot top'),
+    ('jv1',         'v_a0 - j_drop', 'mm', 'derived: brace top joint, up the screen from the iPad bottom edge'),
+    ('jn1',         'n_b + boss_d/2 - 1 mm', 'mm', 'derived: brace top joint, behind the screen face (boss overlaps the back plate 1 mm)'),
+    ('j1y',         '(ipad_y0) + (jv1)*sin(tilt) + (jn1)*cos(tilt)', 'mm', 'derived: brace top joint Y'),
+    ('j1z',         '(ipad_z0) + (jv1)*cos(tilt) - (jn1)*sin(tilt)', 'mm', 'derived: brace top joint Z'),
+    ('lr_y',        '(ipad_y0) + (low_v + strut_w/2)*sin(tilt) + (n_b)*cos(tilt)', 'mm', 'derived: leg root (middle) Y'),
+    ('lr_z',        '(ipad_z0) + (low_v + strut_w/2)*cos(tilt) - (n_b)*sin(tilt)', 'mm', 'derived: leg root (middle) Z'),
+    ('le_y',        'ft_y0', 'mm', 'derived: leg end (middle) Y, on the foot'),
+    ('le_z',        '(ft_z1 - rim_drop)/2', 'mm', 'derived: leg end (middle) Z'),
+    ('leg_len',     'sqrt(((le_y - lr_y)/(1 mm))^2 + ((le_z - lr_z)/(1 mm))^2) * (1 mm)', 'mm', 'derived: leg length'),
+    ('leg_uy',      '(le_y - lr_y)/leg_len', '', 'derived: leg direction'),
+    ('leg_uz',      '(le_z - lr_z)/leg_len', '', 'derived: leg direction'),
+    ('j2y',         'lr_y + leg_f*(le_y - lr_y)', 'mm', 'derived: brace bottom joint Y'),
+    ('j2z',         'lr_z + leg_f*(le_z - lr_z)', 'mm', 'derived: brace bottom joint Z'),
+    ('br_len',      'sqrt(((j2y - j1y)/(1 mm))^2 + ((j2z - j1z)/(1 mm))^2) * (1 mm)', 'mm', 'derived: brace length, bolt to bolt'),
+    ('br_uy',       '(j2y - j1y)/br_len', '', 'derived: brace direction'),
+    ('br_uz',       '(j2z - j1z)/br_len', '', 'derived: brace direction'),
 
     # Finishing (CAD rule 3): corners get the biggest class that suits them
     # (r ~ 0.2 x the narrower face), concave one class smaller.
@@ -371,24 +425,21 @@ def tq(v0, v1, n0, n1):
     return ('poly', [P(v0, n0), P(v1, n0), P(v1, n1), P(v0, n1)])
 
 
+def slot_rect(cy, cz, uy, uz, a0, a1, w):
+    """Rectangle from a0 to a1 along the unit vector (uy, uz) from (cy, cz),
+    w wide across it, as a polygon shape (all expressions)."""
+    pts = []
+    for a, b in ((a0, '-(%s)/2' % w), (a1, '-(%s)/2' % w), (a1, '(%s)/2' % w), (a0, '(%s)/2' % w)):
+        pts.append(('(%s) + (%s)*(%s) - (%s)*(%s)' % (cy, a, uy, b, uz),
+                    '(%s) + (%s)*(%s) + (%s)*(%s)' % (cz, a, uz, b, uy)))
+    return ('poly', pts)
+
+
 def LP(s, w):
     """Point s along the handle-to-wire line from the handle centre, w
     across it (positive toward the basket), as (Y, Z) expressions."""
     return ('(%s)*rim_dy/rim_c + (%s)*rim_drop/rim_c' % (s, w),
             '-(%s)*rim_drop/rim_c + (%s)*rim_dy/rim_c' % (s, w))
-
-
-def RP(a, b):
-    """Wire frame -> model (Y, Z). Origin = wire centre; b along the
-    handle-to-wire line (away from the handle), a across it: the way the
-    hook swings onto the wire (toward the basket). The hook opens toward +a."""
-    return ('rim_dy + (%s)*rim_drop/rim_c + (%s)*rim_dy/rim_c' % (a, b),
-            '-(rim_drop) + (%s)*rim_dy/rim_c - (%s)*rim_drop/rim_c' % (a, b))
-
-
-def fq(frame, a0, a1, b0, b1):
-    """Rectangle a0..a1 x b0..b1 in a frame, as a polygon shape."""
-    return ('poly', [frame(a0, b0), frame(a1, b0), frame(a1, b1), frame(a0, b1)])
 
 
 class Part:
@@ -639,9 +690,9 @@ def arch_pt(a, r='r_sad - sad_t/2'):
 
 
 def add_hanger(p, thick=None):
-    """Arch on the handle, hook on the wire, and the struts that make the
-    triangles: upper strut (channel top to arch), back rib (arch down the
-    back plate to the channel bottom), lower strut (channel bottom to hook)."""
+    """Arch on the handle, upper strut (channel top to arch), back rib (arch
+    down the back plate), the leg from the channel bottom to the foot on the
+    wire, and the two bosses the brace bolts to."""
     T = lambda t: thick or t
     # Arch: a pie from the handle centre, 0 deg to arch_a1 in ~5 deg steps;
     # the bore cut leaves the curved band.
@@ -653,36 +704,55 @@ def add_hanger(p, thick=None):
                                    P('top_v - strut_w', plate)]), '0 mm', T('strut_t'))
     p.add('Back rib', ('poly', [P('low_v', plate), P('v_c1', plate), arch_pt('arch_a1', 'r_sad - 1 mm'),
                                 P('low_v + strut_w', 'n_b + rib_d')]), '0 mm', T('strut_t'))
-    p.add('Lower strut', ('poly', [P('low_v + strut_w', plate),
-                                   RP('-(r_pad - 1 mm)', '-(r_pad - 2 mm)'),
-                                   RP('-(r_pad - 1 mm)', 'r_pad - 2 mm'),
-                                   P('low_v', plate)]), '0 mm', T('strut_t'))
-    p.add('Wire hook', fq(RP, '-(r_pad)', '0 mm', '-(r_pad)', 'r_pad'), '0 mm', T('hook_w'))
+    # The L's second leg: channel bottom to the foot's shopper face.
+    p.add('Leg', ('poly', [P('low_v + strut_w', plate), ('ft_y0 + 1 mm', 'ft_z1 - 1 mm'),
+                           ('ft_y0 + 1 mm', '-(rim_drop) + 1 mm'), P('low_v', plate)]),
+          '0 mm', T('strut_t'))
+    # Foot: sits on top of the wire, walls both sides of it; the cap bolts
+    # on under the wire.
+    p.add('Foot', ('rect', 'ft_y0', '-(rim_drop)', 'ft_y1 - ft_y0', 'ft_z1 + rim_drop'),
+          '0 mm', T('hook_w'))
+    for k in (1, 2):
+        p.add('Brace boss %d' % k, ('circle', 'j%dy' % k, 'j%dz' % k, 'boss_d'), '0 mm', T('joint_t'))
+    # Web from the brace top joint straight into the end of the arch, so the
+    # brace force doesn't have to bend the thin back plate to get there.
+    p.add('Brace web', ('poly', [P('jv1', plate), ('j1y', 'j1z'),
+                                 arch_pt('arch_a1', 'bore_r + web_gap'),
+                                 arch_pt('arch_a1', 'r_sad - 1 mm')]), '0 mm', T('strut_t'))
 
 
-def hanger_cuts(p, ties=True):
+def hanger_cuts(p):
     p.cut('Handle bore', ('circle', '0 mm', '0 mm', 'handle_d + 2*handle_fit'),
           '-1 mm', 'arm_w + 2 mm')
     p.cut('Wire notch', ('circle', 'rim_dy', '-(rim_drop)', 'rim_d + 2*rim_fit'),
           '-1 mm', 'arm_w + 2 mm')
-    # Straight-walled mouth toward the basket, so nothing blocks the wire as
-    # the hook swings on; starts inside the notch so the cut always removes
-    # material.
-    p.cut('Wire mouth', fq(RP, '-(r_wb/2)', 'r_pad + 10 mm', '-(r_wb)', 'r_wb'),
+    # Straight-walled mouth below the notch, so the wire comes straight up
+    # into it; starts inside the notch so the cut always removes material.
+    p.cut('Wire mouth', ('rect', 'rim_dy - r_wb', '-(rim_drop) - 10 mm',
+                         '2*r_wb', '10 mm + r_wb/2'),
           '-1 mm', 'arm_w + 2 mm')
-    if not (ties and TIES):
-        return
-    # Handle tie: up the gap behind the back plate, over the arch, down its
-    # cart side and back under the tube.
-    p.cut('Handle tie tunnel',
-          tq('v_a0 - 20 mm', 'v_c1 + 8 mm',
-             'n_b + (hook_gap - zt_h)/2', 'n_b + (hook_gap + zt_h)/2'),
-          'tie_x - zt_w/2', 'zt_w')
-    # Wire tie: through the hook behind the wire, round its basket side.
-    p.cut('Wire tie tunnel',
-          fq(RP, '-(r_wb + tun_floor + zt_h)', '-(r_wb + tun_floor)',
-             '-(r_pad + 1 mm)', 'r_pad + 1 mm'),
-          'tie_x - zt_w/2', 'zt_w')
+
+
+def bolt_into_L(p, label, cy, cz, uy, uz, reach, plate_t):
+    """Hole and captive-nut slot in the L for a bolt along X through a plate
+    (brace or cap) lying on the L's outer face. The slot runs from the bolt
+    to a free edge along (uy, uz), `reach` past the bolt; the nut drops in
+    there and can't turn."""
+    p.cut(label + ' bolt hole', ('circle', cy, cz, 'bolt_hole'),
+          '-1 mm', 'bolt_len - (%s) + 2.5 mm' % plate_t)
+    p.cut(label + ' nut slot', slot_rect(cy, cz, uy, uz, '-(nut_c)', reach, 'nut_w'),
+          'nut_s', 'nut_sl')
+
+
+def joint_cuts(p):
+    # Brace top: slot opens straight back from the screen; brace bottom: out
+    # of the triangle; cap bolts: up through the top of the foot.
+    bolt_into_L(p, 'Brace top', 'j1y', 'j1z', 'cos(tilt)', '-sin(tilt)',
+                'boss_d/2 + 1 mm', 'brace_t')
+    bolt_into_L(p, 'Brace bottom', 'j2y', 'j2z', 'leg_uz', '-(leg_uy)',
+                'boss_d/2 + 1 mm', 'brace_t')
+    for k in (1, 2):
+        bolt_into_L(p, 'Cap %d' % k, 'cb%d_y' % k, 'cb_z', '0', '1', 'foot_up + 1 mm', 'cap_t')
 
 
 def build_bracket(name, side):
@@ -694,7 +764,44 @@ def build_bracket(name, side):
     p.cut('Top button relief', tq('ipad_h - win_hi', 'v_t + 1 mm', '-(clr)', 'n_r'),
           'wall_t - btn_relief', 'btn_relief + 1 mm')
     hanger_cuts(p)
+    joint_cuts(p)
     return p
+
+
+def build_brace(name, side):
+    """Flat bar across the corner of the L (the triangle), a bolt at each
+    end. It lies on the L's outer face."""
+    b = Part(name, side)
+    a, t, h = '-(brace_t)', 'brace_t', 'brace_w/2'
+    b.add('Brace bar', ('poly', [('j1y - (%s)*br_uz' % h, 'j1z + (%s)*br_uy' % h),
+                                 ('j2y - (%s)*br_uz' % h, 'j2z + (%s)*br_uy' % h),
+                                 ('j2y + (%s)*br_uz' % h, 'j2z - (%s)*br_uy' % h),
+                                 ('j1y + (%s)*br_uz' % h, 'j1z - (%s)*br_uy' % h)]), a, t)
+    for k in (1, 2):
+        b.add('Brace end %d' % k, ('circle', 'j%dy' % k, 'j%dz' % k, 'boss_d'), a, t)
+    for k in (1, 2):
+        b.cut('Brace hole %d' % k, ('circle', 'j%dy' % k, 'j%dz' % k, 'bolt_hole'),
+              '-(brace_t) - 1 mm', 'brace_t + 2 mm')
+    return b
+
+
+def build_cap(name, side):
+    """Strap under the wire, bolted to the foot either side of it. It lies
+    on the foot's outer face; the wire drops into its seat from above."""
+    c = Part(name, side)
+    a, t = '-(cap_t)', 'cap_t'
+    c.add('Cap base', ('rect', 'cb1_y - cap_r', '-(rim_drop) - r_wb - cap_wall',
+                       'cb2_y - cb1_y + 2*cap_r', 'r_wb + cap_wall'), a, t)
+    for k in (1, 2):
+        cy = 'cb%d_y' % k
+        c.add('Cap arm %d' % k, ('rect', cy + ' - cap_r', '-(rim_drop) - 1 mm', '2*cap_r', 'cb_dz + 1 mm'), a, t)
+        c.add('Cap boss %d' % k, ('circle', cy, 'cb_z', '2*cap_r'), a, t)
+    c.cut('Wire seat', ('circle', 'rim_dy', '-(rim_drop)', 'rim_d + 2*rim_fit'),
+          '-(cap_t) - 1 mm', 'cap_t + 2 mm')
+    for k in (1, 2):
+        c.cut('Cap hole %d' % k, ('circle', 'cb%d_y' % k, 'cb_z', 'bolt_hole'),
+              '-(cap_t) - 1 mm', 'cap_t + 2 mm')
+    return c
 
 
 def build_tests():
@@ -708,7 +815,7 @@ def build_tests():
     s = Part('TEST_Profile', shift='2*test_gap')
     add_channel(s, 'v_t', 'rest_hi', wall=False, top_lip=False, thick='test_t')
     add_hanger(s, thick='test_t')
-    hanger_cuts(s, ties=False)
+    hanger_cuts(s)
     return [c, s]
 
 
@@ -752,11 +859,12 @@ def build_reference():
 
 def build():
     warnings, report = [], []
-    t = um.evaluateExpression('tilt', 'deg')
     left = build_bracket('Bracket_L', -1)
     right = build_bracket('Bracket_R', 1)
+    extras = [build_brace('Brace_L', -1), build_brace('Brace_R', 1),
+              build_cap('Cap_L', -1), build_cap('Cap_R', 1)]
     tests = build_tests() if BUILD_TESTS else []
-    parts = [left, right] + tests
+    parts = [left, right] + extras + tests
     COMPONENTS[:] = parts
     if SHOW_REFERENCE:
         try:
@@ -766,7 +874,7 @@ def build():
                             + traceback.format_exc().splitlines()[-1])
 
     # Rule 3 finishing, then the print-bed check
-    beds = [(left, (-1, 0, 0)), (right, (1, 0, 0))] + [(p, (-1, 0, 0)) for p in tests]
+    beds = [(p, (p.side, 0, 0)) for p in [left, right] + extras] + [(p, (-1, 0, 0)) for p in tests]
     for part, d in beds:
         try:
             st = finish(part, d)
@@ -782,8 +890,9 @@ def build():
             warnings.append('%s finishing failed (part is fine, add fillets by hand):\n%s'
                             % (part.name, traceback.format_exc().splitlines()[-1]))
 
-    heights = {'TEST_Profile': E('test_t') * 10}
-    tallest = max(E('wall_t + grip'), E('arm_w'), E('strut_t')) * 10
+    heights = {'TEST_Profile': E('test_t') * 10, 'Brace_L': E('brace_t') * 10,
+               'Brace_R': E('brace_t') * 10, 'Cap_L': E('cap_t') * 10, 'Cap_R': E('cap_t') * 10}
+    tallest = max(E('wall_t + grip'), E('arm_w'), E('strut_t'), E('hook_w'), E('joint_t')) * 10
     fits = []
     for part in parts:
         h = heights.get(part.name, tallest)
@@ -830,16 +939,29 @@ def run(context):
         add_params()
         warnings, report, fits = build()
         step('final checks')
-        if not TIES:
-            warnings.append('Zip-tie tunnels are off (TIES = False) while the side profile '
-                            'is being signed off.')
-        lo, hi = (E('bx_o - hook_w') * 10, E('bx_o') * 10)  # wire hook, mm from centre
+        for plate in ('brace_t', 'cap_t'):
+            spare = E('bolt_len - (%s + nut_s + nut_t)' % plate) * 10
+            if spare < 0.8:
+                warnings.append('A 1/2" bolt only reaches %.1f mm past the nut through %s: '
+                                'it needs about 0.8 (one thread). Lower %s or nut_s.'
+                                % (spare, plate, plate))
+        # Every nut slot keeps a wall on each side but its open one.
+        walls = [('under the nut slots in the foot', 'cb_dz - nut_c'),
+                 ('between the nut slots in the foot and the wire', 'rim_dy - r_wb - cb1_y - nut_w/2'),
+                 ('between the nut slots in the foot and the wire', 'cb2_y - nut_w/2 - rim_dy - r_wb'),
+                 ('round the brace nut slots', 'boss_d/2 - sqrt((nut_c/(1 mm))^2 + (nut_w/(2 mm))^2) * (1 mm)')]
+        for where, expr in walls:
+            if E(expr) * 10 < 1.0:
+                warnings.append('Only %.1f mm of plastic %s: raise cb_dz / cap_r / boss_d.'
+                                % (E(expr) * 10, where))
+        # foot + cap + bolt heads, mm from centre: they sit between two mesh wires
+        lo, hi = (E('bx_o - hook_w') * 10, E('bx_o + cap_t + head_h') * 10)
         for k in range(int(round(N('mesh_n')))):
             xk = E('mesh_x0 + %d*mesh_pitch' % k) * 10
             gap = max(lo - xk, xk - hi, 0) - E('mesh_d/2') * 10
             if gap < 2:
-                warnings.append('The wire hook (%.0f-%.0f mm from centre) is %.1f mm from the '
-                                'mesh wire at %.0f mm: change hook_w or check the mesh numbers.'
+                warnings.append('The foot and cap (%.0f-%.0f mm from centre) are %.1f mm from '
+                                'the mesh wire at %.0f mm: change hook_w or check the mesh numbers.'
                                 % (lo, hi, gap, xk))
         if N('rim_side') < 0:
             warnings.append('rim_side = -1 (wire toward the shopper): the web is laid out '
@@ -850,7 +972,8 @@ def run(context):
         measure = [n for n, _, _, c in PARAMS if c.startswith('MEASURE')]
         msg = ('KART iPad mount built.\n\n'
                'Components: ' + ', '.join(p.name for p in COMPONENTS) + '.\n'
-               'Print the TEST pieces first (README, "Fit test").\n\n'
+               'Print the TEST pieces first (README, "Fit test").\n'
+               'Hardware: 8 x 10-32 x 1/2" bolts, 8 nuts, 1 zip tie between the upper struts.\n\n'
                'Print beds:\n  ' + '\n  '.join(fits) + '\n\n'
                'Still nominal (MEASURE): ' + ', '.join(measure) + '\n\n'
                'Edit: Modify > Change Parameters.')
