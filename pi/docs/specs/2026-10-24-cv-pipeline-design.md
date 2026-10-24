@@ -139,6 +139,9 @@ Known limit: two identical items dropped touching each other in the same second 
    - Accepted if confidence ≥ `cloud_min_conf` (default **0.6**). Timeout: **3 s**.
 3. **Unknown.** The event has `product_id: null`, `method: "none"`, and `label` = the best text we have. The iPad asks the shopper to pick.
 
+### 6.1a Where the catalog comes from (CONTRACT v0.9 §3a)
+The store owner can add products live, and those exist only in Supabase. So the Pi reads `id`, `name`, `short_name`, and `vision_hint` from Supabase `products` (anon key) at startup and on every `trip_id` change, falling back to `data/store.json` when offline. A live-added product has no gallery photos, so it always takes the Claude path using its `vision_hint`. Gallery products no longer in the catalog are ignored.
+
 ### 6.2 Removed items
 Matched **only against cart memory**: the before-crop's fingerprint is compared against each in-cart item's stored fingerprints, boosted by box overlap in the same camera. No cloud call. `method: "memory"`.
 

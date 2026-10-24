@@ -46,7 +46,8 @@ pi/
   kartcv/
     __init__.py
     config.py               Config dataclass, load_config, load_env, REPO_ROOT
-    catalog.py              Product, Catalog, load_catalog (+ fallback example)
+    http.py                 tiny urllib get/post helpers + Supabase headers
+    catalog.py              Product, Catalog, load_catalog (+ fallback example), fetch_catalog (Supabase)
     events.py               Event
     sources.py              Frame, LiveCamera, FrameListSource, save_tick, load_recording, snap_all
     synth.py                synthetic two-camera scenes + Script timeline (tests & demos)
@@ -76,7 +77,7 @@ Deviation from spec §4 layout: the synthetic generator lives in `pi/kartcv/synt
 ### Task 1: Scaffold, config, catalog, events
 
 **Files:**
-- Create: `pi/pyproject.toml`, `pi/requirements.txt`, `pi/requirements-pi.txt`, `pi/.gitignore`, `pi/.env.example`, `pi/config.example.json`, `pi/kartcv/__init__.py`, `pi/kartcv/config.py`, `pi/kartcv/catalog.py`, `pi/kartcv/events.py`
+- Create: `pi/pyproject.toml`, `pi/requirements.txt`, `pi/requirements-pi.txt`, `pi/.gitignore`, `pi/.env.example`, `pi/config.example.json`, `pi/kartcv/__init__.py`, `pi/kartcv/config.py`, `pi/kartcv/http.py`, `pi/kartcv/catalog.py`, `pi/kartcv/events.py`
 - Test: `pi/tests/test_config.py`, `pi/tests/test_catalog.py`, `pi/tests/test_events.py`
 
 **Interfaces:**
@@ -90,8 +91,17 @@ Deviation from spec §4 layout: the synthetic generator lives in `pi/kartcv/synt
     - `Config.path(name) -> Path` resolves one of the path fields.
   - `load_config(path: Path | None = None, overrides: dict | None = None) -> Config`. Precedence: defaults < JSON file < overrides. Unknown keys are ignored with a `logging` warning; tuple fields accept JSON lists.
   - `load_env() -> dict[str, str]`: loads `KART_ENV_FILE` or `REPO_ROOT/.env` into `os.environ` (python-dotenv, no override of already-set vars). Returns the four known vars that are set. A missing file is fine.
-  - `Product(id, name, price, vision_hint)` (frozen dataclass).
-  - `Catalog(products: dict[str, Product])` with `.ids() -> list[str]` (sorted), `.name(pid) -> str` (falls back to `pid`), `.get(pid) -> Product | None`, and `.prompt_lines() -> str` (one `id | name | vision_hint` line per product).
+  - `http.py`, used by the catalog, sinks and trip watcher:
+    - `get(url, headers, timeout=5.0) -> tuple[int, bytes]`.
+    - `post_json(url, headers, body: dict, timeout=5.0) -> int`.
+    - Both use stdlib `urllib`. Both return the status for HTTP error responses and raise `OSError` on network failure.
+  - `supabase_headers(anon_key) -> dict`: `apikey`, `Authorization: Bearer <key>`, `Content-Type: application/json`.
+  - `Product(id, name, price=0.0, vision_hint="", short_name="")` (frozen dataclass).
+  - `Catalog(products: dict[str, Product])`:
+    - `.ids() -> list[str]` (sorted), `.name(pid) -> str` (falls back to `pid`), `.get(pid) -> Product | None`.
+    - `.prompt_lines() -> str`: one `id | name | vision_hint` line per product.
+    - `.replace_with(other: Catalog)`: swaps in `other`'s products dict in one assignment, so everything holding this `Catalog` object sees the new products.
+  - `fetch_catalog(base_url, anon_key, get=http.get) -> Catalog | None` (CONTRACT v0.9 §3a): GETs `f"{base_url.rstrip('/')}/rest/v1/products?select=id,name,short_name,price,vision_hint"`. It returns `None` on `OSError`, non-200, bad JSON, or an empty list.
   - `load_catalog(path: Path) -> Catalog`. If the file is missing, it returns the built-in `FALLBACK_CATALOG` (`kirkland-parmesan` "Kirkland Parmigiano Reggiano" 12.99, `barilla-spaghetti` "Barilla Spaghetti" 1.99, `rao-marinara` "Rao's Marinara" 6.99, with short vision hints) and logs a warning.
   - `Event` dataclass with exactly the Global Constraints keys; `Event.new(**fields_except_id_and_ts) -> Event`; `.to_json() -> dict`. `ts` is UTC ISO8601 ending in `Z`, seconds precision.
 
@@ -154,7 +164,27 @@ def test_missing_hint_and_missing_file(tmp_path):
     p = tmp_path / "s.json"; p.write_text('{"products": [{"id": "a", "name": "A", "price": 1}]}')
     assert load_catalog(p).get("a").vision_hint == ""
     assert "kirkland-parmesan" in load_catalog(tmp_path / "nope.json").ids()
+
+def test_fetch_catalog_from_supabase_and_failures():
+    rows = [{"id": "new-thing", "name": "New Thing", "short_name": "New", "price": 3.5, "vision_hint": "green box"}]
+    calls = []
+    def get(url, headers): calls.append((url, headers)); return 200, json.dumps(rows).encode()
+    cat = fetch_catalog("https://x.supabase.co/", "k", get=get)
+    assert cat.ids() == ["new-thing"] and cat.get("new-thing").vision_hint == "green box"
+    assert calls[0][0] == "https://x.supabase.co/rest/v1/products?select=id,name,short_name,price,vision_hint"
+    assert calls[0][1]["apikey"] == "k"
+    def offline(url, headers): raise OSError("offline")
+    assert fetch_catalog("https://x", "k", get=offline) is None
+    assert fetch_catalog("https://x", "k", get=lambda u, h: (500, b"")) is None
+    assert fetch_catalog("https://x", "k", get=lambda u, h: (200, b"[]")) is None
+
+def test_replace_with_is_seen_by_holders(tmp_path):
+    cat = load_catalog(tmp_path / "nope.json"); held = cat
+    cat.replace_with(Catalog({"z": Product("z", "Z")}))
+    assert held.ids() == ["z"]
 ```
+
+(Imports for this file: `from kartcv.catalog import Catalog, Product, load_catalog, fetch_catalog`.)
 
 ```python
 # pi/tests/test_events.py
@@ -174,7 +204,7 @@ def test_event_json_shape():
 Run: `pi/.venv/bin/python -m pytest pi/tests -q`
 Expected: FAIL / ERROR with `ModuleNotFoundError: No module named 'kartcv'`.
 
-- [ ] **Step 4: Implement `config.py`, `catalog.py`, `events.py` and `config.example.json`** per the Interfaces block. `config.example.json` holds every Config field with its default, except `cameras`, which is `["/dev/v4l/by-path/REPLACE-cam0", "/dev/v4l/by-path/REPLACE-cam1"]`.
+- [ ] **Step 4: Implement `config.py`, `http.py`, `catalog.py`, `events.py` and `config.example.json`** per the Interfaces block. `config.example.json` holds every Config field with its default, except `cameras`, which is `["/dev/v4l/by-path/REPLACE-cam0", "/dev/v4l/by-path/REPLACE-cam1"]`.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
@@ -662,7 +692,7 @@ git commit -m "pi: feature extractors, few-shot gallery, model fetch tool" -- pi
     - `stop_reason == "refusal"`, a JSON parse error, an id not in the catalog, `"unknown"`, or `anthropic.APITimeoutError` / `APIConnectionError` / `APIStatusError` all give `CloudAnswer(None, 0.0 or the returned confidence, label or "error: <kind>")`.
     - Confidence is clamped to [0, 1].
   - `Identification(product_id: str | None, confidence: float, method: "local" | "cloud" | "none", label: str)`.
-  - `HybridIdentifier(gallery: Gallery | None, cloud: CloudIdentifier | None, catalog, cfg)`. `.identify(crops) -> Identification`:
+  - `HybridIdentifier(gallery: Gallery | None, cloud: CloudIdentifier | None, catalog, cfg)`. `.identify(crops) -> Identification`. Gallery products that aren't in the current catalog are dropped from the local ranking first, so a product the merchant removed can't be billed. A product added live has no gallery photos, so it always takes the cloud path using its `vision_hint`.
     1. Local accepts if top ≥ `local_min_score` and (top − second ≥ `local_min_margin`, or there is only one ranked product). The label is the catalog name.
     2. Otherwise the cloud accepts if `product_id` is set and confidence ≥ `cloud_min_conf`.
     3. Otherwise the result is `none`. The label is the cloud label if there is one, else the catalog name of the local top guess, else `"unknown item"`. The confidence is the max seen.
@@ -740,6 +770,7 @@ def test_hybrid_policy():
     assert hyb([("kirkland-parmesan", 0.6)], c).method == "cloud" and hyb([], c).method == "cloud"
     assert hyb([("kirkland-parmesan", 0.6)], FakeCloud(CloudAnswer("rao-marinara", 0.4, "maybe jar"))) == Identification(None, 0.6, "none", "maybe jar")
     assert hyb([("kirkland-parmesan", 0.6)], None) == Identification(None, 0.6, "none", "Kirkland Parmigiano Reggiano")
+    assert hyb([("gone-product", 0.95), ("kirkland-parmesan", 0.6)], None) == Identification(None, 0.6, "none", "Kirkland Parmigiano Reggiano")
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -892,7 +923,7 @@ git commit -m "pi: added/removed classification, camera combining, nudge cancel"
     - `.send` appends to the outbox file and wakes the worker.
     - `.flush_once(now: float) -> int` sends pending events in order, stops at the first failure, returns the number sent, and rewrites the outbox with the remainder.
     - A failure (status not 2xx, or `OSError`) sets `next_retry = now + min(30, 2**(failures-1))`, so the waits are 1, 2, 4, … capped at 30. Success resets the failure count.
-    - `post(url, headers, body) -> int` defaults to `urllib.request` with a 5 s timeout.
+    - `post(url, headers, body) -> int` defaults to `kartcv.http.post_json`.
     - The URL is `f"{base_url.rstrip('/')}/rest/v1/rpc/apply_cart_event"`. Headers: `apikey`, `Authorization: Bearer <key>`, `Content-Type: application/json`.
     - Body: `{"p_cart_id", "p_type", "p_product_id", "p_confidence", "p_source": "vision", "p_label", "p_camera": cameras[0] or None, "p_event_id": event_id, "p_method": method}`. The RPC is idempotent on `p_event_id` (CONTRACT v0.3+), so a retry after a lost response can't double-bill.
     - `.pending() -> int`.
@@ -997,6 +1028,7 @@ git commit -m "pi: event sinks with persistent ordered outbox" -- pi/kartcv/sink
     - Sinks: Jsonl (`state/events.jsonl`) + Console, plus `HttpSink` when `SUPABASE_URL` and `SUPABASE_ANON_KEY` are set.
     - `CloudIdentifier` only when `ANTHROPIC_API_KEY` is set and not `--no-cloud`. Otherwise warn "local-only mode".
     - `cfg.cart_id` comes from `CART_ID` when set.
+    - Catalog: `fetch_catalog(SUPABASE_URL, SUPABASE_ANON_KEY)` when both are set and `--catalog` isn't given. Otherwise, or if the fetch returns `None`, `load_catalog(cfg.path("catalog_path"))`. Log which source was used and the product count.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1133,8 +1165,8 @@ git commit -m "pi: tick-driven pipeline, live/replay/reset CLI, end-to-end synth
     - If that value differs from the last seen one, it calls `on_new_trip()` and saves `{"trip_id": ...}` to `state_path`.
     - The **first** value ever seen, with no state file, is only recorded and does not reset.
     - Network errors, non-200 responses, an empty row list, or a null `trip_id` change nothing and return `None`.
-    - `get(url, headers) -> tuple[int, bytes]` defaults to `urllib.request` with a 5 s timeout. `.stop()`.
-  - `main live` starts a `TripWatcher(on_new_trip=pipeline.request_reset)` when `SUPABASE_URL` and `SUPABASE_ANON_KEY` are set.
+    - `get(url, headers) -> tuple[int, bytes]` defaults to `kartcv.http.get`. `.stop()`.
+  - `main live` starts a `TripWatcher` when `SUPABASE_URL` and `SUPABASE_ANON_KEY` are set. Its `on_new_trip` calls `pipeline.request_reset()`, then refreshes the catalog in place: `new = fetch_catalog(...)`; if `new` is not `None`, `catalog.replace_with(new)`. Products the owner added live are therefore known on the next trip (CONTRACT v0.9 §3a).
   - `ControlServer(port: int, status_fn, reset_fn, frames_fn=None, debug_view=False, crops_dir: Path | None = None)` on a `ThreadingHTTPServer` in a daemon thread. `.start()`, `.stop()`, `.port` (the real port; `0` picks a free one).
   - `GET /status` → 200 JSON. `POST /reset` → calls `reset_fn` and returns 200 `{"ok": true}`.
   - With `debug_view`:
