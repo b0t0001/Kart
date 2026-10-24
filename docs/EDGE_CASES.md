@@ -43,6 +43,19 @@ Owned by the manager. Status: **handled** · **partly** · **not yet**. Cost: S 
 | H8 | **A judge's phone or bag set INSIDE the basket** (expected) | **It's a real add**, so it gets an "Is this…?" card | Choreography (drop, hand out); the marked drop zone; **cross-team: a "That's mine" action** | S | See cross-team |
 | H9 | **The iPad mount drops on a bump** | Not printed or fit-tested yet | Fit test, a zip-tie backup, a charging cable path | M | Before the video |
 
+### Member memory and privacy (member chat; beta, flag off by default)
+| # | Scenario | Design today | Fix | Cost | Decision |
+|---|---|---|---|---|---|
+| M1 | **"Forget me" mid-trip** | **Gap:** the agent keeps the profile in its prompt and can still mention Leo's party | Forget → new trip_context without the member; the agent drops the profile and tools at once: "Done, I've forgotten everything." | S | **Build** |
+| M2 | **Mistyped member number** | An unknown id silently creates a member; a typo can land on a real one | Confirm card: "Dylan N.? That's me / Not me"; an unknown id → "Start a new membership?" | S | **Build** |
+| M3 | **Someone else's number; memories said aloud on a public floor** | Demo-grade, no PIN | Demo: optional PIN. Production: a QR code or passkey from the shopper's phone (pitch note) | S / L | Defer (pitch note) |
+| M4 | **Forgot to sign out / walked away** | Signed in until the next reset | "Still shopping, Dylan?" at 3 min; sign-out at 5 min (the trip is kept) | S | **Build** |
+| M5 | **Sensitive purchases** (the Target pregnancy story) | Nothing prevents it | Sensitive categories (pharmacy, personal care, baby) never feed picks, usuals or speech; Claude saves the event, not the reason | S | **Build**: a strong trust line |
+| M6 | **Stale events; the seed not rerun** | Undated events never expire; "party tomorrow" can be in the past | Undated events expire after 30 days; the seed prints the date; it runs in `pre_judging.sh --members` | S | **Build** |
+| M7 | **One-off event shopping skews the usuals** | Partly handled (counts trips, with thresholds) | Tag saved-list purchases and leave them out of the stats | M | Defer |
+| M8 | **A pick or saved item now out of stock or discontinued** | Picks skip it; the prompt may still mention it | `available` flag; offer the nearest in-stock substitute | S–M | Defer |
+| M9 | **"What do you know about me?"** | — | Kart opens the memory sheet on the iPad with a one-line summary | S | **Build** |
+
 ### Cross-team candidates (emerging)
 - **Personal items** (a phone, bag or jacket placed in the basket): on the "Is this…?" card, add **"That's mine, ignore it"** → never billed, and the camera ignores that spot until it's removed (CV + iPad + backend).
 - **Cart health on the iPad:** the Pi writes a heartbeat (last frame age, camera status, power status) to Supabase every few seconds, and the iPad debug panel shows it (CV + backend + iPad). A dead camera is then visible without SSH.
