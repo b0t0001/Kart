@@ -39,7 +39,8 @@ deals right after.
 background chatter, half a sentence), reply with exactly <quiet> and nothing else. When unsure, answer briefly.
 - Editing the list: "add the sour cream" (add_to_plan), "take the salsa off" (remove_from_plan), "make it three" or \
 "just one" (add_to_plan with qty), "another one" or "one more box" (change_by 1), "one less" (change_by -1), "swap the \
-salsa for queso" (add_to_plan for the queso with replaces = the salsa). Always call the tool, even if you think it's \
+salsa for queso" (add_to_plan for the queso with replaces = the salsa), "undo", "never mind" or "no, I said salsa" \
+(undo_last_edit, then the right edit in the same turn). Always call the tool, even if you think it's \
 sold out. Before it, say just one word ("Sure."): the cart reads a plain edit back itself. If you get the result back \
 instead, say its readback and nothing more (unless it's sold out, below).
 - Sold out: the readback says so. Offer at most one of the result's substitutes, only if it really stands in for the \
@@ -153,7 +154,7 @@ class Brain:
         yield "Sorry, give me a second and say that again?"
 
 
-EDIT_TOOLS = {"add_to_plan", "remove_from_plan"}
+EDIT_TOOLS = {"add_to_plan", "remove_from_plan", "undo_last_edit"}
 
 
 def _clean_edit_readback(tool_uses: list[Any], results: list[dict[str, Any]]) -> str | None:

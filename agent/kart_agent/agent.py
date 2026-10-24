@@ -61,6 +61,7 @@ class KartAgent:
         self._speaking = False
         self._pending: str | None = None            # a proactive line that arrived while Kart was talking
         self._last_add: tuple[dict[str, Any], float] | None = None   # the latest "added" event, until it's said
+        self._undo: list[dict[str, Any]] = []      # earlier lists, newest last: "undo" puts the last one back
         self._offer: dict[str, Any] | None = None   # the deal Kart just asked about, until it's answered
         self._nudge: dict[str, Any] | None = None   # the quantity nudge Kart just said (v0.12 beta)
         self._last_asked: str | None = None         # "offer" or "nudge": a plain answer goes to the latest question
@@ -79,6 +80,7 @@ class KartAgent:
                 self.cart_id = str(meta.get("cart_id") or self.cart_id)
                 if meta.get("trip_id") and meta.get("trip_id") != self.trip_id:   # a new trip starts fresh
                     self._said, self._meal, self._offer, self._nudge = set(), None, None, None
+                    self._undo = []
                     self._digest, self._digest_offered = None, False
                 self.trip_id = meta.get("trip_id") or self.trip_id
                 self._context.set()
@@ -139,7 +141,7 @@ class KartAgent:
             if not self._offer and not self._nudge and not self._digest and only_ack(text):   # nothing asked
                 return
             await self._refresh()
-            ctx = {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id}
+            ctx = self._ctx()
             digest_reply = _digest_answer(text) if self._digest and self._last_asked == "digest" else None
             if digest_reply:                             # "yes" / "not now" to the deals walk-through
                 await self._caption("user", text)
@@ -202,7 +204,7 @@ class KartAgent:
             meta = event.metadata or {}
             if meta.get("type") == "card_response" and str(meta.get("card_id", "")).startswith("digest"):
                 answer = "yes" if meta.get("action") == "yes" else "no"
-                ctx = {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id}
+                ctx = self._ctx()
                 async for out in self._digest_step(answer, ctx):
                     yield out
                 return
@@ -339,6 +341,10 @@ class KartAgent:
             await self.backend.rpc("append_transcript", p_cart_id=self.cart_id, p_role=role, p_text=text)
         except Exception:
             pass                                          # captions must never break the conversation
+
+    def _ctx(self) -> dict[str, Any]:
+        """What the tools get: the backend, this cart and trip, and the trip's undo history."""
+        return {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id, "undo": self._undo}
 
     async def _refresh(self) -> None:
         try:

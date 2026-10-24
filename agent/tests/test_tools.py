@@ -19,7 +19,7 @@ def ctx(backend):
 def test_every_tool_streams_eagerly_and_has_a_schema():
     names = {t["name"] for t in TOOLS}
     assert names == {"search_catalog", "get_cart", "set_plan", "add_to_plan", "remove_from_plan", "dismiss_nudge", "get_deals", "set_location",
-                     "dismiss_suggestion", "confirm_item", "start_checkout", "not_sold_here"}
+                     "dismiss_suggestion", "confirm_item", "start_checkout", "not_sold_here", "undo_last_edit"}
     assert all(t["eager_input_streaming"] and t["input_schema"]["type"] == "object" for t in TOOLS)
 
 
@@ -239,3 +239,43 @@ async def test_nearby_stores_read_the_backends_shape(backend):
     assert out["nearby_stores"] == [{"name": "Berkeley Bowl", "distance": "about 1.5 miles away", "kind": "produce",
                                      "good_for": ["produce", "fruit"], "address": "2020 Oregon St, Berkeley",
                                      "might_have_it": True}]
+
+
+# Undo: every list change can be taken back, one step at a time.
+
+def trip_ctx(backend):
+    return {**ctx(backend), "undo": []}                  # the agent keeps this list for the whole trip
+
+
+async def test_undo_takes_back_an_add(backend):
+    c = trip_ctx(backend)
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1}]
+    await run_tool("add_to_plan", {"product_id": "daisy-sour-cream", "reason": "tacos"}, c)
+    out = json.loads(await run_tool("undo_last_edit", {}, c))
+    assert out["readback"] == "Took sour cream back off your list." and planned(backend) == {"barilla-spaghetti": 1}
+
+
+async def test_undo_puts_back_a_removed_item_and_an_amount(backend):
+    c = trip_ctx(backend)
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1},
+                            {"product_id": "tostitos-salsa", "reason": "nachos", "qty": 1}]
+    await run_tool("remove_from_plan", {"product_id": "tostitos-salsa"}, c)
+    await run_tool("add_to_plan", {"product_id": "barilla-spaghetti", "reason": "pasta", "change_by": 1}, c)
+    out = json.loads(await run_tool("undo_last_edit", {}, c))
+    assert out["readback"] == "Back to one box of spaghetti." and planned(backend) == {"barilla-spaghetti": 1}
+    out = json.loads(await run_tool("undo_last_edit", {}, c))
+    assert out["readback"] == "Put salsa back on your list."
+    assert planned(backend) == {"barilla-spaghetti": 1, "tostitos-salsa": 1}
+
+
+async def test_undo_reverts_a_swap(backend):
+    c = trip_ctx(backend)
+    backend.cart["plan"] = [{"product_id": "tostitos-salsa", "reason": "nachos", "qty": 1}]
+    await run_tool("add_to_plan", {"product_id": "queso", "reason": "nachos", "replaces": "tostitos-salsa"}, c)
+    out = json.loads(await run_tool("undo_last_edit", {}, c))
+    assert out["readback"] == "Swapped back to salsa." and planned(backend) == {"tostitos-salsa": 1}
+
+
+async def test_undo_with_nothing_to_undo_changes_nothing(backend):
+    out = json.loads(await run_tool("undo_last_edit", {}, trip_ctx(backend)))
+    assert out["readback"] == "There's nothing to undo." and backend.calls == []
