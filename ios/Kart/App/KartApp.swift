@@ -81,8 +81,8 @@ final class KartWorld {
         let config = SupabaseConfig.fromInfoPlist().map { config in   // `-KartCartID` overrides (live rehearsal uses its own cart)
             SupabaseConfig(url: config.url, anonKey: config.anonKey, cartId: defaults.string(forKey: "KartCartID") ?? config.cartId)
         }
-        let requested = defaults.string(forKey: "KartBackend").flatMap(BackendKind.init(rawValue:))
-        let kind: BackendKind = scenario != nil ? .mock : (requested ?? (config != nil ? .supabase : .mock))
+        let kind = BackendKind(rawValue: LaunchPreferences.backend(defaults: defaults, scenario: scenario,
+                                                                  hasConfig: config != nil).rawValue) ?? .mock
         let clock = clock
 
         if kind == .supabase, let config {

@@ -112,6 +112,12 @@ public final class AppModel {
     public func ingest(cart: CartState) {
         defer { lastCart = cart }
         guard let previous = lastCart else { return }
+        if previous.tripId != cart.tripId {               // a reset from outside the app (laptop, another iPad)
+            resetLocalTripState()
+            baselineDeals = Dictionary(backend.catalog.deals.map { ($0.id, $0.label) }, uniquingKeysWith: { first, _ in first })
+            lastActivity = clock()
+            return
+        }
         let changes = CartDiff.changes(from: previous, to: cart)
         for change in changes {
             switch change {
@@ -180,6 +186,18 @@ public final class AppModel {
     // MARK: Intents
 
     public func startTrip() async {
+        resetLocalTripState()
+        do { try await backend.startTrip() } catch { return }
+        lastCart = backend.cart
+        baselineDeals = Dictionary(backend.catalog.deals.map { ($0.id, $0.label) }, uniquingKeysWith: { first, _ in first })
+        lastActivity = clock()
+        react(.wave)
+        guard let tripId = backend.cart.tripId else { return }
+        await voice.start(cartId: backend.cart.cartId, tripId: tripId)
+        voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId))
+    }
+
+    private func resetLocalTripState() {
         locallyResolved = []
         acknowledgedNewDeals = []
         paymentState = .idle
@@ -190,14 +208,6 @@ public final class AppModel {
         seenEvents = []
         seenNewDealCards = []
         lastSuggestionDealId = nil
-        do { try await backend.startTrip() } catch { return }
-        lastCart = backend.cart
-        baselineDeals = Dictionary(backend.catalog.deals.map { ($0.id, $0.label) }, uniquingKeysWith: { first, _ in first })
-        lastActivity = clock()
-        react(.wave)
-        guard let tripId = backend.cart.tripId else { return }
-        await voice.start(cartId: backend.cart.cartId, tripId: tripId)
-        voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId))
     }
 
     /// Adopts a trip that started outside this model (a demo scenario, or an app relaunch mid-trip)
@@ -226,7 +236,7 @@ public final class AppModel {
                 await confirm(eventId: eventId, as: productId)
             case .remove:
                 locallyResolved.insert(eventId)
-                try? await backend.resolveUnknown(eventId: eventId)
+                do { try await backend.resolveUnknown(eventId: eventId) } catch { locallyResolved.remove(eventId) }
             default:
                 break
             }
@@ -261,6 +271,7 @@ public final class AppModel {
         paymentState = .processing
         do {
             let result = try await payment.pay(amount: backend.cart.total, tripId: tripId)
+            guard backend.cart.tripId == tripId else { paymentState = .idle; return }   // reset while the card was tapped
             guard result.approved else { paymentState = .failed(Self.paymentFailedMessage); return }
             let receipt = try await backend.checkout(provider: payment.name)
             paymentState = .done(receipt)
@@ -296,9 +307,12 @@ public final class AppModel {
 
     // MARK: Helpers
 
+    /// Hides the card at once; if the backend refuses, the card comes back (it still blocks checkout there).
     private func confirm(eventId: UUID, as productId: String) async {
         locallyResolved.insert(eventId)
-        try? await backend.applyManualEvent(.added, productId: productId, resolving: eventId)
+        do { try await backend.applyManualEvent(.added, productId: productId, resolving: eventId) } catch {
+            locallyResolved.remove(eventId)
+        }
     }
 
     private func addToPlan(_ productId: String) async {

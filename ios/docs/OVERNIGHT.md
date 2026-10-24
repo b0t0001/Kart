@@ -32,6 +32,25 @@ Local test of the agent before deploying: `cd agent && .venv/bin/python main.py`
 - **Milestone 1 (the whole app on the mock):** done. Thirteen plan tasks, plus an automated rehearsal of the §1.1 demo, the live merchant beat, and the failure paths (`scripts/rehearse.sh`).
 - **Milestone 2 (Supabase):** `KartSupabase` (REST, realtime, the backend), wired into the app (`-KartBackend supabase`, the default when `Config.xcconfig` has a URL), with live integration tests and a live rehearsal against the local stack (`scripts/rehearse-live.sh`).
 - **Voice (milestone 3, keys pending):** `agent/` (the Line agent with Claude tools, tested with fakes and against the live backend) and `LineVoiceSession` (the iPad side, tested with fakes). It runs for real once the keys and the Line agent exist (checklist above).
+- **Final review:** a fresh reviewer read the whole range (iOS and agent). Its one critical finding and seven important ones are fixed, each with a test that failed first:
+  - A trip reset from outside the app (laptop, another iPad) now clears Paid and every card, and a reset during payment can't charge the new trip.
+  - If confirm or remove fails on the backend, the card stays up instead of vanishing while checkout is still blocked.
+  - The Line connection waits for its ack with a timeout, retries a dropped socket 3 times with backoff, then shows offline; a reconnect restores the trip context.
+  - The agent never cuts Kart off mid-sentence for a proactive line, waits a beat after an add so the add and its deal come out as one line, doesn't re-greet when the call restarts mid-trip, and never stores an empty assistant turn.
+  - An on-device switch to the offline demo (below).
+  - The chimes no longer fight the voice for the audio session (build-verified only; check on the first on-device Line run).
+  - Lower-priority findings are listed as deferred in the session's final message and in `.superpowers/sdd/2026-10-24-ipad-app-m1/progress.md`.
+
+## Launch switches
+
+| Switch | What it does |
+|---|---|
+| `-KartBackend mock` / `supabase` | Pick the backend for this launch. The default is Supabase when `Config.xcconfig` has a URL, else the mock. |
+| Debug panel → **Use offline demo mode (relaunch)** | The on-device way to drop to the mock if the network dies at the demo; this choice sticks across launches. **Use the live backend (relaunch)** switches back. Quit and reopen the app after tapping. |
+| `-KartCartID <id>` | Use another cart row (the live rehearsal uses `ipad-live`). |
+| `-KartVoice line` / `mock` | Real voice through Cartesia Line, or the scripted mock (default). |
+| `-KartScenario <name>` | Seed a screen for screenshots (always the mock). |
+| `-KartStill YES`, `-KartDebugButton YES` | Freeze Kart's idle animation (UI tests); show a corner button for the debug panel. |
 
 ## Things worth knowing
 

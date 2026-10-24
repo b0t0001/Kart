@@ -7,16 +7,26 @@ import Testing
 @MainActor final class FakeTransport: LineTransport {
     var sent: [[String: Any]] = []
     var connectedURL: URL?
+    var connectCount = 0
+    /// Ack every `start` immediately, before `send` even returns (the race the session must survive).
+    var autoAck = false
     private var continuation: AsyncThrowingStream<String, Error>.Continuation?
+
+    init(autoAck: Bool = false) { self.autoAck = autoAck }
 
     func connect(to url: URL) -> AsyncThrowingStream<String, Error> {
         connectedURL = url
+        connectCount += 1
         let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
         self.continuation = continuation
         return stream
     }
     func send(_ text: String) async throws {
-        sent.append(try JSONSerialization.jsonObject(with: Data(text.utf8)) as! [String: Any])
+        let message = try JSONSerialization.jsonObject(with: Data(text.utf8)) as! [String: Any]
+        sent.append(message)
+        if autoAck, message["event"] as? String == "start", let id = message["stream_id"] as? String {
+            continuation?.yield(#"{"event":"ack","stream_id":"\#(id)","config":{}}"#)
+        }
     }
     func close() { continuation?.finish() }
     func receive(_ json: String) { continuation?.yield(json) }
@@ -108,15 +118,44 @@ struct FakeTokens: VoiceTokenProviding {
     #expect(transport.events("custom").last.flatMap { $0["metadata"] as? [String: Any] }?["action"] as? String == "checkout_tapped")
 }
 
-@MainActor @Test func aDroppedSocketGoesOffline() async throws {
+private let fast: [Duration] = [.milliseconds(10), .milliseconds(10), .milliseconds(10)]
+
+@MainActor @Test func aDroppedSocketRetriesThenGoesOffline() async throws {
     let transport = FakeTransport(), audio = FakeAudio()
-    let voice = LineVoiceSession(tokens: FakeTokens(), transport: transport, audio: audio)
+    let voice = LineVoiceSession(tokens: FakeTokens(), transport: transport, audio: audio, ackTimeout: .milliseconds(40), backoff: fast)
     let starting = Task { await voice.start(cartId: "7", tripId: UUID()) }
     await settle()
     let streamId = try #require(transport.events("start").first?["stream_id"] as? String)
     transport.receive(#"{"event":"ack","stream_id":"\#(streamId)","config":{}}"#)
     await starting.value
-    transport.drop()
-    await settle()
+    transport.drop()                                       // no acks from here on
+    try await Task.sleep(for: .milliseconds(400))
     #expect(voice.state == .offline && !audio.running)
+    #expect(transport.connectCount == 4)                   // the first call plus three retries
+}
+
+@MainActor @Test func anAckBeforeTheWaitIsNotLost() async throws {
+    let voice = LineVoiceSession(tokens: FakeTokens(), transport: FakeTransport(autoAck: true), audio: FakeAudio(),
+                                 ackTimeout: .milliseconds(200), backoff: fast)
+    await voice.start(cartId: "7", tripId: UUID())
+    #expect(voice.state == .listening)
+}
+
+@MainActor @Test func anAckThatNeverComesEndsOffline() async throws {
+    let transport = FakeTransport()
+    let voice = LineVoiceSession(tokens: FakeTokens(), transport: transport, audio: FakeAudio(), ackTimeout: .milliseconds(40), backoff: fast)
+    await voice.start(cartId: "7", tripId: UUID())
+    #expect(voice.state == .offline && transport.connectCount == 4)
+}
+
+@MainActor @Test func aReconnectRestoresListeningAndTheTripContext() async throws {
+    let transport = FakeTransport(autoAck: true), audio = FakeAudio()
+    let voice = LineVoiceSession(tokens: FakeTokens(), transport: transport, audio: audio, ackTimeout: .milliseconds(200), backoff: fast)
+    let trip = UUID()
+    await voice.start(cartId: "7", tripId: trip)
+    transport.drop()
+    try await Task.sleep(for: .milliseconds(150))
+    #expect(voice.state == .listening && transport.connectCount == 2 && audio.running)
+    let contexts = transport.events("custom").compactMap { $0["metadata"] as? [String: Any] }.filter { $0["type"] as? String == "trip_context" }
+    #expect(contexts.last?["trip_id"] as? String == trip.uuidString.lowercased())   // the new call knows the trip
 }

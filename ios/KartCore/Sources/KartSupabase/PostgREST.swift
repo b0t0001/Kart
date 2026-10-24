@@ -69,7 +69,7 @@ public struct PostgREST: Sendable {
     }
 
     /// `path` is a table or view plus its query string, e.g. `"carts?cart_id=eq.7"`.
-    public func select<T: Decodable>(_ path: String, as type: T.Type = T.self) async throws -> [T] {
+    public func select<T: Decodable & Sendable>(_ path: String, as type: T.Type = T.self) async throws -> [T] {
         let data = try await send(request("rest/v1/\(path)", method: "GET"))
         return try KartJSON.decoder().decode([T].self, from: data)
     }

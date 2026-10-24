@@ -167,7 +167,7 @@ public final class SupabaseKartBackend: KartBackend {
         }
     }
 
-    private func fetch<T: Decodable>(_ path: String, as type: T.Type) async -> [T]? {
+    private func fetch<T: Decodable & Sendable>(_ path: String, as type: T.Type) async -> [T]? {
         do {
             let rows = try await rest.select(path, as: type)
             lastError = nil

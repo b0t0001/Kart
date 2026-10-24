@@ -119,6 +119,7 @@ public enum LineCodec {
 }
 
 /// Hands-free conversation with the hosted Line agent: mic up, Kart's voice down, `clear` for barge-in.
+/// A call that never acks, or a socket that drops, is retried with backoff (1 s, 2 s, 4 s) before going offline.
 @MainActor @Observable
 public final class LineVoiceSession: VoiceSession {
     public private(set) var state: VoiceState = .idle
@@ -128,54 +129,33 @@ public final class LineVoiceSession: VoiceSession {
     @ObservationIgnored private let tokens: any VoiceTokenProviding
     @ObservationIgnored private let transport: any LineTransport
     @ObservationIgnored private let audio: any LineAudio
+    @ObservationIgnored private let ackTimeout: Duration
+    @ObservationIgnored private let backoff: [Duration]
     @ObservationIgnored private var streamId: String?
+    @ObservationIgnored private var acked = false
     @ObservationIgnored private var receiver: Task<Void, Never>?
     @ObservationIgnored private var ackWaiter: CheckedContinuation<Bool, Never>?
+    @ObservationIgnored private var trip: (cartId: String, tripId: UUID)?
+    @ObservationIgnored private var reconnecting = false
 
-    public init(tokens: any VoiceTokenProviding, transport: any LineTransport, audio: any LineAudio) {
+    public init(tokens: any VoiceTokenProviding, transport: any LineTransport, audio: any LineAudio,
+                ackTimeout: Duration = .seconds(10), backoff: [Duration] = [.seconds(1), .seconds(2), .seconds(4)]) {
         self.tokens = tokens
         self.transport = transport
         self.audio = audio
+        self.ackTimeout = ackTimeout
+        self.backoff = backoff
     }
 
     public func start(cartId: String, tripId: UUID) async {
         stop()
-        state = .connecting
-        guard let token = try? await tokens.token(cartId: cartId) else { state = .offline; return }
-        var components = URLComponents(url: token.wsUrl, resolvingAgainstBaseURL: false)!
-        components.queryItems = (components.queryItems ?? []) + [
-            URLQueryItem(name: "cartesia_version", value: token.cartesiaVersion),
-            URLQueryItem(name: "access_token", value: token.token),
-        ]
-        let messages = transport.connect(to: components.url!)
-        let id = UUID().uuidString.lowercased()
-        streamId = id
-        receiver = Task { [weak self] in
-            do {
-                for try await text in messages { self?.handle(LineCodec.decode(text)) }
-            } catch {}
-            self?.connectionEnded()
-        }
-        try? await transport.send(LineCodec.start(streamId: id))
-        let acked = await withCheckedContinuation { ackWaiter = $0 }
-        guard acked else { return }
-        do {
-            audio.onMicChunk = { [weak self] pcm in self?.sendMic(pcm) }
-            audio.onPlaybackIdle = { [weak self] in self?.playbackIdle() }
-            try audio.start()
-            state = .listening
-        } catch {
-            state = .offline
-        }
+        trip = (cartId, tripId)
+        _ = await connectWithRetries()
     }
 
     public func stop() {
-        receiver?.cancel()
-        receiver = nil
-        transport.close()
-        audio.stop()
-        streamId = nil
-        resumeAck(false)
+        trip = nil
+        disconnect()
         outputLevel = 0
         state = .idle
     }
@@ -190,15 +170,89 @@ public final class LineVoiceSession: VoiceSession {
         Task { try? await transport.send(text) }
     }
 
+    // MARK: Connecting
+
+    /// A fresh start tries at once; a reconnect after a drop waits before every attempt.
+    private func connectWithRetries(afterDrop: Bool = false) async -> Bool {
+        for attempt in (afterDrop ? 1 : 0)...backoff.count {
+            if attempt > 0 {
+                try? await Task.sleep(for: backoff[attempt - 1])
+            }
+            guard trip != nil else { return false }            // stopped while waiting
+            if await connectOnce() { return true }
+        }
+        disconnect()
+        state = .offline
+        return false
+    }
+
+    private func connectOnce() async -> Bool {
+        guard let trip else { return false }
+        disconnect()
+        state = .connecting
+        guard let token = try? await tokens.token(cartId: trip.cartId) else { return false }
+        var components = URLComponents(url: token.wsUrl, resolvingAgainstBaseURL: false)!
+        components.queryItems = (components.queryItems ?? []) + [
+            URLQueryItem(name: "cartesia_version", value: token.cartesiaVersion),
+            URLQueryItem(name: "access_token", value: token.token),
+        ]
+        let messages = transport.connect(to: components.url!)
+        let id = UUID().uuidString.lowercased()
+        streamId = id
+        acked = false
+        receiver = Task { [weak self] in
+            do {
+                for try await text in messages { self?.handle(LineCodec.decode(text), on: id) }
+            } catch {}
+            self?.connectionEnded(id)
+        }
+        try? await transport.send(LineCodec.start(streamId: id))
+        guard await waitForAck(), streamId == id else { return false }
+        do {
+            audio.onMicChunk = { [weak self] pcm in self?.sendMic(pcm) }
+            audio.onPlaybackIdle = { [weak self] in self?.playbackIdle() }
+            try audio.start()
+        } catch {
+            return false
+        }
+        state = .listening
+        send(.tripContext(cartId: trip.cartId, tripId: trip.tripId))   // a fresh call knows nothing yet
+        return true
+    }
+
+    /// True once the server acks this stream; false after `ackTimeout` or if the socket ends first.
+    private func waitForAck() async -> Bool {
+        if acked { return true }                               // the ack beat us here
+        let timeout = Task { [weak self, ackTimeout] in
+            try? await Task.sleep(for: ackTimeout)
+            self?.resumeAck(false)
+        }
+        defer { timeout.cancel() }
+        return await withCheckedContinuation { ackWaiter = $0 }
+    }
+
+    private func disconnect() {
+        receiver?.cancel()
+        receiver = nil
+        streamId = nil
+        transport.close()
+        audio.stop()
+        resumeAck(false)
+    }
+
+    // MARK: Traffic
+
     private func sendMic(_ pcm: Data) {
         guard let streamId, !isMuted, state != .offline else { return }
         let text = LineCodec.media(streamId: streamId, pcm: pcm)
         Task { try? await transport.send(text) }
     }
 
-    private func handle(_ event: LineServerEvent) {
+    private func handle(_ event: LineServerEvent, on id: String) {
+        guard id == streamId else { return }                   // a late message from an old call
         switch event {
         case .ack:
+            acked = true
             resumeAck(true)
         case .media(let pcm):
             audio.play(pcm)
@@ -217,12 +271,18 @@ public final class LineVoiceSession: VoiceSession {
         if state == .agentSpeaking { state = .listening }
     }
 
-    private func connectionEnded() {
-        guard streamId != nil else { return }      // a deliberate stop() already reset everything
+    private func connectionEnded(_ id: String) {
+        guard id == streamId else { return }                   // an old receiver finishing late, or a deliberate stop
         resumeAck(false)
+        guard acked, !reconnecting, trip != nil else { return } // still connecting: connectOnce handles it
+        reconnecting = true
         audio.stop()
         outputLevel = 0
-        state = .offline
+        state = .connecting
+        Task { [weak self] in
+            _ = await self?.connectWithRetries(afterDrop: true)
+            self?.reconnecting = false
+        }
     }
 
     private func resumeAck(_ value: Bool) {

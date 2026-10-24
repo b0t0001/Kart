@@ -182,3 +182,37 @@ import Testing
     #expect(!t.voice.sent.contains { if case .suggestion = $0 { true } else { false } })
     #expect(!t.sounds.played.contains(.card) && t.model.visibleCard == nil)
 }
+
+// MARK: Final-review fixes
+
+@MainActor @Test func outsideTripResetClearsPaymentAndLocalState() async throws {
+    let t = try make(); await t.model.startTrip()
+    await t.backend.simulateVision(.added, productId: "bananas", confidence: 0.9, label: "b"); t.model.ingest(cart: t.backend.cart)
+    await t.model.beginCheckout(); await t.model.pay()
+    guard case .done = t.model.paymentState else { Issue.record("first trip didn't pay"); return }
+    try await t.backend.startTrip()                          // reset from the laptop (cart.py reset / reset-demo)
+    t.model.ingest(cart: t.backend.cart)
+    #expect(t.model.paymentState == .idle && t.model.celebration == nil && !t.model.highlightUnresolved)
+    await t.backend.simulateVision(.added, productId: "bananas", confidence: 0.9, label: "b")
+    await t.model.beginCheckout(); await t.model.pay()
+    #expect(t.payment.calls == 2)                            // the next shopper can pay
+}
+
+@MainActor @Test func tripResetDuringPaymentDoesNotChargeTheNewTrip() async throws {
+    let t = try make(delay: .milliseconds(150)); await t.model.startTrip()
+    await t.backend.simulateVision(.added, productId: "bananas", confidence: 0.9, label: "b"); t.model.ingest(cart: t.backend.cart)
+    await t.model.beginCheckout()
+    async let paying: Void = t.model.pay()
+    try? await Task.sleep(for: .milliseconds(30))
+    try await t.backend.startTrip(); t.model.ingest(cart: t.backend.cart)
+    await paying
+    #expect(t.backend.receipt == nil && t.backend.cart.status == .shopping && t.model.paymentState == .idle)
+}
+
+@MainActor @Test func aFailedConfirmKeepsTheCard() async throws {
+    let t = try make(); await t.model.startTrip()
+    await t.backend.simulateVision(.added, productId: nil, confidence: 0.3, label: "jar of rao's marinara")
+    let card = try #require(t.model.visibleCard)
+    await t.model.respond(to: card, with: .choose(productId: "no-such-product"))   // the backend rejects it
+    #expect(t.model.unresolvedCount == 1 && t.model.visibleCard?.id == card.id)
+}

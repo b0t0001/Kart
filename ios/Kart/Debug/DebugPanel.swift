@@ -12,6 +12,15 @@ struct DebugPanel: View {
                 Section {
                     Text(world.backendKind == .supabase ? "Backend: Supabase (live)" : "Backend: built-in mock")
                     Text(world.voiceKind == .line ? "Voice: Cartesia Line" : "Voice: scripted Kart (on-device speech)")
+                    if world.backendKind == .supabase {
+                        row("Use offline demo mode (relaunch)", id: "debug.useMock") {
+                            LaunchPreferences.persist(.mock, defaults: .standard)
+                        }
+                    } else if SupabaseConfig.fromInfoPlist() != nil {
+                        row("Use the live backend (relaunch)", id: "debug.useLive") {
+                            LaunchPreferences.persist(.supabase, defaults: .standard)
+                        }
+                    }
                     if let error = world.supabase?.lastError {
                         Text("Last backend error: \(error)").foregroundStyle(.red).font(.footnote)
                     }

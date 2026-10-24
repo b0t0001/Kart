@@ -7,7 +7,6 @@ import KartCore
     private let player = AVAudioPlayerNode()
     private let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
     private var buffers: [SoundCue: AVAudioPCMBuffer] = [:]
-    private var started = false
 
     init() {
         engine.attach(player)
@@ -22,12 +21,15 @@ import KartCore
 
     func play(_ cue: SoundCue) {
         guard let buffer = buffers[cue] else { return }
-        if !started {
-            try? AVAudioSession.sharedInstance().setCategory(.ambient, options: .mixWithOthers)
-            try? engine.start()
-            started = engine.isRunning
+        if !engine.isRunning {
+            // Never downgrade the session while the Line voice owns it (.playAndRecord): .ambient would kill the mic.
+            let session = AVAudioSession.sharedInstance()
+            if session.category != .playAndRecord {
+                try? session.setCategory(.ambient, options: .mixWithOthers)
+            }
+            try? engine.start()                      // also restarts after the voice engine reconfigured the session
         }
-        guard started else { return }
+        guard engine.isRunning else { return }
         player.scheduleBuffer(buffer, at: nil, options: .interrupts)
         player.play()
     }
