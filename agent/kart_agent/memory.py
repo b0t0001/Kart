@@ -17,6 +17,10 @@ WELCOME_BACK = "Welcome back!"
 NICE_TO_MEET = "Nice to meet you!"
 PROFILE_FAILED_LINE = "Welcome back! What are we shopping for today?"
 FORGOTTEN_LINE = "Done. I've forgotten everything about you."
+GUEST_NOW = "shopping as a guest now"                  # in Kart's "not me" apology (MEMBER_RULES)
+FORGOTTEN_NOTE = ("(The shopper had Kart forget everything about them; they're a guest now. Never mention anything "
+                  "said earlier about them.)")
+NOT_ME_NOTE = "(That wasn't the member who signed in; they're a guest now. Nothing said earlier about the member applies.)"
 LIST_LATER_LINE = "Okay, it's saved for later."
 NAME_QUESTION = "By the way, what should I call you?"
 QUESTIONS = ["Any fun plans coming up I can help you shop for?", "Anyone coming over soon?",
@@ -42,7 +46,8 @@ words, names kept, then the detail: "Leo's soccer team party, pasta for 12". The
 <the event, short, with the name> on <weekday>. Want me to save a list for it?"
 - A saved list is sized like a meal for their guests (about a pound of pasta per four people, a jar of sauce per six), \
 basics only: leave cheese, bread and extras off unless they ask. After save_for_later, say its readback word for word.
-- "Forget that" is forget with that memory's id. If they say "don't remember that" right after you saved \
+- "Forget that" is forget with that memory's id. But "never mind" or "forget it" answering your own question just \
+means no: forget nothing. To "forget everything about me", call show_memories: the Forget me button is on that screen. If they say "don't remember that" right after you saved \
 something, forget that memory (its id came back from remember) and say so.
 - "What do you know about me?": call show_memories (it opens the memory screen), then say one short sentence \
 naming at most three things.
@@ -108,6 +113,15 @@ def question(profile: dict[str, Any] | None, n: int) -> str:
 def still_there_line(profile: dict[str, Any] | None) -> str:
     """Said after 3 quiet minutes while signed in; the iPad signs out at 5."""
     return f"Still shopping, {_name(profile)}?" if _name(profile) else "Still shopping?"
+
+
+def after_last_drop(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A rejoined call's history starts after the last "forget me" or "not me": that member is gone for good."""
+    for i in range(len(lines) - 1, -1, -1):
+        text = lines[i].get("text") or ""
+        if lines[i].get("role") == "agent" and (text == FORGOTTEN_LINE or GUEST_NOW in text):
+            return lines[i + 1:]
+    return lines
 
 
 def saved_list_offer(profile: dict[str, Any] | None) -> tuple[dict[str, Any], str] | None:

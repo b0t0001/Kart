@@ -15,8 +15,9 @@ from .brain import Brain
 from .lines import (DECLINED_LINE, KEEP_LINE, LIST_KEPT, LIST_TOO, NUDGE_OK_LINE, QUIET_OFF_LINE, QUIET_ON_LINE,
                     WELCOME_LINE, accepted_line, nudge_answer, only_ack, only_filler, only_thanks, proactive_line,
                     quiet_request, yes_or_no)
-from .memory import (FORGOTTEN_LINE, GREETING_TURN, LIST_LATER_LINE, PROFILE_FAILED_LINE, list_shopped_line,
-                     member_section, only_greeting, question, saved_list_offer, still_there_line, welcome_line)
+from .memory import (FORGOTTEN_LINE, FORGOTTEN_NOTE, GREETING_TURN, LIST_LATER_LINE, NOT_ME_NOTE, PROFILE_FAILED_LINE,
+                     after_last_drop, list_shopped_line, member_section, only_greeting, question, saved_list_offer,
+                     still_there_line, welcome_line)
 from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
@@ -341,6 +342,7 @@ class KartAgent:
             if ctx.get("signed_out"):                    # "that's not me": a guest from here on
                 self._drop_member()
                 self.member_id = None
+                self.brain.remember(NOT_ME_NOTE, "".join(said).strip() or "Okay.")
             elif ctx.get("memory_changed"):              # remember / save_for_later / forget: reload what Kart knows
                 await self._load_profile()
             if ctx.get("show_memories"):                 # "what do you know about me?": the memory screen opens
@@ -356,6 +358,7 @@ class KartAgent:
             if meta.get("type") == "member_forgotten":
                 self._drop_member()
                 self.member_id = None
+                self.brain.remember(FORGOTTEN_NOTE, FORGOTTEN_LINE)   # a clean slate, and Claude knows why
                 async for out in self._say([FORGOTTEN_LINE], interruptible=False):
                     yield out
                 return
@@ -535,8 +538,12 @@ class KartAgent:
     # Member memory -------------------------------------------------------------------------------
 
     def _drop_member(self) -> None:
-        self._profile, self._profile_tried, self._question = None, False, None
+        """The member is gone (forgotten, "not me", signed out): their prompt, tools and everything said so far."""
+        had_member = self._profile is not None or self.member_id is not None
+        self._profile, self._profile_tried, self._question, self._list_offer = None, False, None, None
         self.brain.set_member(None)
+        if had_member:
+            self.brain.messages = []                     # the history mentions them; Claude must not
 
     def _next_question(self) -> str:
         line = question(self._profile, self._questions)
@@ -553,11 +560,14 @@ class KartAgent:
         """What Kart remembers about the signed-in member; a slow or failed read leaves it out (never blocks)."""
         self._profile_tried = True
         try:
-            self._profile = await asyncio.wait_for(
+            profile = await asyncio.wait_for(
                 self.backend.rpc("member_profile", p_member_id=self.member_id, p_cart_id=self.cart_id),
                 self.profile_timeout_seconds)
         except Exception:
-            self._profile = None
+            profile = None
+        if profile is None and self._profile and (self._profile.get("member") or {}).get("member_id") == self.member_id:
+            return                                       # a slow reload keeps what Kart already knew this trip
+        self._profile = profile
         self.brain.set_member(member_section(self._profile))
 
     async def _what_this_is(self) -> str:
@@ -585,7 +595,7 @@ class KartAgent:
         if reasons and not self._meal:
             self._meal = Counter(reasons).most_common(1)[0][0]
         try:
-            lines = await self.backend.get_transcript(self.cart_id, self.trip_id)
+            lines = after_last_drop(await self.backend.get_transcript(self.cart_id, self.trip_id))   # member beta
         except Exception:
             lines = []
         self.brain.seed([(line.get("role", ""), line.get("text", "")) for line in lines])

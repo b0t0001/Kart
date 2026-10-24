@@ -266,6 +266,7 @@ public final class LineVoiceSession: VoiceSession {
 
     public func send(_ event: VoiceEvent) {
         if case .tripContext(_, let tripId, let memberId) = event { member = memberId.map { (tripId, $0) } }
+        if case .memberForgotten = event { member = nil }        // a reconnect must not bring them back
         if case .tripContext = event {} else { lastActiveAt = Date() }
         guard let streamId, state != .offline else {
             if case .tripContext = event { return }            // every new call sends its own

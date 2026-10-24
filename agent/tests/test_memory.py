@@ -112,3 +112,7 @@ def test_member_rules_cover_the_conversational_moments():
     for phrase in ("show_memories", "sign_out", "don't remember that", "what did I buy last time",
                    "remind me", "health"):
         assert phrase in MEMBER_RULES, phrase
+
+
+def test_forget_it_answering_a_question_means_no():
+    assert '"never mind" or "forget it"' in MEMBER_RULES and "forget everything" in MEMBER_RULES

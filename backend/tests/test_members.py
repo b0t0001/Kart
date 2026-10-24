@@ -399,3 +399,13 @@ def test_fill_skips_more_items_of_a_saved_list(conn, member):
     for days in (6, 13, 20, 27):
         buy(conn, member, "large-eggs", days)
     assert [p for p, _, _ in picks(profile(conn, member))] == ["barilla-spaghetti", "whole-milk", "large-eggs"]
+
+
+def test_forget_all_unlinks_the_members_receipts(member_cart, conn):
+    """Receipts are readable with the anon key; after "Forget me" none may still point at the member."""
+    member_cart("set_member", p_member_id="it-1")
+    add(member_cart, "whole-milk")
+    receipt = member_cart("checkout")
+    assert conn.execute("select member_id from receipts where id = %s", [receipt["id"]]).fetchone() == ("it-1",)
+    rpc(conn, "member_forget", p_member_id="it-1")
+    assert conn.execute("select member_id from receipts where id = %s", [receipt["id"]]).fetchone() == (None,)

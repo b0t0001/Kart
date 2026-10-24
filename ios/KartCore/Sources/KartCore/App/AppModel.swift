@@ -130,6 +130,7 @@ public final class AppModel {
             lastActivity = clock()
             return
         }
+        if previous.memberId != cart.memberId { resendTripContext() }   // signed out by Kart ("not me") or elsewhere
         let changes = CartDiff.changes(from: previous, to: cart)
         for change in changes {
             switch change {
@@ -416,10 +417,15 @@ public final class AppModel {
         forYouDismissed = true
     }
 
+    /// The last tap, cart change or word from the shopper (talking with Kart is activity too).
+    private var lastHeard: Date {
+        max(lastActivity, backend.transcript.last(where: { $0.role == .user })?.createdAt ?? .distantPast)
+    }
+
     /// 40 quiet seconds while a member shops, with nothing on screen: Kart may ask its one question (once per trip).
     public func lullDue(now: Date) -> Bool {
         member != nil && !lullSent && backend.cart.status == .shopping && visibleCard == nil
-            && now.timeIntervalSince(lastActivity) >= 40
+            && now.timeIntervalSince(lastHeard) >= 40
     }
 
     public func sendLullIfDue(now: Date) {
@@ -465,7 +471,7 @@ public final class AppModel {
     /// Walking away signed in: ask at 3 quiet minutes, sign out at 5 (the trip stays).
     public func memberIdleStage(now: Date) -> MemberIdle {
         guard signedIn, backend.cart.status == .shopping else { return .none }
-        let quiet = now.timeIntervalSince(lastActivity)
+        let quiet = now.timeIntervalSince(lastHeard)
         return quiet >= 300 ? .signOut : quiet >= 180 ? .ask : .none
     }
 

@@ -27,7 +27,9 @@ extension PostgRESTTests {
         defer { StubProtocol.routes = [:] }
         let backend = try memberBackend()
         try await backend.signIn(memberId: "1029")
+        await backend.profileLoad?.value
         #expect(backend.cart.memberId == "1029" && backend.memberProfile?.member.name == "Dylan")
+        await backend.refreshMemberProfile()                   // the background read raced the cart's: ask once more
         let body = try JSONSerialization.jsonObject(with: try #require(StubProtocol.lastBody)) as? [String: String]
         #expect(StubProtocol.lastRequest?.url?.lastPathComponent == "member_profile")
         #expect(body == ["p_member_id": "1029", "p_cart_id": "7"])
@@ -46,13 +48,53 @@ extension PostgRESTTests {
         defer { StubProtocol.routes = [:] }
         let backend = try memberBackend()
         try await backend.startTrip()
+        await backend.profileLoad?.value
         #expect(backend.memberProfile?.member.name == "Dylan")
         StubProtocol.routes["carts"] = .init(status: 200, body: Self.cartRow(member: "1029", rev: 1))
         StubProtocol.routes["member_profile"] = .init(status: 200, body: memberProfileJSON.replacingOccurrences(of: "\"Dylan\"", with: "\"Dyl\""))
         try await backend.startTrip()
+        await backend.profileLoad?.value
         #expect(backend.memberProfile?.member.name == "Dyl")
         StubProtocol.routes["carts"] = .init(status: 200, body: Self.cartRow(member: nil, rev: 1))
         try await backend.startTrip()
+        await backend.profileLoad?.value
         #expect(backend.memberProfile == nil)
     }
+}
+
+/// Answers every request at once except `member_profile`, which takes `profileDelay` seconds.
+final class SlowProfileStub: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var profileDelay: TimeInterval = 2
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let path = request.url?.lastPathComponent ?? ""
+        let body = switch path {
+        case "carts": PostgRESTTests.cartRow(member: "1029")
+        case "member_profile": memberProfileJSON
+        case "cart_events", "transcript", "receipts": "[]"
+        default: "{}"
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + (path == "member_profile" ? Self.profileDelay : 0)) { [self] in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+                                           headerFields: ["Content-Type": "application/json"])!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data(body.utf8))
+            client?.urlProtocolDidFinishLoading(self)
+        }
+    }
+    override func stopLoading() {}
+}
+
+@MainActor @Test func signInDoesNotWaitOnTheProfile() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [SlowProfileStub.self]
+    let backend = SupabaseKartBackend(url: URL(string: "http://127.0.0.1:54321")!, anonKey: "anon", cartId: "7",
+                                      layout: try Fixtures.catalog().layout, session: URLSession(configuration: config))
+    let started = Date()
+    try await backend.signIn(memberId: "1029")
+    #expect(Date().timeIntervalSince(started) < 1 && backend.cart.memberId == "1029")   // the trip starts now
+    await backend.profileLoad?.value
+    #expect(backend.memberProfile?.member.name == "Dylan")                              // memory arrives after
 }

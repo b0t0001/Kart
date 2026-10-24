@@ -295,3 +295,53 @@ async def test_rejoined_member_call_keeps_the_member_without_regreeting():
     backend.transcript = [("agent", "Welcome back, Dylan!")]           # this trip already talked: a dropped call
     assert await run(agent, CallStarted()) == []
     assert len(profile_calls(backend)) == 1 and "About this shopper" in agent.brain.system
+
+
+# ── Review fixes: the member is really gone; memory survives a slow reload ──
+
+def far_party_profile():
+    profile = copy.deepcopy(PROFILE)                   # Leo's party in 5 days: the greeting goes to Claude
+    return profile
+
+
+async def test_forget_me_purges_the_member_from_claudes_history():
+    from kart_agent.memory import FORGOTTEN_LINE
+    agent, backend, llm = make([Turn(chunks=["Leo's soccer party is Thursday, Dylan."]), Turn(chunks=["Sure."])])
+    await run(agent, CallStarted())
+    assert await run(agent, UserCustomSent(metadata={"type": "member_forgotten"})) == [FORGOTTEN_LINE]
+    await run(agent, said_by_user("What do you remember about me?"))
+    sent = json.dumps(llm.requests[-1]["messages"])
+    assert "Dylan" not in sent and "Leo" not in sent
+    assert "forget everything" in sent                     # Claude knows why the slate is clean
+
+
+async def test_not_me_purges_the_member_from_claudes_history():
+    agent, backend, llm = make([Turn(chunks=["Welcome back, Dylan. Leo's party is Thursday."]),
+                                Turn(tools=[ToolUse("t1", "sign_out", {})]),
+                                Turn(chunks=["Sorry about that, you're shopping as a guest now. What are we getting?"]),
+                                Turn(chunks=["Sure."])])
+    await run(agent, CallStarted())
+    await run(agent, said_by_user("That's not me."))
+    await run(agent, said_by_user("Pasta night."))
+    sent = json.dumps(llm.requests[-1]["messages"])
+    assert "Dylan" not in sent and "Leo" not in sent
+
+
+async def test_rejoin_after_forget_skips_what_came_before():
+    from kart_agent.memory import FORGOTTEN_LINE
+    agent, backend, llm = make(member=None)
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta night", "qty": 1, "done": False}]
+    backend.transcript = [("user", "hey kart"), ("agent", "Welcome back, Dylan! Leo's soccer party is tomorrow."),
+                          ("agent", FORGOTTEN_LINE), ("user", "pasta night"), ("agent", "Pasta night it is.")]
+    assert await run(agent, CallStarted()) == []
+    history = json.dumps(agent.brain.messages)
+    assert "Dylan" not in history and "Leo" not in history and "Pasta night it is." in history
+
+
+async def test_slow_reload_keeps_the_good_profile():
+    agent, backend, llm = make([Turn(chunks=["Hey."]), Turn(chunks=["Okay."])])
+    await run(agent, CallStarted())
+    backend.delay = 2.0                                    # the reload times out...
+    agent.run_filter(trip_context("1029", "trip-1"))       # ...after a same-member trip_context (every call sends two)
+    await run(agent, said_by_user("what's on my list"))
+    assert agent._profile is not None and "About this shopper, from Kart's memory" in llm.requests[-1]["system"]

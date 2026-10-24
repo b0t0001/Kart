@@ -463,6 +463,7 @@ declare
   n int;
 begin
   if p_memory_id is null then
+    update receipts set member_id = null where member_id = p_member_id;   -- receipts are anon-readable
     delete from members where member_id = p_member_id;
     return jsonb_build_object('forgotten', 'all');
   end if;

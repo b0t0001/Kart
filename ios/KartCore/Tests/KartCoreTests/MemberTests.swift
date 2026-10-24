@@ -376,3 +376,49 @@ struct MemberContractTests {
         .filter { $0["type"] as? String == "trip_context" }
     #expect(!contexts.isEmpty && contexts.allSatisfy { $0["member_id"] as? String == "1029" })
 }
+
+// ── Review fixes: a forgotten or signed-out member stays gone; talking counts as activity ──
+
+@MainActor @Test func theCallsMemberIsForgottenWithTheMember() async throws {
+    let transport = FakeTransport(), audio = FakeAudio()
+    let voice = LineVoiceSession(tokens: FakeTokens(), transport: transport, audio: audio)
+    let trip = UUID()
+    voice.send(.tripContext(cartId: "7", tripId: trip, memberId: "1029"))
+    voice.send(.memberForgotten)                                       // "Forget me", then the call (re)connects
+    let starting = Task { await voice.start(cartId: "7", tripId: trip) }
+    await settle()
+    let streamId = try #require(transport.events("start").first?["stream_id"] as? String)
+    transport.receive(#"{"event":"ack","stream_id":"\#(streamId)","config":{}}"#)
+    await starting.value
+    await settle()
+    let contexts = transport.events("custom").compactMap { $0["metadata"] as? [String: Any] }
+        .filter { $0["type"] as? String == "trip_context" }
+    #expect(!contexts.isEmpty && contexts.allSatisfy { $0["member_id"] == nil })
+}
+
+@MainActor struct MemberReviewFixTests {
+    func signedIn() async throws -> TestRig {
+        let t = try make()
+        t.clock.now = Date(timeIntervalSince1970: 1_792_868_400)
+        try await t.backend.setFeature("member_memory", on: true)
+        await t.model.startTrip(memberId: "1029")
+        t.voice.sent = []
+        return t
+    }
+
+    @Test func aSignOutFromKartReachesTheVoiceSession() async throws {
+        let t = try await signedIn()
+        try await t.backend.signOut()                                  // the agent's sign_out: set_member(cart, null)
+        t.model.ingest(cart: t.backend.cart)
+        #expect(t.voice.sent == [.tripContext(cartId: "7", tripId: try #require(t.backend.cart.tripId))])
+    }
+
+    @Test func talkingCountsForTheLullAndTheIdleSignOut() async throws {
+        let t = try await signedIn()
+        t.clock.now += 170
+        try await t.backend.appendTranscript(.user, "And where's the parmesan?")   // the shopper is talking with Kart
+        #expect(!t.model.lullDue(now: t.clock.now + 30))
+        #expect(t.model.memberIdleStage(now: t.clock.now + 30) == .none)
+        #expect(t.model.memberIdleStage(now: t.clock.now + 181) == .ask)
+    }
+}
