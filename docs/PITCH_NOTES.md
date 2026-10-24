@@ -17,6 +17,7 @@ Talking points for the pitch, the Devpost write-up and judge Q&A. Owned by the m
 - **Why that beats training YOLO:** trained recognizers must be retrained whenever the catalog changes. With KART, a store owner tells the merchant agent "add fresh basil, $2.49, produce aisle", and the next cart can recognize it, with **zero photos and zero retraining.**
 - **Built for a Raspberry Pi 4.** Detection runs at 10 Hz on downscaled frames, and the cameras use about 18% of the Pi's CPU. Claude is called only when a settled change needs it.
 - **Two cameras, one decision.** The diagonal corners cover each other's blind spots, and one item seen by both counts once.
+- **The cameras only see the basket floor.** Each camera has a basket-floor outline. Anything outside it (the mesh walls, the store beyond, people walking by) is ignored for detection, and it's painted out of every crop before anything goes to Claude. Rolling the cart down an aisle doesn't fool it, and a passer-by's face never leaves the cart. This came from a real-cart test: the room moving behind the mesh walls fooled the first version, so we fixed it and turned that test into a regression.
 
 **Numbers to fill in after hardware testing** (from `tools/gallery_check.py` and `tools/cloud_smoke.py --gallery`):
 - local match accuracy on real props: ___
