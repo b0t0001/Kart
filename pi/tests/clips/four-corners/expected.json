@@ -1,0 +1,115 @@
+{
+ "what_happened": "NOT empty at frame 1: red apple #1 was already in cam1's far-right corner (cam0's near blind zone), placed just before recording. Then red apple #2 into the near-left corner (~20 s), apple #3 into the far-left corner (~33 s), a Kirkland almond bag (soft plastic bag, tall) into the near-right corner (~43 s), each followed by ~4 s of stillness; all stay in.",
+ "expected": [
+  {
+   "type": "added"
+  },
+  {
+   "type": "added"
+  },
+  {
+   "type": "added"
+  }
+ ],
+ "live": [
+  "ADDED ? \"red and pink fruit half, possibly apple or pepper, on dark fabric\" (none 0.20)",
+  "ADDED ? \"red and yellow apple\" (none 0.90)",
+  "ADDED ? \"round red and white glossy object, blurry close-up\" (none 0.30)",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "INTRUSION: cam1 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "RECHECK: the edge-touching change stayed still 3 s more: judging it as an item",
+  "ADDED ? \"unknown item\" (none 0.00)",
+  "INTRUSION: cam1 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "RECHECK: the edge-touching change stayed still 3 s more: judging it as an item",
+  "ADDED ? \"unknown item\" (none 0.00)"
+ ],
+ "notes": "replay cannot see apple #1 (it is in the frame-1 empty picture); live billed it. Live billed the almond bag TWICE: the bag slumped after placement and cam1 re-triggered INTRUSION -> RECHECK. Both recheck adds got label 'unknown item' (0.00): the tall bag mostly sits outside the floor ROI, so its crop is grayed before Claude sees it. Coverage: every corner item seen by >= 1 camera.",
+ "roi": {
+  "0": [
+   [
+    0.01,
+    0.99
+   ],
+   [
+    0.01,
+    0.38
+   ],
+   [
+    0.1,
+    0.36
+   ],
+   [
+    0.5,
+    0.36
+   ],
+   [
+    0.8,
+    0.35
+   ],
+   [
+    0.88,
+    0.37
+   ],
+   [
+    0.94,
+    0.46
+   ],
+   [
+    0.99,
+    0.63
+   ],
+   [
+    0.99,
+    0.99
+   ]
+  ],
+  "1": [
+   [
+    0.03,
+    0.99
+   ],
+   [
+    0.03,
+    0.8
+   ],
+   [
+    0.1,
+    0.7
+   ],
+   [
+    0.25,
+    0.52
+   ],
+   [
+    0.36,
+    0.4
+   ],
+   [
+    0.41,
+    0.24
+   ],
+   [
+    0.47,
+    0.19
+   ],
+   [
+    0.62,
+    0.27
+   ],
+   [
+    0.85,
+    0.47
+   ],
+   [
+    0.85,
+    0.75
+   ],
+   [
+    0.82,
+    0.99
+   ]
+  ]
+ },
+ "setup": "FINAL 2-camera layout, zip-tied: cam0 = Logitech Brio 101 mid-front looking back down the basket; cam1 = Aoozi QS-WB-202PRO very wide-angle, high at the top-basket end looking down. Floor liner = a black T-shirt (loose, wrinkled). Makerspace lighting.",
+ "recording": "640x360, 5 Hz, re-encoded JPEG q55; still stretches trimmed by hardware/trim_clip.py (timestamps kept)"
+}
