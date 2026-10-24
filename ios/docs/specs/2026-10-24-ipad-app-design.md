@@ -23,7 +23,7 @@ Products and deals are from the published `data/store.json` v1.
 2. Judge: *"Pasta dinner for my family, four people."* The list builds itself on screen (spaghetti, marinara, baguette, Caesar kit); the Next stop card shows the first aisle on the walking route (the backend orders the list by route).
 3. The judge drops a real box of Barilla spaghetti in the cart. A soft chime; it slides into the cart, the list item checks off, the total counts up. Kart: *"Nice. Rao's is right beside it, and parmesan's $3 off in aisle 4."*
 4. A deal card appears. The judge says "yes," and parmesan joins the list.
-   - *(Optional merchant beat.)* A teammate playing the store owner tells the merchant agent "chips $1.50 off." Seconds later the cart chimes, a "New deal" card rises in, and every price on screen updates live.
+   - *(Merchant beat.)* The pitch starts without the parmesan deal, so the spaghetti first offers the baguette deal. A teammate playing the store owner creates "parmesan $3 off" in the merchant console. Within a second the deal card swaps to Parmesan with a pop, Kart bounces and says it once, and every price on screen updates live.
 5. The judge drops an item the cameras aren't sure about: an amber card asks "Is this the Rao's marinara?" "Yes."
 6. The judge takes an item back out. Kart notices; the total drops.
 7. *"I'm done."* Checkout lists every item (with the camera's photo when available) and the savings. Tap the card to pay, then the receipt: "You saved $3.00 · 4-minute trip." Closing line: *"Our 4-hour Costco trip, cut to 45 minutes."*
@@ -111,7 +111,7 @@ Cards are how the cart shows things that need attention or a decision. One is vi
 
 | Kind | Source | Example | Actions |
 |---|---|---|---|
-| `deal` | `carts.suggestion` | "Parmesan $3 off · Aisle 4. Add it?" | Yes (adds it to the plan with `set_plan`: the agent does it when you say it, the iPad when you tap) / No thanks (P5) |
+| `deal` | `carts.suggestion` (a deal the store creates after the current one was offered replaces it; a changed `deal_id` always enters as a new card with a pop, and Kart says it) | "Parmesan is $3 off in Aisle 4. Want it?" | Yes (adds it to the plan with `set_plan`: the agent does it when you say it, the iPad when you tap) / No thanks (P5) |
 | `newDeal` | a live `deals` change (new or improved) on a product in the plan or cart, or one that `pairs_with` them | "New deal: Chips $1.50 off" | Add it / Got it |
 | `confirmItem` | a vision `cart_events` row with `product_id = null` that isn't resolved (P4) | Photo + "Is this the Rao's marinara?" (best catalog match for the event's `label`) | Yes / Something else (pick from the 3 closest matches or search) / Remove |
 | `offline` | the app's own connection state | "Voice is offline. Tap to retry." | Retry |
