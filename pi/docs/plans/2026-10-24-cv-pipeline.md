@@ -62,9 +62,9 @@ pi/
     sinks.py                JsonlSink, ConsoleSink, MemorySink, HttpSink
     pipeline.py             Pipeline
     server.py               ControlServer
+    trip.py                 TripWatcher (reset when carts.trip_id changes)
     enroll.py               run_enrollment
-  deploy/setup_pi.sh  deploy/kart-cv.service
-  README.md                 operator guide (milestone checks)
+  README.md                 how to run CV on the Pi + milestone checks (autostart itself is the hardware chat's)
   tests/                    one test file per module + helpers.py
 tools/  snap.py  record.py  enroll.py  fetch_model.py
 ```
@@ -894,7 +894,7 @@ git commit -m "pi: added/removed classification, camera combining, nudge cancel"
     - A failure (status not 2xx, or `OSError`) sets `next_retry = now + min(30, 2**(failures-1))`, so the waits are 1, 2, 4, … capped at 30. Success resets the failure count.
     - `post(url, headers, body) -> int` defaults to `urllib.request` with a 5 s timeout.
     - The URL is `f"{base_url.rstrip('/')}/rest/v1/rpc/apply_cart_event"`. Headers: `apikey`, `Authorization: Bearer <key>`, `Content-Type: application/json`.
-    - Body: `{"p_cart_id", "p_type", "p_product_id", "p_confidence", "p_source": "vision", "p_label", "p_camera": cameras[0] or None}`.
+    - Body: `{"p_cart_id", "p_type", "p_product_id", "p_confidence", "p_source": "vision", "p_label", "p_camera": cameras[0] or None, "p_event_id": event_id, "p_method": method}`. The RPC is idempotent on `p_event_id` (CONTRACT v0.3+), so a retry after a lost response can't double-bill.
     - `.pending() -> int`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -927,8 +927,10 @@ def test_http_payload(tmp_path):
     url, headers, body = p.calls[0]
     assert url == "https://x.supabase.co/rest/v1/rpc/apply_cart_event"
     assert headers["apikey"] == "k" and headers["Authorization"] == "Bearer k"
-    assert body == {"p_cart_id": "7", "p_type": "added", "p_product_id": "kirkland-parmesan", "p_confidence": 0.93,
-                    "p_source": "vision", "p_label": "Parm", "p_camera": 0}
+    assert {k: v for k, v in body.items() if k != "p_event_id"} == {"p_cart_id": "7", "p_type": "added",
+        "p_product_id": "kirkland-parmesan", "p_confidence": 0.93, "p_source": "vision", "p_label": "Parm",
+        "p_camera": 0, "p_method": "local"}
+    assert len(body["p_event_id"]) == 36
 
 def test_outbox_order_backoff_and_restart(tmp_path):
     out = tmp_path / "o.jsonl"; p = Post([500, OSError("down"), 200, 200])
@@ -1116,16 +1118,23 @@ git commit -m "pi: tick-driven pipeline, live/replay/reset CLI, end-to-end synth
 
 ---
 
-### Task 12: Control and debug server
+### Task 12: Control server, debug view, trip-reset watcher
 
 **Files:**
-- Create: `pi/kartcv/server.py`
-- Modify: `pi/main.py` (start the server in `live`)
-- Test: `pi/tests/test_server.py`
+- Create: `pi/kartcv/server.py`, `pi/kartcv/trip.py`
+- Modify: `pi/main.py` (start the server and, when Supabase env is set, the trip watcher in `live`)
+- Test: `pi/tests/test_server.py`, `pi/tests/test_trip.py`
 
 **Interfaces:**
 - Consumes: `Pipeline.status`, `.request_reset`, `.latest_frames` (Task 11).
 - Produces:
+  - `TripWatcher(base_url, anon_key, cart_id, state_path: Path, on_new_trip: Callable[[], None], get=None, interval_s=2.0, start_thread=True)`:
+    - `.poll_once() -> str | None` GETs `f"{base_url.rstrip('/')}/rest/v1/carts?cart_id=eq.{cart_id}&select=trip_id"` (headers `apikey`, `Authorization: Bearer`) and reads `rows[0]["trip_id"]`.
+    - If that value differs from the last seen one, it calls `on_new_trip()` and saves `{"trip_id": ...}` to `state_path`.
+    - The **first** value ever seen, with no state file, is only recorded and does not reset.
+    - Network errors, non-200 responses, an empty row list, or a null `trip_id` change nothing and return `None`.
+    - `get(url, headers) -> tuple[int, bytes]` defaults to `urllib.request` with a 5 s timeout. `.stop()`.
+  - `main live` starts a `TripWatcher(on_new_trip=pipeline.request_reset)` when `SUPABASE_URL` and `SUPABASE_ANON_KEY` are set.
   - `ControlServer(port: int, status_fn, reset_fn, frames_fn=None, debug_view=False, crops_dir: Path | None = None)` on a `ThreadingHTTPServer` in a daemon thread. `.start()`, `.stop()`, `.port` (the real port; `0` picks a free one).
   - `GET /status` → 200 JSON. `POST /reset` → calls `reset_fn` and returns 200 `{"ok": true}`.
   - With `debug_view`:
@@ -1168,12 +1177,42 @@ def test_debug_view(tmp_path):
     finally: s.stop()
 ```
 
+```python
+# pi/tests/test_trip.py
+import json
+from kartcv.trip import TripWatcher
+
+class Get:
+    def __init__(self, replies): self.replies, self.urls = list(replies), []
+    def __call__(self, url, headers):
+        self.urls.append((url, headers)); r = self.replies.pop(0)
+        if isinstance(r, Exception): raise r
+        return r
+
+def rows(tid): return (200, json.dumps([{"trip_id": tid}]).encode())
+
+def test_first_seen_records_then_change_resets(tmp_path):
+    resets = []; g = Get([rows("t1"), rows("t1"), OSError("down"), (500, b""), (200, b"[]"), rows(None), rows("t2")])
+    w = TripWatcher("https://x.supabase.co/", "k", "7", tmp_path / "trip.json", lambda: resets.append(1), get=g, start_thread=False)
+    assert w.poll_once() == "t1" and resets == []
+    for _ in range(5): w.poll_once()
+    assert resets == []
+    w.poll_once(); assert resets == [1] and json.loads((tmp_path / "trip.json").read_text()) == {"trip_id": "t2"}
+    url, headers = g.urls[0]
+    assert url == "https://x.supabase.co/rest/v1/carts?cart_id=eq.7&select=trip_id" and headers["apikey"] == "k"
+
+def test_change_while_off_resets_at_startup(tmp_path):
+    (tmp_path / "trip.json").write_text('{"trip_id": "old"}'); resets = []
+    w = TripWatcher("https://x", "k", "7", tmp_path / "trip.json", lambda: resets.append(1), get=Get([rows("new")]), start_thread=False)
+    w.poll_once(); assert resets == [1]
+```
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `pi/.venv/bin/python -m pytest pi/tests/test_server.py -q`
+Run: `pi/.venv/bin/python -m pytest pi/tests/test_server.py pi/tests/test_trip.py -q`
 Expected: FAIL with `ModuleNotFoundError: No module named 'kartcv.server'`.
 
-- [ ] **Step 3: Implement `server.py` and wire it into `main live`.** The `reset_fn` passed by `main` is `pipeline.request_reset`.
+- [ ] **Step 3: Implement `server.py` and `trip.py`, and wire both into `main live`.** The `reset_fn` and `on_new_trip` passed by `main` are both `pipeline.request_reset`.
 
 - [ ] **Step 4: Run the whole suite**
 
@@ -1183,16 +1222,16 @@ Expected: all pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pi/kartcv/server.py pi/main.py pi/tests/test_server.py
-git commit -m "pi: control server (/status, /reset) and optional debug view" -- pi/kartcv/server.py pi/main.py pi/tests/test_server.py
+git add pi/kartcv/server.py pi/kartcv/trip.py pi/main.py pi/tests/test_server.py pi/tests/test_trip.py
+git commit -m "pi: control server, debug view, trip_id reset watcher" -- pi/kartcv/server.py pi/kartcv/trip.py pi/main.py pi/tests/test_server.py pi/tests/test_trip.py
 ```
 
 ---
 
-### Task 13: Enrollment
+### Task 13: Enrollment and the run guide
 
 **Files:**
-- Create: `pi/kartcv/enroll.py`, `tools/enroll.py`
+- Create: `pi/kartcv/enroll.py`, `tools/enroll.py`, `pi/README.md`
 - Test: `pi/tests/test_enroll.py`
 
 **Interfaces:**
@@ -1205,6 +1244,13 @@ git commit -m "pi: control server (/status, /reset) and optional debug view" -- 
     - Prints `captured k/rounds: take it out` after each add and `put it back in a new pose` after each removal.
     - Stops after `rounds` added events and returns the count.
   - `tools/enroll.py PRODUCT_ID [--rounds 5] [--config P]`: live cameras feed ticks at 10 Hz; it prints `put PRODUCT_ID in the cart` first.
+  - `pi/README.md`, plain English for whoever runs `pi/` on the Pi (the hardware chat or the operator):
+    - **Install:** `sudo apt install -y python3-opencv python3-numpy python3-venv v4l-utils`; `python3 -m venv --system-site-packages ~/venv`; `~/venv/bin/pip install -r pi/requirements-pi.txt`; `~/venv/bin/python tools/fetch_model.py`.
+    - **Configure:** copy `pi/config.example.json` → `pi/config.json`, run `tools/snap.py --list`, and paste the two `-video-index0` `/dev/v4l/by-path/...` paths into `cameras`.
+    - **Run command for autostart:** `~/venv/bin/python pi/main.py live`, from the repo root, restarted on exit. The hardware chat owns the systemd unit.
+    - The spec §14 milestone checks, each as "do this → you should see that".
+    - The enrollment how-to.
+    - Two warnings: the cart floor needs a solid mat, and the cart must be empty on first start (or run `python pi/main.py reset` with it empty).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1236,69 +1282,7 @@ def test_enroll_unknown_product(tmp_path):
 Run: `pi/.venv/bin/python -m pytest pi/tests/test_enroll.py -q`
 Expected: FAIL with `ModuleNotFoundError: No module named 'kartcv.enroll'`.
 
-- [ ] **Step 3: Implement `enroll.py` and `tools/enroll.py`** per the Interfaces block.
-
-- [ ] **Step 4: Run the tests to verify they pass**
-
-Run: `pi/.venv/bin/python -m pytest pi/tests/test_enroll.py -q`
-Expected: all pass.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add pi/kartcv/enroll.py tools/enroll.py pi/tests/test_enroll.py
-git commit -m "pi: product enrollment through the real pipeline" -- pi/kartcv/enroll.py tools/enroll.py pi/tests/test_enroll.py
-```
-
----
-
-### Task 14: Pi install, autostart, operator guide
-
-**Files:**
-- Create: `pi/deploy/setup_pi.sh`, `pi/deploy/kart-cv.service`, `pi/README.md`
-- Test: `pi/tests/test_deploy.py`
-
-**Interfaces:**
-- Consumes: `main.py live` (Tasks 11–12), `tools/*.py`.
-- Produces:
-  - `setup_pi.sh`, run on the Pi from the repo; `set -euo pipefail`; idempotent:
-    1. `sudo apt install -y python3-opencv python3-numpy python3-venv v4l-utils`.
-    2. Create `~/venv` with `--system-site-packages` if it's missing, then `~/venv/bin/pip install -r pi/requirements-pi.txt`.
-    3. Copy `pi/config.example.json` → `pi/config.json` if it's missing.
-    4. Run `tools/fetch_model.py`.
-    5. Print `/dev/v4l/by-path/*` with instructions to paste the two `-video-index0` paths into `pi/config.json`.
-    6. Render the service from the template (replace `@USER@`, `@REPO@`, `@VENV@`) into `/etc/systemd/system/kart-cv.service`, then `daemon-reload` and `enable` (not `start`).
-    - It never touches network config.
-  - `kart-cv.service`: `After=network-online.target`, `User=@USER@`, `WorkingDirectory=@REPO@`, `ExecStart=@VENV@/bin/python pi/main.py live`, `Restart=always`, `RestartSec=3`, `WantedBy=multi-user.target`.
-  - `pi/README.md`, the operator guide in plain English:
-    - Setup steps.
-    - The milestone checks from spec §14, each as "do this, you should see that".
-    - Enrollment how-to.
-    - `journalctl -u kart-cv -f` for logs.
-    - The cart-floor mat requirement.
-    - "Make sure the cart is empty on first start, or run `python pi/main.py reset` with the cart empty."
-
-- [ ] **Step 1: Write the failing test**
-
-```python
-# pi/tests/test_deploy.py
-import subprocess
-from kartcv.config import REPO_ROOT
-
-def test_setup_script_syntax_and_service_template():
-    subprocess.run(["bash", "-n", str(REPO_ROOT / "pi/deploy/setup_pi.sh")], check=True)
-    svc = (REPO_ROOT / "pi/deploy/kart-cv.service").read_text()
-    for line in ("ExecStart=@VENV@/bin/python pi/main.py live", "Restart=always", "User=@USER@", "WorkingDirectory=@REPO@"):
-        assert line in svc
-    assert "nmcli" not in (REPO_ROOT / "pi/deploy/setup_pi.sh").read_text()
-```
-
-- [ ] **Step 2: Run the test to verify it fails**
-
-Run: `pi/.venv/bin/python -m pytest pi/tests/test_deploy.py -q`
-Expected: FAIL with `FileNotFoundError` / `CalledProcessError`.
-
-- [ ] **Step 3: Write `setup_pi.sh`, `kart-cv.service`, and `pi/README.md`** per the Interfaces block.
+- [ ] **Step 3: Implement `enroll.py`, `tools/enroll.py`, and write `pi/README.md`** per the Interfaces block.
 
 - [ ] **Step 4: Run the whole suite**
 
@@ -1308,18 +1292,17 @@ Expected: all pass (1 skipped if the ONNX model isn't fetched).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pi/deploy pi/README.md pi/tests/test_deploy.py
-git commit -m "pi: Pi setup script, systemd unit, operator guide" -- pi/deploy pi/README.md pi/tests/test_deploy.py
+git add pi/kartcv/enroll.py tools/enroll.py pi/tests/test_enroll.py pi/README.md
+git commit -m "pi: product enrollment through the real pipeline, run guide" -- pi/kartcv/enroll.py tools/enroll.py pi/tests/test_enroll.py pi/README.md
 ```
 
 ---
 
 ## Hardware follow-up (not part of this plan's execution)
 
-These happen once the Pi and Brios are set up, following `pi/README.md`:
-1. Run `setup_pi.sh`.
-2. Set the camera paths in `pi/config.json`.
-3. Check milestones 1–3 on the real cart.
-4. Enroll the demo props.
-5. Record replay clips with `tools/record.py` and tune `change_thresh`, `empty_thresh`, and `local_min_score`/`local_min_margin` against them.
-6. Add the clips as regression fixtures.
+These happen once the Pi and Brios are set up, following `pi/README.md`. The hardware chat owns Pi setup and the autostart unit.
+1. Install the dependencies and set the camera paths in `pi/config.json`.
+2. Check milestones 1–3 on the real cart.
+3. Enroll the demo props from `data/store.json`.
+4. Record replay clips with `tools/record.py` and tune `change_thresh`, `empty_thresh`, and `local_min_score`/`local_min_margin` against them.
+5. Add the clips as regression fixtures.

@@ -149,7 +149,7 @@ Matched **only against cart memory**: the before-crop's fingerprint is compared 
 
 - Holds one entry per physical unit in the cart: `instance_id`, `product_id` (or null), and per camera the pixel box + fingerprint + crop path.
 - Saved to `pi/state/cart.json` after every change, so a restart doesn't forget what's inside.
-- **Reset** clears memory, takes a new empty-basket picture per camera, and sets the references. Triggered on demand by `python pi/main.py reset` or `POST /reset` (section 9). At startup, saved state is loaded and **not** reset, because the cart may not be empty. The one exception is the very first run (no saved state), which resets automatically and logs it.
+- **Reset** clears memory, takes a new empty-basket picture per camera, and sets the references. Triggered on demand by `python pi/main.py reset` or `POST /reset` (section 9), and **automatically when the iPad starts a new trip**. The iPad calls the backend's `reset_cart`, which sets a new `carts.trip_id`. The Pi polls that value every ~2 s and resets when it changes. The last seen `trip_id` is saved in `pi/state/trip.json`, so a change made while the Pi was off is caught at startup (CONTRACT v0.4). At startup, saved state is loaded and **not** reset, because the cart may not be empty. The one exception is the very first run (no saved state), which resets automatically and logs it.
 
 ## 8. Events (what the cart emits)
 
@@ -172,7 +172,7 @@ One event = one unit added or removed (comments are explanation only; the real p
 
 **Sinks** (`sinks.py`):
 - `JsonlSink`: always on, appends to `pi/state/events.jsonl`.
-- `HttpSink`: on when backend settings exist. Default mapping is the Supabase RPC `apply_cart_event(p_cart_id, p_type, p_product_id, p_confidence, p_source="vision", p_label, p_camera=<first camera>)` per CONTRACT §3. If the backend picks a different endpoint, only this class changes.
+- `HttpSink`: on when backend settings exist. It calls the Supabase RPC `apply_cart_event(p_cart_id, p_type, p_product_id, p_confidence, p_source="vision", p_label, p_camera=<first camera>, p_event_id, p_method)` per CONTRACT §3. The RPC is idempotent on `p_event_id`, so outbox retries can't double-bill.
   - Failed sends go to `pi/state/outbox.jsonl` and are retried in order (backoff up to 30 s), so no event is lost or reordered.
 - Crops stay local in v1. Uploading them for the iPad is a later, separate change.
 
@@ -239,11 +239,15 @@ A small HTTP server on port **8080** (stdlib, one thread):
 | 5 | Local matcher + enrollment | Enrolled items named in < 0.5 s, `method: "local"` |
 | 6 | HTTP sink + outbox | Events show up in the backend; unplug Wi-Fi → they arrive after reconnect |
 | 7 | Status/reset/debug server | `/status` works from a laptop; reset clears the cart |
-| 8 | Pi install + systemd autostart | Power-cycle the Pi → it starts watching with nobody touching it |
+| 8 | Pi install guide (`pi/README.md`); autostart is owned by the hardware chat (`hardware/`), which runs `pi/main.py live` | Power-cycle the Pi → it starts watching with nobody touching it |
 
 Milestones 1–3 and the synthetic tests are built on the Mac before the hardware arrives.
 
 ## 15. Needs from other workstreams
 
-- **iPad/backend chat:** confirm the event destination (the `apply_cart_event` RPC, or another endpoint) and that `product_id` is the join key. Decide how a **new trip / reset** reaches the cart (for v1, the Pi exposes `POST /reset`). Say whether the iPad wants item crops, which would mean uploading them.
+- **Backend/iPad chats (answered in CONTRACT v0.4):**
+  - Events go to `apply_cart_event`.
+  - `product_id` = the `store.json` id.
+  - Reset arrives via `carts.trip_id`.
+  - No crops in v1. Upload is a later stretch: P9.
 - **Dylan:** `ANTHROPIC_API_KEY` in `.env`; Supabase URL/key once the backend exists; the Pi + both Brios set up; a solid mat for the cart floor; the 10–15 demo props for enrollment.
