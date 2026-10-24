@@ -554,10 +554,7 @@ begin
   end if;
 
   if p_resolves_event_id is not null then
-    -- "Yes" / "Something else" add the real product (confirmed); "Remove" or the item leaving the
-    -- basket is a removal (removed)
-    update cart_events set resolved_at = now(),
-                           resolution = case when p_type = 'removed' then 'removed' else 'confirmed' end
+    update cart_events set resolved_at = now()
     where event_id = p_resolves_event_id and cart_id = p_cart_id and resolved_at is null;
   end if;
 
@@ -684,21 +681,6 @@ begin
   return recompute_cart(p_cart_id);
 end $$;
 
--- "That's mine" (v0.15): the unrecognized thing is the shopper's own (a phone, a bag, a water
--- bottle). Resolves that unknown add without billing anything, so checkout isn't blocked.
-create or replace function mark_personal(p_cart_id text, p_event_id uuid)
-returns carts language plpgsql security definer set search_path = public as $$
-begin
-  perform 1 from carts where cart_id = p_cart_id for update;
-  update cart_events set resolved_at = now(), resolution = 'personal'
-  where event_id = p_event_id and cart_id = p_cart_id
-    and type = 'added' and product_id is null and resolved_at is null;
-  if not found then
-    raise exception 'not an unresolved unknown item on cart %: %', p_cart_id, p_event_id;
-  end if;
-  return recompute_cart(p_cart_id);
-end $$;
-
 -- Feature switch for one cart (the iPad's demo control). p_on null removes the override.
 create or replace function set_feature(p_cart_id text, p_feature text, p_on boolean)
 returns carts language plpgsql security definer set search_path = public as $$
@@ -794,7 +776,6 @@ grant execute on function set_plan(text, jsonb)          to anon, authenticated,
 grant execute on function reset_cart(text)               to anon, authenticated, service_role;
 grant execute on function dismiss_suggestion(text)       to anon, authenticated, service_role;
 grant execute on function set_feature(text, text, boolean)  to anon, authenticated, service_role;
-grant execute on function mark_personal(text, uuid)         to anon, authenticated, service_role;
 grant execute on function add_to_plan(text, text, int, text, text) to anon, authenticated, service_role;
 grant execute on function remove_from_plan(text, text)      to anon, authenticated, service_role;
 grant execute on function set_budget(text, numeric)         to anon, authenticated, service_role;
