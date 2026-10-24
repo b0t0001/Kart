@@ -18,13 +18,12 @@ sudo apt-get install -y git python3-venv python3-opencv python3-numpy v4l-utils
 [ -x "$VENV/bin/python" ] || python3 -m venv --system-site-packages "$VENV"
 grep -qF 'source ~/venv/bin/activate' ~/.bashrc || echo 'source ~/venv/bin/activate' >> ~/.bashrc
 
-# pi/requirements.txt is written for the Mac; OpenCV comes from apt here, so drop it.
-REQS="$REPO_DIR/pi/requirements.txt"
+# requirements-pi.txt leaves out OpenCV/NumPy (apt) and pytest; we still want pytest to run pi/tests here.
+REQS="$REPO_DIR/pi/requirements-pi.txt"
 if [ -f "$REQS" ]; then
-  grep -viE '^[[:space:]]*opencv' "$REQS" > /tmp/kart-reqs.txt
-  "$VENV/bin/pip" install -r /tmp/kart-reqs.txt
+  "$VENV/bin/pip" install -r "$REQS" pytest
 else
-  "$VENV/bin/pip" install onnxruntime anthropic httpx python-dotenv pytest
+  "$VENV/bin/pip" install onnxruntime onnx anthropic python-dotenv pytest
 fi
 
 "$VENV/bin/python" -c "import cv2, numpy; print('cv2', cv2.__version__, '| numpy', numpy.__version__)"

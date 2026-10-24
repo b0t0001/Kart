@@ -4,7 +4,7 @@ Scripts that only make sense on the real cart (Raspberry Pi + 2 Brios). The CV c
 
 | File | Run where | What it does |
 |---|---|---|
-| `setup_pi.sh` | Pi (or `ssh jamwan@smartcart.local 'bash -s' < hardware/setup_pi.sh`) | apt OpenCV, `~/venv` (`--system-site-packages`), pip deps from `pi/requirements.txt` minus OpenCV, clones the repo to `~/kart`. Re-runnable. |
+| `setup_pi.sh` | Pi (or `ssh jamwan@smartcart.local 'bash -s' < hardware/setup_pi.sh`) | apt OpenCV/NumPy, `~/venv` (`--system-site-packages`), `pi/requirements-pi.txt` + pytest, clones the repo to `~/kart`. Re-runnable; run again when `pi/requirements-pi.txt` changes. |
 | `sync_pi.sh` | laptop | `git pull` here, then fast-forward `~/kart` on the Pi |
 | `check_cameras.py` | Pi | Streams both cams at once (MJPEG 1280×720), prints fps / brightness / sharpness, saves `hardware/out/cam0.jpg`, `cam1.jpg` |
 | `kart-cv.service`, `install_service.sh` | Pi | systemd autostart for `pi/main.py live` (`--now` to start immediately; logs: `journalctl -u kart-cv -f`) |
