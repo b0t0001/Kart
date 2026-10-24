@@ -1,4 +1,4 @@
-# KART integration contract — v0.11 (DRAFT)
+# KART integration contract — v0.12 (DRAFT)
 
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
@@ -106,6 +106,38 @@ Writers **only** use these; nobody writes `carts.items` directly.
   **Idempotent on `p_event_id`** (v0.3): CV retries failed sends from a disk outbox, so a repeated `event_id` must return the current cart without applying the event again. `cart_events` gets `event_id uuid unique` and `method text` (`local` \| `cloud` \| `memory` \| `none` \| `manual`).
 - `set_plan(p_cart_id text, p_plan jsonb) → carts row` — voice agent writes the trip plan; recomputes `next_step` / `lcd_line1`.
 - `reset_cart(p_cart_id text) → carts row` — clears items/plan/suggestion **and sets a new `carts.trip_id` (uuid)**. For new trips and demo resets.
+
+### Quantity nudges, "right amount for the meal" (v0.12): BETA, OFF BY DEFAULT
+
+**Stability rule:** with the feature off, nothing changes. `carts.nudge` stays `null`, the iPad shows no nudge UI, the agent says nothing new, and CV counts exactly as before. The stable rollback point is git tag `stable-pre-nudges`. Once Dylan has tested it and says it's good, the default flips to on.
+
+- **Flag (backend):** feature `quantity_nudges`.
+  - A global default lives in a `feature_flags(name, enabled_default)` table, seeded **false**.
+  - Per-cart overrides live in `carts.features jsonb` (e.g. `{"quantity_nudges": true}`).
+  - RPC `set_feature(p_cart_id text, p_feature text, p_on boolean) → carts row`.
+  - `carts.features` is readable by anon, so the iPad knows whether to show the beta UI.
+- **Plan lines:** `plan[].basis` (text, additive) holds the agent's reasoning for the amount, e.g. `"8 people × 2 tacos ≈ 16 tortillas → 2 packs of 10"`.
+- **`carts.nudge` jsonb | null:** `{product_id, name, kind: "under"|"over", have, need, basis, text, savings?, aisle?, at}`.
+  - **over:** set right after an applied `added` takes cart qty above plan qty. Text: *"That's your 3rd bag of avocados. One covers taco night for 4. Keep it?"*, plus `savings` = the price of the extra units.
+  - **under:** set when the shopper moves on from that item's aisle (`location` passes it on the route) or on `set_cart_status('checkout')`. Text: *"Before you go: you're one pack of tortillas short for 8 people. It's in Aisle 2."*
+  - **Rules:** only for plan items (impulse buys are never nudged), once per product per direction per trip (`carts.nudged text[]`), and a pending deal suggestion takes priority.
+  - It clears itself when the counts match (`have == need`).
+- **RPC `dismiss_nudge(p_cart_id text, p_action text) → carts row`:**
+  - `keep` (over): raises the plan qty to `have`, so the nudge stops.
+  - `ok`: acknowledges it; that product/direction isn't re-nudged this trip.
+- **iPad:**
+  - A nudge card, styled like the deal card, with "Keep it" / "Got it" buttons; Kart says `text` once.
+  - **+ / −** on each list line (`apply_cart_event`, `source: "manual"`).
+  - A demo-controls switch "Quantity nudges (beta)" that calls `set_feature` for its own cart.
+  - All of this is shown only when the flag is on for the cart.
+- **Agent:**
+  - Always writes `basis` when planning; it's harmless when the flag is off.
+  - Speaks `nudge.text` once when it changes.
+  - Maps spoken "keep it" / "ok" to `dismiss_nudge`.
+- **CV:** config `"claude_count": false` (default) in `pi/config.json`.
+  - When it's true, Claude's closed-set answer includes `count` (1–6), and one blob holding N identical items emits **N events**, each with its own `event_id`.
+  - A blob much bigger than the product's enrolled crops goes to Claude for the count.
+  - The event shape is unchanged.
 
 ### Shared hosted project rules (v0.11)
 
@@ -267,3 +299,4 @@ All three feature chats work in the **same main checkout**, so stay inside your 
 - v0.9 — Merchant agent built (`d5d3c2b`): it stages changes, the owner confirms, and every change has an audit log and undo. `suggestion.offered_at`: a newer store deal replaces the current suggestion. CV reads the catalog from Supabase at startup and on each trip change, with `store.json` as the fallback. Live-deal demo option added.
 - v0.10 — CV events gain `resolves_event_id`: a vision removal of an unknown unit resolves it, so checkout isn't blocked by a stray hand. Overnight as-built notes for CV.
 - v0.11 — Hosted is live (`go_live.sh` PASS). Shared hosted rules: only the demo operator runs `reset-demo`, and tests and rehearsals use throwaway carts. The merchant agent passed its real-Claude smoke test (`merchant/smoke.py`).
+- v0.12 — Quantity nudges (beta, behind the `quantity_nudges` flag, off by default): `carts.nudge`, `plan[].basis`, `dismiss_nudge`, `set_feature`, `carts.features`; CV `claude_count` (off by default). The stable rollback point is tag `stable-pre-nudges`.
