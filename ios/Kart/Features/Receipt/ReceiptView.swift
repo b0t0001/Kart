@@ -23,6 +23,7 @@ struct ReceiptView: View {
                 Text("Done").frame(minWidth: 220)
             }
             .buttonStyle(PrimaryButtonStyle())
+            .accessibilityIdentifier("receipt.done")
             .padding(.top, Theme.l)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

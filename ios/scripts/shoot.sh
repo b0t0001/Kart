@@ -4,6 +4,7 @@
 #        SKIP_BUILD=1 reuses the last build; SHOOT_WAIT sets seconds to wait before the shot (default 3).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+[ -f Config.xcconfig ] || cp Config.example.xcconfig Config.xcconfig   # no Config yet: build against the mock
 SCENARIOS=${1:?scenario[,scenario…]}; shift || true
 DEVICE="iPad Pro 13-inch (M5)"
 if [ -z "${SKIP_BUILD:-}" ]; then
@@ -20,6 +21,6 @@ for s in ${SCENARIOS//,/ }; do
   xcrun simctl launch "$DEVICE" com.kart.app -KartScenario "$s" "$@" >/dev/null
   sleep "${SHOOT_WAIT:-3}"
   xcrun simctl io "$DEVICE" screenshot "build/shots/$s.png" >/dev/null 2>&1
-  sips -r 270 "build/shots/$s.png" >/dev/null   # framebuffer is portrait; the app is landscape
+  scripts/landscape-png.sh "build/shots/$s.png"
   echo "build/shots/$s.png"
 done

@@ -128,6 +128,7 @@ private struct PaySummary: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(PayButtonStyle(ready: unresolved == 0))
+            .accessibilityIdentifier("pay.button")
             Button {
                 Task { await model.resumeShopping() }
             } label: {

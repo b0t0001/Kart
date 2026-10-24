@@ -8,12 +8,13 @@ struct AvatarView: View {
     var reaction: ReactionEvent? = nil
     var size: CGFloat = 220
 
+    @Environment(\.kartStill) private var still
     @State private var rotation: Double = 0
     @State private var lift: CGFloat = 0
     @State private var confetti: UUID?
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(.animation(minimumInterval: nil, paused: still)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             face(t: t)
         }

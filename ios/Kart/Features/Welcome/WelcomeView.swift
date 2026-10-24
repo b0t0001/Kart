@@ -22,8 +22,10 @@ struct WelcomeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .onTapGesture { Task { await model.startTrip() } }
+        .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel("Start shopping")
+        .accessibilityIdentifier("welcome.start")
     }
 }
 

@@ -16,6 +16,21 @@ targets:
         buildPhase: resources
     dependencies:
       - package: KartCore
+        product: KartCore
+      - package: KartCore
+        product: KartSupabase
+    configFiles:
+      Debug: Config.xcconfig
+      Release: Config.xcconfig
+    info:
+      path: Kart/Info.plist
+      properties:
+        KartSupabaseURL: $(SUPABASE_URL)
+        KartSupabaseAnonKey: $(SUPABASE_ANON_KEY)
+        KartCartID: $(CART_ID)
+        NSMicrophoneUsageDescription: Kart listens so you can shop hands-free. The mic stays off until you tap Start.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     scheme:
       testTargets:
         - KartUITests

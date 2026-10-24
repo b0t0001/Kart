@@ -45,6 +45,7 @@ struct CardView: View {
                     if action == .somethingElse { withAnimation(Theme.spring) { choosing = true } } else { onAction(action) }
                 }
                 .buttonStyle(CardButtonStyle(primary: primary))
+                .accessibilityIdentifier("card.\(action.title)")
             }
         }
     }

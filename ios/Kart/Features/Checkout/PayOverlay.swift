@@ -6,6 +6,7 @@ struct PayOverlay: View {
     let state: PaymentState
     let onRetry: () -> Void
 
+    @Environment(\.kartStill) private var still
     @State private var glide = false
 
     var body: some View {
@@ -39,9 +40,9 @@ struct PayOverlay: View {
                 Image(systemName: "wave.3.right")
                     .font(.system(size: 56, weight: .semibold))
                     .foregroundStyle(Theme.brand)
-                    .symbolEffect(.variableColor.iterative, isActive: true)
+                    .symbolEffect(.variableColor.iterative, isActive: !still)
             }
-            .onAppear { glide = true }
+            .onAppear { glide = !still }
             VStack(spacing: Theme.s) {
                 Text("Paying…").font(Theme.title).foregroundStyle(Theme.ink)
                 Text("Hold your card near the cart").font(Theme.body).foregroundStyle(Theme.inkSecondary)

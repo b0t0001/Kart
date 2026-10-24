@@ -4,3 +4,4 @@ KartCore/.build/
 *.xcuserstate
 .swiftpm/
 Config.xcconfig
+Kart/Info.plist

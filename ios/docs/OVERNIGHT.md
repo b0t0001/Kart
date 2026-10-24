@@ -1,12 +1,41 @@
-# iPad app: overnight build log
+# iPad app and voice agent: overnight build log
 
-Started 2026-10-24 (night), on the manager's relay of Dylan's message: "can you just have remaining claudes build everything they need… then it's ready for review/testing when I come back."
+Built overnight 2026-10-24, on the manager's relay of Dylan's message: "can you just have remaining claudes build everything they need… then it's ready for review/testing when I come back."
 
-## Decisions made without asking (for Dylan's morning review)
+## Morning checklist for Dylan (≈15 minutes)
+
+1. **Look at it:** open `ios/build/shots/` (scenario screenshots) and `ios/build/shots/rehearsal/` (the automated §1.1 rehearsal, the live merchant beat, the failure paths).
+2. **Run it in the simulator:** `cd ios && xcodegen generate && open Kart.xcodeproj`, then Run on "iPad Pro 13-inch (M5)". With `ios/Config.xcconfig` present (`ios/scripts/make-config.sh` writes it from the repo `.env`), the app talks to the local Supabase. Without it, it uses the built-in mock. Three-finger long press opens the demo controls.
+3. **Create the voice pieces** (nothing secret was created overnight; see "What you need to create" below), then launch with `-KartVoice line`.
+4. **On a real iPad:** sign the `Kart` target with your Apple ID (Xcode → Signing & Capabilities → Team), set the bundle id if `com.kart.app` is taken, and run. The real iPad needs the **hosted** Supabase (https), or an ATS exception for the Mac's LAN IP.
+5. **Say yes or no to the rulings** below; each is a one-line change if you disagree.
+
+## What you need to create
+
+| What | Where | Then |
+|---|---|---|
+| Anthropic API key | console.anthropic.com | `cd agent && cartesia env set ANTHROPIC_API_KEY=…` |
+| Cartesia account + API key | play.cartesia.ai | put `CARTESIA_API_KEY` in the repo `.env`; the backend's `deploy_functions.sh` pushes it to the voice-token function |
+| The Line agent | `cd agent && cartesia auth login && cartesia init` (create new: "kart") then `cartesia deploy` | put the printed agent id in `.env` as `CARTESIA_AGENT_ID` and redeploy the function |
+| Agent env on Cartesia | `cartesia env set SUPABASE_URL=… SUPABASE_ANON_KEY=… CART_ID=7` (hosted Supabase values) | `KART_MODEL` / `KART_EFFORT` are optional (defaults: `claude-opus-5-5`, `low`) |
+
+Local test of the agent before deploying: `cd agent && .venv/bin/python main.py` (with the env vars set), then `cartesia chat 8000`.
+
+## Decisions made without asking
 
 - **How it was built:** Native, my recommendation at the plan handoff. The manager relayed the choice; Dylan didn't pick it directly.
-- **Where:** on `main` in the shared checkout, committing only `ios/` (and `agent/`), as the contract requires. No pushes from this chat.
+- **Where:** on `main` in the shared checkout, committing only `ios/` and `agent/` (the contract's rule). No pushes from this chat.
+- **Every other ruling** is in the plan ledgers and summarized in the final message of the session.
 
 ## Progress
 
-(updated as milestones land)
+- **Milestone 1 (the whole app on the mock):** done. Thirteen plan tasks, plus an automated rehearsal of the §1.1 demo, the live merchant beat, and the failure paths (`scripts/rehearse.sh`).
+- **Milestone 2 (Supabase):** `KartSupabase` (REST, realtime, the backend), wired into the app (`-KartBackend supabase`, the default when `Config.xcconfig` has a URL), with live integration tests and a live rehearsal against the local stack (`scripts/rehearse-live.sh`).
+- **Voice (milestone 3, keys pending):** `agent/` (the Line agent with Claude tools, tested with fakes and against the live backend) and `LineVoiceSession` (the iPad side, tested with fakes). It runs for real once the keys and the Line agent exist (checklist above).
+
+## Things worth knowing
+
+- **The suggestion rule follows the backend's SQL:** a deal can be offered even when its product is already on the list, and the iPad then hides the card and stays quiet. **Backend follow-up (not done):** once a suggestion's product is on the list, treat it as accepted, so the next pairing deal can surface. Today the accepted one holds the slot until it's in the cart.
+- **Kart's voice format from Line isn't documented.** The iPad assumes 16 kHz mono PCM16, the same as it sends. If Kart sounds chipmunky or slowed on the iPad, change `EngineAudio.outputSampleRate` (24 000 or 44 100).
+- **The mock backend's route and suggestion order are simpler than the backend's.** That only affects the offline demo mode.
+- **Throwaway test carts:** `ios-it-*`, `agent-it-*`, and `ipad-live` rows exist in the local DB from the integration runs.

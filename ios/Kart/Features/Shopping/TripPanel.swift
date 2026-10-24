@@ -184,6 +184,7 @@ private struct TotalFooter: View {
                     .frame(minWidth: 220)
             }
             .buttonStyle(PrimaryButtonStyle())
+            .accessibilityIdentifier("checkout.button")
         }
         .animation(Theme.spring, value: cart.total)
     }
