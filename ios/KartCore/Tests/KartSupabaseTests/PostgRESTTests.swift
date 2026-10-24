@@ -7,6 +7,8 @@ import Testing
 final class StubProtocol: URLProtocol, @unchecked Sendable {
     struct Reply: Sendable { var status: Int; var body: String }
     nonisolated(unsafe) static var reply = Reply(status: 200, body: "[]")
+    /// Per-table replies ("sections" → …) for reads that fetch several tables; anything else gets `reply`.
+    nonisolated(unsafe) static var routes: [String: Reply] = [:]
     nonisolated(unsafe) static var lastRequest: URLRequest?
     nonisolated(unsafe) static var lastBody: Data?
 
@@ -20,9 +22,10 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
             while stream.hasBytesAvailable { let n = stream.read(&buffer, maxLength: buffer.count); if n <= 0 { break }; data.append(buffer, count: n) }
             return data
         }
-        let response = HTTPURLResponse(url: request.url!, statusCode: Self.reply.status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        let reply = request.url.flatMap { Self.routes[$0.lastPathComponent] } ?? Self.reply
+        let response = HTTPURLResponse(url: request.url!, statusCode: reply.status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(Self.reply.body.utf8))
+        client?.urlProtocol(self, didLoad: Data(reply.body.utf8))
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
@@ -77,6 +80,41 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         #expect(backend.lastError == nil)
         try await backend.startTrip()
         #expect(backend.lastError?.contains("carts") == true)
+    }
+
+    static let parmesanRow = #"[{"id":"kirkland-parmesan","name":"Grated Parmesan Cheese, 8 oz shaker","short_name":"Parmesan","#
+        + #""price":4.99,"section":"A12","category":"cheese","tags":[],"stock":20}]"#
+
+    @MainActor @Test func theMapFollowsTheStoreLayoutInTheDatabase() async throws {
+        StubProtocol.routes = [
+            "products": .init(status: 200, body: Self.parmesanRow), "deals": .init(status: 200, body: "[]"),
+            "sections": .init(status: 200, body: #"[{"id":"A12","name":"Aisle A12 · Grocery","x":10,"y":1,"w":1,"h":8}]"#),
+            "store_info": .init(status: 200, body: #"[{"id":1,"name":"Target Berkeley Central","width":24,"height":14,"#
+                                + #""entrance_x":1,"entrance_y":7,"layout":"target-berkeley"}]"#),
+        ]
+        defer { StubProtocol.routes = [:] }
+        let backend = SupabaseKartBackend(url: URL(string: "http://127.0.0.1:54321")!, anonKey: "anon", cartId: "7",
+                                          layout: try Fixtures.catalog().layout, session: StubProtocol.session())
+        await backend.refreshCatalog()
+        let layout = backend.catalog.layout
+        #expect(layout.sections.map(\.id) == ["A12"] && layout.sections.first?.aisleLabel == "Aisle A12")
+        #expect(layout.store == StoreInfo(name: "Target Berkeley Central", width: 24, height: 14))
+        #expect(layout.entrance == GridPoint(x: 1, y: 7))
+        #expect(backend.catalog.product("kirkland-parmesan")?.section == "A12")
+    }
+
+    @MainActor @Test func theBundledMapStaysWhenTheLayoutCantBeRead() async throws {
+        StubProtocol.routes = [
+            "products": .init(status: 200, body: Self.parmesanRow), "deals": .init(status: 200, body: "[]"),
+            "sections": .init(status: 500, body: #"{"message":"down"}"#), "store_info": .init(status: 200, body: "[]"),
+        ]
+        defer { StubProtocol.routes = [:] }
+        let bundled = try Fixtures.catalog().layout
+        let backend = SupabaseKartBackend(url: URL(string: "http://127.0.0.1:54321")!, anonKey: "anon", cartId: "7",
+                                          layout: bundled, session: StubProtocol.session())
+        await backend.refreshCatalog()
+        #expect(backend.catalog.layout == bundled)                           // offline fallback: the store.json map
+        #expect(backend.catalog.product("kirkland-parmesan")?.price == Decimal(string: "4.99"))   // products still refresh
     }
 
     @MainActor @Test func aLateOlderRefetchNeverStepsTheCartBack() async throws {

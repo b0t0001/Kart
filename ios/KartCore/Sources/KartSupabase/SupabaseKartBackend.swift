@@ -39,6 +39,7 @@ public final class SupabaseKartBackend: KartBackend {
         let watched: [(String, String?, Slice)] = [
             ("carts", filter, .cart), ("cart_events", filter, .events), ("transcript", filter, .transcript),
             ("receipts", filter, .receipt), ("products", nil, .catalog), ("deals", nil, .catalog),
+            ("sections", nil, .catalog),   // a layout switch (mini ↔ Target) rewrites sections: refetch the map too
         ]
         for (table, filter, slice) in watched {
             let signals = await realtime.watch(table: table, filter: filter)
@@ -224,9 +225,27 @@ public final class SupabaseKartBackend: KartBackend {
         }
     }
 
-    private func refreshCatalog() async {
+    func refreshCatalog() async {
         guard let products = await fetch("products?active=is.true&order=sort", as: Product.self),
               let deals = await fetch("deals?active=is.true&order=sort", as: Deal.self) else { return }
-        catalog = Catalog(layout: catalog.layout, products: products, deals: deals)
+        catalog = Catalog(layout: await fetchLayout() ?? catalog.layout, products: products, deals: deals)
     }
+
+    /// The store's current layout from the database; nil (keep the one shown, at first the bundled store.json)
+    /// when either table can't be read or has nothing in it.
+    private func fetchLayout() async -> StoreLayout? {
+        guard let sections = await fetch("sections?order=id", as: Section.self), !sections.isEmpty,
+              let store = await fetch("store_info?limit=1", as: StoreRow.self)?.first else { return nil }
+        return StoreLayout(store: StoreInfo(name: store.name, width: store.width, height: store.height),
+                           entrance: GridPoint(x: store.entranceX, y: store.entranceY), sections: sections)
+    }
+}
+
+/// One `store_info` row: the store's size and entrance (and which layout is active, unused here).
+private struct StoreRow: Decodable, Sendable {
+    let name: String
+    let width: Int
+    let height: Int
+    let entranceX: Int
+    let entranceY: Int
 }
