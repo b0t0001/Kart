@@ -1,7 +1,54 @@
 {
   "name": "target-berkeley",
   "placeholder": true,
-  "_note": "Target Berkeley Central, 2187 Shattuck Ave. PLACEHOLDER aisles: replace each product's aisle (and the section list) with the real ones after the shopping trip, set prices to the shelf prices paid, then set placeholder to false. Grid is rough: aisles front to back as vertical strips.",
+  "_note": "Target Berkeley Central, 2187 Shattuck Ave. Aisles and shelf prices for the demo items come from target.com with the store set to Berkeley Central (checked 2026-10-24). Other products sit in department placeholders ('… · aisle not confirmed'). Set placeholder to false once Dylan confirms what he bought; A12's sign name may change. Store promo 'Buy 2 for $6 chips & dips' (chips + queso) is not modeled; d-chips-150off stays as is.",
+  "_items": {
+    "barilla-spaghetti": {
+      "aisle": "A12",
+      "price": 1.99,
+      "target_product": "Barilla Spaghetti Pasta, 16 oz"
+    },
+    "rao-marinara": {
+      "aisle": "A12",
+      "price": 2.19,
+      "target_product": "Good & Gather Marinara Pasta Sauce, 23 oz"
+    },
+    "kirkland-parmesan": {
+      "aisle": "A12",
+      "price": 4.19,
+      "target_product": "Market Pantry Grated Parmesan Cheese, 8 oz shaker"
+    },
+    "tostitos-chips": {
+      "aisle": "A6",
+      "price": 4.59,
+      "target_product": "Tostitos Original Restaurant Style Tortilla Chips, 12 oz"
+    },
+    "tostitos-salsa": {
+      "aisle": "A12",
+      "price": 2.99,
+      "target_product": "Good & Gather Mild Restaurant Style Salsa, 16 oz (only 1 in stock; may be substituted)"
+    },
+    "queso": {
+      "aisle": "A6",
+      "price": 5.19,
+      "target_product": "Tostitos Salsa Con Queso Medium Dip, 15 oz"
+    },
+    "black-beans": {
+      "aisle": "A12",
+      "price": 0.99,
+      "target_product": "Good & Gather Black Beans, 15.5 oz can"
+    },
+    "jalapenos": {
+      "aisle": "A12",
+      "price": 2.29,
+      "target_product": "Market Pantry Hot Sliced Jalapeño, 12 oz"
+    },
+    "taco-seasoning": {
+      "aisle": "A12",
+      "price": 0.99,
+      "target_product": "Old El Paso Taco Seasoning Original, 1 oz"
+    }
+  },
   "store": {
     "name": "Target Berkeley Central",
     "width": 20,
@@ -13,65 +60,57 @@
   },
   "sections": [
     {
-      "id": "G1",
-      "name": "Aisle G1 · Produce",
+      "id": "PRODUCE",
+      "name": "Produce · aisle not confirmed",
       "x": 2,
       "y": 1,
       "w": 1,
       "h": 8
     },
     {
-      "id": "G4",
-      "name": "Aisle G4 · Bakery & Bread",
-      "x": 4,
-      "y": 1,
-      "w": 1,
-      "h": 8
-    },
-    {
-      "id": "G8",
-      "name": "Aisle G8 · Meat",
+      "id": "A6",
+      "name": "Aisle A6 · Chips & Dips",
       "x": 6,
       "y": 1,
       "w": 1,
       "h": 8
     },
     {
-      "id": "G12",
-      "name": "Aisle G12 · Cheese & Dairy",
-      "x": 8,
-      "y": 1,
-      "w": 1,
-      "h": 8
-    },
-    {
-      "id": "G16",
-      "name": "Aisle G16 · Mexican & Salsa",
+      "id": "A12",
+      "name": "Aisle A12 · Grocery",
       "x": 10,
       "y": 1,
       "w": 1,
       "h": 8
     },
     {
-      "id": "G20",
-      "name": "Aisle G20 · Snacks & Chips",
+      "id": "BAKERY",
+      "name": "Bakery · aisle not confirmed",
       "x": 12,
       "y": 1,
       "w": 1,
       "h": 8
     },
     {
-      "id": "G23",
-      "name": "Aisle G23 · Pasta & Sauce",
+      "id": "DAIRY",
+      "name": "Dairy · aisle not confirmed",
       "x": 14,
       "y": 1,
       "w": 1,
       "h": 8
     },
     {
-      "id": "H5",
-      "name": "Aisle H5 · Household & Batteries",
+      "id": "MEAT",
+      "name": "Meat · aisle not confirmed",
       "x": 16,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "HOME",
+      "name": "Household · aisle not confirmed",
+      "x": 18,
       "y": 1,
       "w": 1,
       "h": 8
@@ -86,27 +125,37 @@
     }
   ],
   "products": {
-    "kirkland-parmesan": "G12",
-    "barilla-spaghetti": "G23",
-    "rao-marinara": "G23",
-    "ground-beef": "G8",
-    "caesar-salad-kit": "G1",
-    "french-baguette": "G4",
-    "mission-tortillas": "G4",
-    "tillamook-mexican-cheese": "G12",
-    "tostitos-salsa": "G16",
-    "taco-seasoning": "G16",
-    "queso": "G16",
-    "black-beans": "G16",
-    "jalapenos": "G16",
-    "tostitos-chips": "G20",
-    "avocados": "G1",
-    "daisy-sour-cream": "G12",
-    "bananas": "G1",
-    "whole-milk": "G12",
-    "large-eggs": "G12",
-    "kirkland-paper-towels": "H5",
-    "kirkland-batteries": "H5"
+    "avocados": "PRODUCE",
+    "bananas": "PRODUCE",
+    "barilla-spaghetti": "A12",
+    "black-beans": "A12",
+    "caesar-salad-kit": "PRODUCE",
+    "daisy-sour-cream": "DAIRY",
+    "french-baguette": "BAKERY",
+    "ground-beef": "MEAT",
+    "jalapenos": "A12",
+    "kirkland-batteries": "HOME",
+    "kirkland-paper-towels": "HOME",
+    "kirkland-parmesan": "A12",
+    "large-eggs": "DAIRY",
+    "mission-tortillas": "BAKERY",
+    "queso": "A6",
+    "rao-marinara": "A12",
+    "taco-seasoning": "A12",
+    "tillamook-mexican-cheese": "DAIRY",
+    "tostitos-chips": "A6",
+    "tostitos-salsa": "A12",
+    "whole-milk": "DAIRY"
   },
-  "prices": {}
+  "prices": {
+    "barilla-spaghetti": 1.99,
+    "rao-marinara": 2.19,
+    "kirkland-parmesan": 4.19,
+    "tostitos-chips": 4.59,
+    "tostitos-salsa": 2.99,
+    "queso": 5.19,
+    "black-beans": 0.99,
+    "jalapenos": 2.29,
+    "taco-seasoning": 0.99
+  }
 }

@@ -62,8 +62,8 @@ def main() -> None:
                 raise SystemExit(f"no layout {path} (have: {', '.join(p.stem for p in kartdb.LAYOUTS.glob('*.json'))})")
             hosted = "supabase.co" in kartdb.db_url(args.db_url)
             if json.loads(path.read_text()).get("placeholder") and hosted and not args.force:
-                raise SystemExit(f"{args.name} still has PLACEHOLDER aisles; not applying it to the hosted project "
-                                 "(fill in the real aisles and set placeholder: false, or pass --force)")
+                raise SystemExit(f"{args.name} is still marked placeholder: true; not applying it to the hosted "
+                                 "project until it's confirmed (set placeholder: false in the file, or pass --force)")
             out = kartdb.apply_layout(conn, args.name)
             print(f"applied change #{out['change']}: {out['summary']} (Undo it in the merchant console)")
         elif args.command == "reset-demo":
