@@ -168,6 +168,11 @@ Spec: `docs/specs/2026-10-24-member-memory-design.md`. Flag: `member_memory`. Ro
   - The seed looks everything up by product id.
 - **Picks** never include a product with a live deal, so deals stay with the deal cards. Kinds are `event` | `due` | `usual`.
 - `member_forget` returns `{"forgotten": n | "all"}`.
+- **Edge-case additions (spec §3.9):**
+  - RPC `member_lookup(p_member_id) → {exists, name}`, which never creates anything (used for the "Dylan N.? That's me / Not me" confirmation).
+  - iPad→agent events `{"type":"member_forgotten"}` and `{"type":"member_idle"}`; agent→iPad `{"type":"show_memories"}` (tool `show_memories`).
+  - Sensitive categories (pharmacy, health, medicine, personal-care, baby, pregnancy, adult) are never copied into member history.
+  - Undated events expire 30 days after they were saved.
 - **Agent tool `shop_saved_list(memory_id)`:** puts a saved list on today's plan in one `set_plan`, keeping what's already there. Greeting example: *"Welcome back, Dylan! Leo's soccer party is tomorrow. Want the nachos list?"*
 - **Agent:**
   - `trip_context.member_id` (additive). When it's present, Kart fetches the profile before greeting ("Welcome back, Dylan!").
