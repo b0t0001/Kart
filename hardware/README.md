@@ -31,6 +31,13 @@ Moving a camera to a different USB port changes its path; keep them plugged in w
 
 `check_cameras.py` on 2026-10-24 (both streaming at once, dim room at night): **13–15 fps each**, no read failures, sharp, well exposed. Both cams share the Pi's USB 2.0 bus without bandwidth trouble.
 
+## `pi/` on the real Pi (2026-10-24, commit `c07cf85`)
+
+- `pytest pi/tests`: **80 passed, 2 skipped** (the opt-in Supabase end-to-end tests) in 3 min 12 s.
+- `tools/snap.py`: both cams OK. `pi/main.py live`: starts, takes the empty-basket picture after the 3 s warm-up, `/status` answers from the laptop, Ctrl-C stops it cleanly.
+- Idle CPU: about 72 % of one core (≈18 % of the Pi), mostly decoding two MJPEG streams. Temp 48 °C.
+- If `smartcart.local` doesn't resolve from the laptop, use the IP from the hotspot page: `KART_PI=jamwan@192.168.137.127 bash hardware/sync_pi.sh`.
+
 ## Notes for `pi/` (camera code)
 
 - **Don't set `CAP_PROP_BUFFERSIZE=1`.** On this V4L2 driver it halves the frame rate (7.5 vs 15 fps measured). Keep the default buffers and let a grab thread read continuously and keep the latest frame.
