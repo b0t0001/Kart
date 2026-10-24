@@ -260,8 +260,11 @@ class KartAgent:
                 memory, self._list_offer = self._list_offer, None
                 line = LIST_LATER_LINE
                 if saved == "yes":
+                    was_empty = not self._plan
                     out = json.loads(await run_tool("shop_saved_list", {"memory_id": memory["id"]}, ctx))
                     line = list_shopped_line(out.get("next_step")) if "error" not in out else "Sorry, I couldn't put it up."
+                    if was_empty and "error" not in out:      # the saved list is today's list: its event is the meal
+                        self._meal = self._meal or memory["text"].split(",")[0].strip()
                 self.brain.remember(text, line)
                 async for out_text in self._say([line], interruptible=False):
                     yield out_text
