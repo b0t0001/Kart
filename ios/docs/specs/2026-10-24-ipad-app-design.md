@@ -20,7 +20,7 @@
 ### 1.1 Demo script (what everything serves)
 Products and deals are from the published `data/store.json` v1.
 1. The judge walks up. Kart is smiling on screen: "Tap to start." Tap: Kart waves. *"Hi, I'm Kart. What are we shopping for today?"*
-2. Judge: *"Pasta dinner for my family, four people."* The list builds itself on screen (spaghetti, marinara, parmesan, baguette, Caesar kit); the Next stop card shows Aisle 6 · Pasta & Sauce.
+2. Judge: *"Pasta dinner for my family, four people."* The list builds itself on screen (spaghetti, marinara, baguette, Caesar kit); the Next stop card shows Aisle 6 · Pasta & Sauce.
 3. The judge drops a real box of Barilla spaghetti in the cart. A soft chime; it slides into the cart, the list item checks off, the total counts up. Kart: *"Nice. Rao's is right beside it, and parmesan's $3 off in aisle 4."*
 4. A deal card appears. The judge says "yes," and parmesan joins the list.
    - *(Optional merchant beat.)* A teammate playing the store owner tells the merchant agent "chips $1.50 off." Seconds later the cart chimes, a "New deal" card rises in, and every price on screen updates live.
