@@ -263,7 +263,8 @@ begin
   -- stock and not already on the shopper's plan, each deal offered once per trip. The current
   -- one stays while it is still valid, unless the store created a deal after it was offered
   -- (fresh deals reach shoppers now). A "Yes" puts the product on the plan, which consumes the
-  -- suggestion, so the next eligible deal can be offered right away.
+  -- suggestion, so the next eligible deal can be offered right away. After a "No thanks"
+  -- (deals_quiet, v0.20) no new card is offered this trip; asking ("what's on sale?") still works.
   v_suggested := c.suggested_deals;
   v_sugg := null;
   v_keep := false;
@@ -281,6 +282,7 @@ begin
   join deals d on d.id = pc.deal_id
   where pc.deal_id is not null
     and pc.in_stock
+    and not c.deals_quiet
     and not (pc.deal_id = any(c.suggested_deals))
     and not exists (select 1 from jsonb_array_elements(v_items) e where e->>'product_id' = pc.id)
     and not exists (select 1 from jsonb_array_elements(v_plan) e where e->>'product_id' = pc.id)
@@ -647,20 +649,25 @@ begin
   delete from transcript where cart_id = p_cart_id;
   update carts set items = '[]', plan = '[]', suggestion = null, suggested_deals = '{}',
                    trip_id = gen_random_uuid(), status = 'shopping', trip_started_at = now(),
-                   location = null, nudge = null, nudged = '{}', plan_joined = '{}', budget = null
+                   location = null, nudge = null, nudged = '{}', plan_joined = '{}', budget = null,
+                   deals_quiet = false
   where cart_id = p_cart_id;
   return recompute_cart(p_cart_id);
 end $$;
 
--- Shopper said "no thanks": drop the suggestion; that deal isn't offered again this trip.
-create or replace function dismiss_suggestion(p_cart_id text)
+-- Shopper said "no thanks": drop the suggestion; that deal isn't offered again this trip, and
+-- (v0.20) no other unprompted card either, until a new trip. p_quiet false only clears the card,
+-- for one the shopper never heard (the agent skipping an item they avoid).
+drop function if exists dismiss_suggestion(text);
+create or replace function dismiss_suggestion(p_cart_id text, p_quiet boolean default true)
 returns carts language plpgsql security definer set search_path = public as $$
 begin
   update deal_offers o set dismissed_at = now()
   from carts c
   where c.cart_id = p_cart_id and o.cart_id = c.cart_id and o.trip_id = c.trip_id
     and o.deal_id = c.suggestion->>'deal_id' and o.dismissed_at is null;
-  update carts set suggestion = null where cart_id = p_cart_id;
+  update carts set deals_quiet = deals_quiet or (p_quiet and suggestion is not null), suggestion = null
+  where cart_id = p_cart_id;
   return recompute_cart(p_cart_id);
 end $$;
 
@@ -804,7 +811,7 @@ grant execute on function apply_cart_event(text, text, text, real, text, text, i
   to anon, authenticated, service_role;
 grant execute on function set_plan(text, jsonb)          to anon, authenticated, service_role;
 grant execute on function reset_cart(text)               to anon, authenticated, service_role;
-grant execute on function dismiss_suggestion(text)       to anon, authenticated, service_role;
+grant execute on function dismiss_suggestion(text, boolean) to anon, authenticated, service_role;
 grant execute on function set_feature(text, text, boolean)  to anon, authenticated, service_role;
 grant execute on function add_to_plan(text, text, int, text, text) to anon, authenticated, service_role;
 grant execute on function remove_from_plan(text, text)      to anon, authenticated, service_role;

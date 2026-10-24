@@ -100,6 +100,9 @@ alter table carts add column if not exists plan_joined jsonb not null default '{
 alter table carts add column if not exists budget numeric(10,2);
 alter table carts add column if not exists budget_left numeric(10,2);
 alter table carts add column if not exists plan_estimate numeric(10,2) not null default 0;
+-- v0.20 P5: one "No thanks" (dismiss_suggestion) quiets unprompted deal cards for the rest of the
+-- trip, like nudged; reset_cart clears it.
+alter table carts add column if not exists deals_quiet boolean not null default false;
 
 -- Feature flags (v0.12): a global default per feature; carts.features overrides it per cart.
 create table if not exists feature_flags (

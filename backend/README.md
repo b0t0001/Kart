@@ -45,7 +45,7 @@ Between demo runs: `backend/.venv/bin/python backend/db.py reset-demo` restores 
 | `remove_from_plan(p_cart_id, p_product_id)` | voice agent | Atomic: drops that line (no-op if it isn't there). |
 | `set_budget(p_cart_id, p_amount)` | voice agent | "Under $30": recompute fills `budget_left` (budget − total) and `plan_estimate` (what's left on the list at today's sale prices). `null` clears it; reset clears it. |
 | `reset_cart(p_cart_id)` | iPad | New `trip_id`; the Pi watches it and clears its memory. |
-| `dismiss_suggestion(p_cart_id)` | iPad "No thanks" | That deal isn't offered again this trip. |
+| `dismiss_suggestion(p_cart_id, p_quiet default true)` | iPad / voice "No thanks" | That deal isn't offered again this trip, and (v0.20) no other unprompted card either: `carts.deals_quiet` until `reset_cart`. Asking still works. `p_quiet false` only clears the card (the agent skipping an item the shopper avoids). |
 | `set_cart_status(p_cart_id, p_status)` | iPad, agent | `idle` / `shopping` / `checkout`; `reset_cart` sets `shopping`, `checkout()` sets `paid`. |
 | `set_location(p_cart_id, p_section)` | agent ("I'm at aisle 5") | Accepts `A5`, `5`, `aisle 5`. Adds set it too. Drives the route. |
 | `append_transcript(p_cart_id, p_role, p_text)` | agent | Captions; `reset_cart` deletes the cart's lines. |

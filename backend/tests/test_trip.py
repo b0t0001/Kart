@@ -198,8 +198,10 @@ def test_final_script_route(cart):
     assert row["suggestion"]["text"] == "Parmesan is $1 off in Aisle 4. Want it?"
     row = cart("add_to_plan", p_product_id="kirkland-parmesan")              # "Yes"
     assert row["next_step"] == "Aisle 6 → Marinara"                           # finish this aisle first
+    assert row["suggestion"] is None and row["deals_quiet"] is False          # a "Yes" quiets nothing
     row = add(cart, "rao-marinara")
     assert row["next_step"] == "Aisle 4 → Parmesan, $1 off"                   # nearest: 4 before 9
+    assert row["suggestion"] is None                                          # no garlic bread: off the list
     row = add(cart, "barilla-spaghetti")                                       # the 2nd box: "too much"
     assert row["nudge"]["kind"] == "over" and row["next_step"] == "Aisle 4 → Parmesan, $1 off"
     cart("dismiss_nudge", p_action="ok")
@@ -207,3 +209,35 @@ def test_final_script_route(cart):
     assert row["next_step"] == "Aisle 9 → Kids' Scissors"                     # then the far aisle
     row = add(cart, "kids-scissors")
     assert row["next_step"] == "All done → Checkout"
+
+
+LEOS_PARTY = [{"product_id": "barilla-spaghetti", "qty": 3, "basis": "pasta for 12", "meal": "Leo's soccer team party"},
+              {"product_id": "rao-marinara", "qty": 2, "meal": "Leo's soccer team party"}]
+
+
+def test_act2_one_no_thanks_quiets_deal_cards_for_the_trip(cart):
+    """CONTRACT v0.20 P5: after "No thanks" to the Parmesan, no garlic-bread card, and the 4th box nudges at once."""
+    cart("set_plan", p_plan=LEOS_PARTY)
+    row = add(cart, "barilla-spaghetti")
+    assert row["suggestion"]["text"] == "Parmesan is $1 off in Aisle 4. Want it?"
+    row = cart("dismiss_suggestion")                                          # "No thanks."
+    assert row["suggestion"] is None and row["deals_quiet"] is True
+    for box in (2, 3):
+        row = add(cart, "barilla-spaghetti")
+        assert (row["suggestion"], row["nudge"]) == (None, None), box        # was "Garlic Bread is $1 off…"
+    row = add(cart, "barilla-spaghetti")                                       # a 4th box: over, right away
+    assert row["suggestion"] is None
+    assert (row["nudge"]["kind"], row["nudge"]["product_id"]) == ("over", "barilla-spaghetti")
+    cart("dismiss_nudge", p_action="ok")
+    assert add(cart, "rao-marinara")["suggestion"] is None                    # marinara pairs too: still quiet
+    # asking still works: "what's on sale?" → "add the Parmesan" shows its deal on the list row
+    row = cart("add_to_plan", p_product_id="kirkland-parmesan")
+    assert next(p for p in row["plan"] if p["product_id"] == "kirkland-parmesan")["deal_label"] == "$1 off"
+
+
+def test_a_new_trip_offers_deals_again(cart):
+    add(cart, "barilla-spaghetti")
+    assert cart("dismiss_suggestion")["deals_quiet"] is True
+    row = cart("reset_cart")
+    assert row["deals_quiet"] is False
+    assert add(cart, "barilla-spaghetti")["suggestion"]["product_id"] == "kirkland-parmesan"

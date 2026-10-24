@@ -336,6 +336,35 @@ def test_nothing_is_offered_for_items_on_the_plan(cart, conn):
 def test_planned_suggestion_is_consumed_when_nothing_else_is_eligible(cart):
     row = add(cart, "barilla-spaghetti")
     assert row["suggestion"]["product_id"] == "kirkland-parmesan"
-    cart("dismiss_suggestion")                        # Baguette comes next
-    row = cart("set_plan", p_plan=[{"product_id": "french-baguette", "reason": "said yes"}])
+    row = cart("set_plan", p_plan=[{"product_id": "kirkland-parmesan", "reason": "said yes"}])
+    assert row["suggestion"]["product_id"] == "french-baguette"     # Baguette comes next
+    row = cart("set_plan", p_plan=[{"product_id": "kirkland-parmesan", "reason": "said yes"},
+                                   {"product_id": "french-baguette", "reason": "said yes"}])
     assert row["suggestion"] is None
+
+
+# ── v0.20 P5: one "No thanks" quiets unprompted deal cards for the rest of the trip ──
+
+def test_no_thanks_quiets_every_other_card_including_new_store_deals(cart, conn):
+    add(cart, "barilla-spaghetti")
+    row = cart("dismiss_suggestion")
+    assert (row["suggestion"], row["deals_quiet"]) == (None, True)
+    assert add(cart, "tostitos-salsa")["suggestion"] is None          # Chips would pair with it
+    conn.execute("insert into deals (id, product_id, type, value, label, pairs_with) "
+                 "values ('d-parm-live', 'kirkland-parmesan', 'amount_off', 3, '$3 off', '{barilla-spaghetti}')")
+    assert current(conn)["suggestion"] is None                        # a fresh store deal doesn't pop either
+    assert set(current(conn)["suggested_deals"]) == {"d-parm-3off"}   # nothing else was offered
+
+
+def test_no_thanks_with_no_card_up_quiets_nothing(cart):
+    row = cart("dismiss_suggestion")
+    assert row["deals_quiet"] is False
+    assert add(cart, "barilla-spaghetti")["suggestion"]["product_id"] == "kirkland-parmesan"
+
+
+def test_a_card_cleared_for_the_shopper_can_leave_the_others_on(cart):
+    """The agent clears a card the shopper never heard (an item they avoid) with p_quiet false."""
+    add(cart, "barilla-spaghetti")
+    row = cart("dismiss_suggestion", p_quiet=False)
+    assert row["deals_quiet"] is False
+    assert row["suggestion"]["product_id"] == "french-baguette"       # the next card, as before v0.20

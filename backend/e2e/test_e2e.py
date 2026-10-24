@@ -81,21 +81,22 @@ def test_full_trip_with_the_merchant_beat(rest, db, cart_id, merchant_changes):
         seen = watch.wait_for(lambda r: float(r.get("total") or 0) == 1.99)
         assert seen["cart_id"] == cart_id                                        # realtime reached the "iPad"
 
-        # iPad: "No thanks" on the Baguette card
-        c = rest.rpc("dismiss_suggestion", p_cart_id=cart_id)
-        assert c["suggestion"] is None and "d-baguette-1off" in c["suggested_deals"]
-
-        # Merchant: "parmesan $3 off" confirmed in the console → the cart's card switches live
+        # Merchant: "parmesan $1 off" confirmed in the console → the Baguette card switches live
         merchant(db, merchant_changes, "create_deal", {"deal_id": parm_deal, "product_id": "kirkland-parmesan",
                                      "type": "amount_off", "value": 1, "label": "$1 off", "ends_at": None,
-                                     "pairs_with": ["barilla-spaghetti", "rao-marinara"]}, "Parmesan $3 off")
+                                     "pairs_with": ["barilla-spaghetti", "rao-marinara"]}, "Parmesan $1 off")
         rec = watch.wait_for(lambda r: (r.get("suggestion") or {}).get("deal_id") == parm_deal)
         assert rec["suggestion"]["text"] == "Parmesan is $1 off in Aisle 4. Want it?"
 
-        # iPad: "Yes" puts it on the plan, which consumes the card (nothing else is eligible now)
+        # iPad: "No thanks" quiets deal cards for the rest of the trip (v0.20 P5)
+        c = rest.rpc("dismiss_suggestion", p_cart_id=cart_id)
+        assert c["suggestion"] is None and c["deals_quiet"] is True
+        assert {"d-baguette-1off", parm_deal} <= set(c["suggested_deals"])
+
+        # Voice: "actually, add the Parmesan": asking still works, and the list row shows the deal
         c = rest.rpc("set_plan", p_cart_id=cart_id,
-                     p_plan=PASTA + [{"product_id": "kirkland-parmesan", "reason": "said yes to the deal"}])
-        assert c["suggestion"] is None and parm_deal in c["suggested_deals"]
+                     p_plan=PASTA + [{"product_id": "kirkland-parmesan", "reason": "changed their mind"}])
+        assert c["suggestion"] is None
         parm_row = next(p for p in c["plan"] if p["product_id"] == "kirkland-parmesan")
         assert parm_row["deal_label"] == "$1 off" and parm_row["aisle"] == "Aisle 4"
 
