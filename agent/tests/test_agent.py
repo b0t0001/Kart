@@ -659,3 +659,10 @@ async def test_a_feature_on_by_default_counts_unless_the_cart_turns_it_off():
     backend.cart["features"] = {"quantity_nudges": False}        # this cart's own switch wins
     await agent._refresh()
     assert not agent._nudges
+
+
+async def test_a_guests_bare_yeah_answers_the_question_claude_just_asked():
+    agent, backend = make([Turn(chunks=["Parmesan is $1 off in Aisle 4. Want me to add it?"]), Turn(chunks=["Done."])])
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="What was that deal again?")]))
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Yeah.")])) == ["Done."]   # not dropped as filler
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Okay.")])) == []         # nothing asked: still quiet

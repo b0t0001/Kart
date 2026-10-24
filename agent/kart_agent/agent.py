@@ -237,7 +237,7 @@ class KartAgent:
                 return
             quiet = quiet_request(text)
             nothing_asked = not self._offer and not self._nudge and not self._digest and not self._list_too \
-                and not self._list_offer and not (self.member_id and self._kart_asked)   # member beta: Kart's own question
+                and not self._list_offer and not self._kart_asked   # Kart's own question: a bare "yeah" answers it
             if quiet or (nothing_asked and only_thanks(text)):   # "Be quiet." / "Thanks!": no Claude round
                 await self._caption("user", text)
                 if quiet:

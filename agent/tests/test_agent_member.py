@@ -284,10 +284,10 @@ async def test_member_yeah_after_kart_asks_reaches_claude():
     assert await run(agent, said_by_user("Yeah.")) == ["Saved."]
 
 
-async def test_guest_yeah_after_a_question_stays_unchanged():
-    agent, backend, llm = make([Turn(chunks=["Want me to add bread?"])], member=None)
+async def test_guest_yeah_after_a_question_reaches_claude_too():
+    agent, backend, llm = make([Turn(chunks=["Want me to add bread?"]), Turn(chunks=["Added bread."])], member=None)
     await run(agent, said_by_user("Pasta night."))
-    assert await run(agent, said_by_user("Yeah.")) == [] and len(llm.requests) == 1
+    assert await run(agent, said_by_user("Yeah.")) == ["Added bread."] and len(llm.requests) == 2
 
 
 async def test_rejoined_member_call_keeps_the_member_without_regreeting():
