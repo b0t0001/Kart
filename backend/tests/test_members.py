@@ -92,3 +92,137 @@ def test_guest_checkout_writes_no_purchases(member_cart, conn):
     receipt = member_cart("checkout")
     assert conn.execute("select count(*) from member_purchases").fetchone()[0] == 0
     assert conn.execute("select member_id from receipts where id = %s", [receipt["id"]]).fetchone() == (None,)
+
+
+# ── member_profile: "this week" (§4) ──
+
+TODAY = date(2026, 10, 24)                                    # a Saturday
+
+
+@pytest.fixture
+def member(conn):
+    conn.execute("delete from members where member_id like 'it-%'")
+    conn.execute("insert into members (member_id, name, household) values ('it-p', 'Dylan', 4)")
+    return "it-p"
+
+
+def buy(conn, member_id, product_id, days_ago, qty=1, today=TODAY):
+    """A purchase at noon store time, days_ago days before today (negative = in the future)."""
+    conn.execute(
+        f"insert into member_purchases (member_id, product_id, qty, price, bought_at, source) "
+        f"values (%s, %s, %s, 1.00, ((%s::date - %s) + time '12:00') at time zone '{TZ}', 'seed')",
+        [member_id, product_id, qty, today, days_ago])
+
+
+def memory(conn, member_id, kind, text, days=None, items=None, today=TODAY):
+    import json
+    row = conn.execute(
+        "insert into member_memories (member_id, kind, text, event_date, items) values (%s, %s, %s, %s, %s::jsonb) "
+        "returning id",
+        [member_id, kind, text, None if days is None else today + timedelta(days=days),
+         None if items is None else json.dumps(items)]).fetchone()
+    return row[0]
+
+
+def profile(conn, member_id, today=TODAY, cart_id=None):
+    return conn.execute("select member_profile(%s, %s, %s)", [member_id, cart_id, today]).fetchone()[0]
+
+
+def picks(prof):
+    return [(p["product_id"], p["kind"], p["reason"]) for p in prof["picks"]]
+
+
+def test_due_pick_weekly_milk(conn, member):
+    for days in (7, 14, 21, 28):
+        buy(conn, member, "whole-milk", days)
+    assert ("whole-milk", "due", "every week · last Sat") in picks(profile(conn, member))
+
+
+def test_usual_pick_on_weekday(conn, member):
+    for days in (7, 14, 21, 3):                               # three Saturdays, and last Wednesday
+        buy(conn, member, "mission-tortillas", days)
+    assert picks(profile(conn, member)) == [("mission-tortillas", "usual", "your Saturday usual")]
+
+
+def test_event_pick(conn, member):
+    mid = memory(conn, member, "event", "Leo's soccer party, nachos for the team", days=1,
+                 items=[{"product_id": "tostitos-chips", "qty": 1}, {"product_id": "tostitos-salsa", "qty": 1}])
+    first = profile(conn, member)["picks"][0]
+    assert (first["product_id"], first["kind"], first["reason"], first["memory_id"]) == \
+        ("tostitos-salsa", "event", "Leo's soccer party · tomorrow", mid)    # chips: the deal card's job
+
+
+def test_live_deal_products_never_picked(conn, member):
+    for days in (7, 14, 21, 28):
+        buy(conn, member, "tostitos-chips", days)
+    assert "tostitos-chips" not in [p for p, _, _ in picks(profile(conn, member))]
+    conn.execute("update deals set active = false where id = 'd-chips-150off'")
+    assert "tostitos-chips" in [p for p, _, _ in picks(profile(conn, member))]
+
+
+def test_mix_one_per_signal_then_cap_3(conn, member):
+    memory(conn, member, "event", "Leo's soccer party", days=1, items=[{"product_id": "tostitos-salsa", "qty": 1}])
+    for days in (7, 14, 21, 28):
+        buy(conn, member, "whole-milk", days)
+    for days in (10, 20, 30):
+        buy(conn, member, "large-eggs", days)
+    for days in (7, 14, 21, 3):
+        buy(conn, member, "mission-tortillas", days)
+    prof = profile(conn, member)
+    assert [(p["product_id"], p["kind"]) for p in prof["picks"]] == \
+        [("tostitos-salsa", "event"), ("whole-milk", "due"), ("mission-tortillas", "usual")]
+
+
+def test_picks_skip_plan_and_cart_and_out_of_stock(cart, conn, member):
+    for pid in ("whole-milk", "large-eggs", "bananas"):
+        for days in (7, 14, 21, 28):
+            buy(conn, member, pid, days)
+    cart("set_plan", p_plan=[{"product_id": "whole-milk", "reason": "milk"}])
+    add(cart, "large-eggs")
+    conn.execute("update products set stock = 0 where id = 'bananas'")
+    assert picks(profile(conn, member, cart_id="7")) == []
+
+
+def test_today_uses_store_timezone(conn, member):
+    conn.execute("insert into member_purchases (member_id, product_id, qty, price, bought_at, source) "
+                 "values (%s, 'whole-milk', 1, 5.49, '2026-10-25 01:30+00', 'seed')", [member])   # Sat 6:30 pm PDT
+    prof = profile(conn, member)
+    assert prof["last_trip"]["date"] == "2026-10-24" and prof["member"]["trips"] == 1
+
+
+def test_future_purchases_ignored(conn, member):
+    buy(conn, member, "whole-milk", 7)
+    buy(conn, member, "whole-milk", -3)
+    prof = profile(conn, member)
+    assert prof["member"]["trips"] == 1 and prof["last_trip"]["date"] == "2026-10-17"
+
+
+def test_demo_date_moves_today(member_cart, conn, member):
+    memory(conn, member, "event", "Friendsgiving for 10", days=7)
+    member_cart("set_demo_date", p_date="2026-10-30")
+    prof = conn.execute("select member_profile(%s, '7')", [member]).fetchone()[0]
+    assert (prof["today"], prof["weekday"]) == ("2026-10-30", "Friday")
+    assert prof["memories"][0]["days_until"] == 1
+
+
+def test_recent_past_event_listed_first(conn, member):
+    memory(conn, member, "preference", "Likes the Marinara here")
+    memory(conn, member, "event", "Leo's soccer party", days=-2)
+    mems = profile(conn, member)["memories"]
+    assert [(m["kind"], m["days_until"]) for m in mems] == [("event", -2), ("preference", None)]
+
+
+def test_profile_shape_usuals_and_last_trip(conn, member):
+    for days in (7, 14, 21, 28):
+        buy(conn, member, "whole-milk", days)
+    buy(conn, member, "tostitos-salsa", 7, qty=2)
+    prof = profile(conn, member)
+    assert prof["member"] == {"member_id": "it-p", "name": "Dylan", "household": 4,
+                              "since": prof["member"]["since"], "trips": 4}
+    assert prof["usuals"][0] == {"product_id": "whole-milk", "short_name": "Milk", "times": 4, "every_days": 7,
+                                 "last": "2026-10-17", "weekday": "Saturday"}
+    assert prof["last_trip"] == {"date": "2026-10-17", "items": ["Milk", "Salsa"], "total": 3.0}
+
+
+def test_unknown_member_is_null(conn):
+    assert profile(conn, "it-nobody") is None
