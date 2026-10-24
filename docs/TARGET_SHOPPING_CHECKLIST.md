@@ -2,7 +2,7 @@
 
 | Item | Qty | Catalog id | Role |
 |---|---|---|---|
-| Barilla Spaghetti, 16 oz | 1 | `barilla-spaghetti` | Dropped in → "Got the Spaghetti. Parmesan is $1 off. Want it?" |
+| Barilla Spaghetti, 16 oz | 1 (**buy 2 more, identical**) | `barilla-spaghetti` | Box 1 → "Got the Spaghetti. Parmesan is $1 off. Want it?"; box 2 → "Keep the extra?"; all 3 → counting test clips |
 | Good & Gather Marinara Pasta Sauce, 23 oz (glass, so place it) | 1 | `rao-marinara` | On Kart's list |
 | Market Pantry Grated Parmesan Cheese, 8 oz | 1 | `kirkland-parmesan` | The deal at the moment of decision |
 | up&up Kids' Scissors, Pointed Tip | 1 | `kids-scissors` | Added by voice; far aisle, so Kart navigates across the store; then "changing your mind" (taken back out) |

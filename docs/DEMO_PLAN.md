@@ -2,7 +2,7 @@
 
 > **FINAL SCRIPT (2026-10-24): one natural trip. This supersedes §3 Meal A below.**
 >
-> **Props (bought 2026-10-24, one of each):** Barilla spaghetti, Good & Gather marinara, Market Pantry grated Parmesan, up&up kids' scissors. Not bought: garlic bread (removed by voice) and olive oil (not sold at Target Berkeley Central, and not in our catalog).
+> **Props:** Barilla spaghetti **×3** (identical; 2 more being bought), Good & Gather marinara, Market Pantry grated Parmesan, up&up kids' scissors. **Quantity nudges are ON** (main feature, per Dylan). Not bought: garlic bread (removed by voice) and olive oil (not sold at Target Berkeley Central, and not in our catalog).
 >
 > | # | Shopper | Kart / cart | Shows |
 > |---|---|---|---|
@@ -13,6 +13,7 @@
 > | 4 | Drop **spaghetti** → "Yes" → drop the **Parmesan** | "Got the Spaghetti. Parmesan is $1 off in Aisle 4. Want it?" → bill shows "saved $1" | Live bill + deal at the moment of decision |
 > | 5 | Drop the **marinara**. "Add olive oil too." | "Got the Marinara." → "We don't carry olive oil here. Trader Joe's, about a mile away, might have it." (exact store per Kart) | Honest "not sold here" |
 > | 5b | *(member beta)* "Oh, next Saturday is Leo's soccer team party, we'll need pasta for 12." → "Yes." | "Got it, I'll remember Leo's party on Saturday. Want me to save a list for it?" → "Saved: three boxes of spaghetti and two jars of marinara for Leo's party." | **Memory created by conversation** |
+> | 5c | Drop a **second spaghetti box** → "No" → put it back | **"That's two boxes of spaghetti in the cart, and pasta night for 4 needs one. Keep the extra?"** → "Took the Spaghetti off your bill." | **Right amount for your meal** (less food waste and overspending) |
 > | 6 | Walk to Aisle 9, drop the **scissors** → "Actually, the school has some" → **take them back out** | "Got the Kids' Scissors." → "Took the Kids' Scissors off your bill. Take them off the list too?" → "Yes." | Changing your mind |
 > | 7 | Tap **Check out** → **Pay** | Receipt with savings and time in store → "Paid. Enjoy pasta night!" | Uniqlo-style checkout |
 >

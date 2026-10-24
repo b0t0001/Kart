@@ -1,4 +1,4 @@
-# KART integration contract — v0.17 (DRAFT)
+# KART integration contract — v0.18 (DRAFT)
 
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
@@ -30,7 +30,7 @@ Product background: `project_context/claude_CLAUDE.md` and `project_context/clau
 - Reset: the Pi polls `carts.trip_id` every 2 s and persists the last value it saw, so a reset made while the Pi was off is caught at boot.
 - CV's plan is `pi/docs/plans/2026-10-24-cv-pipeline.md`.
 
-**Final camera layout (v0.13, locked by Dylan):**
+**Final camera layout (v0.13, locked by Dylan; v0.18: cam1 is now on USB port `usb-0:1.3`, and the floor liner is a black T-shirt):**
 - **cam0** = Brio 101 (`usb-0:1.1`), mid-front, looking back down the basket.
 - **cam1** = Aoozi QS-WB-202PRO wide-angle (`usb-0:1.2`), high at the top-basket end, looking down.
 - 15 fps. Together they pass the 4-corner test.
@@ -113,7 +113,7 @@ Writers **only** use these; nobody writes `carts.items` directly.
 - `set_plan(p_cart_id text, p_plan jsonb) → carts row` — voice agent writes the trip plan; recomputes `next_step` / `lcd_line1`.
 - `reset_cart(p_cart_id text) → carts row` — clears items/plan/suggestion **and sets a new `carts.trip_id` (uuid)**. For new trips and demo resets.
 
-### Quantity nudges, "right amount for the meal" (v0.12): BETA, OFF BY DEFAULT
+### Quantity nudges, "right amount for the meal" (v0.12): **ON BY DEFAULT since v0.18 (Dylan approved)**; mid-trip under nudges stay off
 
 **Stability rule:** with the feature off, nothing changes. `carts.nudge` stays `null`, the iPad shows no nudge UI, the agent says nothing new, and CV counts exactly as before. The stable rollback point is git tag `stable-pre-nudges`. Once Dylan has tested it and says it's good, the default flips to on.
 
@@ -365,3 +365,4 @@ All three feature chats work in the **same main checkout**, so stay inside your 
 - v0.15 — "That's mine": `cart_events.resolution`, RPC `mark_personal`, an iPad button and voice phrase, and the CV watcher. CV flags `personal_items` (off) and `edge_privacy` (on).
 - v0.16 — "That's mine" DROPPED (out of scope per Dylan). `edge_privacy` goes back to off by default.
 - v0.17 — The backend fully removed the personal-items pieces. Shopper-interaction RPCs are live: `add_to_plan`, `remove_from_plan`, `set_budget`, `plan.meal`, duplicate merging. Nearby stores are on hosted. The mini store puts bakery last.
+- v0.18 — Quantity nudges ON by default (over + checkout list). Demo props: one each, plus 3 spaghetti boxes; kids' scissors replace the chocolate. cam1 moves to USB port 1.3.
