@@ -80,8 +80,12 @@ public enum LineCodec {
     /// The agent reads these in `kart_agent/agent.py` and `lines.py`.
     public static func metadata(_ event: VoiceEvent) -> [String: Any] {
         switch event {
-        case .tripContext(let cartId, let tripId):
-            return ["type": "trip_context", "cart_id": cartId, "trip_id": tripId.uuidString.lowercased()]
+        case .tripContext(let cartId, let tripId, let memberId):
+            var meta: [String: Any] = ["type": "trip_context", "cart_id": cartId, "trip_id": tripId.uuidString.lowercased()]
+            if let memberId { meta["member_id"] = memberId }
+            return meta
+        case .lull:
+            return ["type": "lull"]
         case .cartChanged(.added(let productId)):
             return ["type": "cart_changed", "change": "added", "product_id": productId]
         case .cartChanged(.removed(let productId)):

@@ -208,15 +208,23 @@ public struct CartState: Codable, Sendable, Equatable {
     public var features: [String: Bool]
     public var nudge: Nudge?
     public var nudged: [String]
+    /// Member memory beta (v0.14): who's signed in this trip, a counter bumped on memory writes, and the demo
+    /// fast-forward date (`YYYY-MM-DD`, nil = real today).
+    public var memberId: String?
+    public var memberRev: Int
+    public var demoDate: String?
 
     /// The quantity-nudge beta is on for this cart: only then does the iPad show nudges and +/−.
     public var quantityNudgesOn: Bool { features["quantity_nudges"] == true }
+    /// The member-memory beta is on for this cart: only then does the iPad show sign-in and memory.
+    public var memberMemoryOn: Bool { features["member_memory"] == true }
 
     public init(cartId: String, tripId: UUID? = nil, items: [CartItem], itemCount: Int, total: Decimal,
                 savings: Decimal? = nil, plan: [PlanItem], nextStep: String? = nil, suggestion: Suggestion? = nil,
                 suggestedDeals: [String], status: TripStatus, tripStartedAt: Date? = nil,
                 location: CartLocation? = nil, updatedAt: Date? = nil, features: [String: Bool] = [:],
-                nudge: Nudge? = nil, nudged: [String] = []) {
+                nudge: Nudge? = nil, nudged: [String] = [], memberId: String? = nil, memberRev: Int = 0,
+                demoDate: String? = nil) {
         self.cartId = cartId
         self.tripId = tripId
         self.items = items
@@ -234,6 +242,9 @@ public struct CartState: Codable, Sendable, Equatable {
         self.features = features
         self.nudge = nudge
         self.nudged = nudged
+        self.memberId = memberId
+        self.memberRev = memberRev
+        self.demoDate = demoDate
     }
 
     public static func empty(cartId: String) -> CartState {
@@ -259,6 +270,9 @@ public struct CartState: Codable, Sendable, Equatable {
                   updatedAt: try c.decodeIfPresent(Date.self, forKey: .updatedAt),
                   features: (try? c.decodeIfPresent([String: Bool].self, forKey: .features)) ?? [:],
                   nudge: try c.decodeIfPresent(Nudge.self, forKey: .nudge),
-                  nudged: try c.decodeIfPresent([String].self, forKey: .nudged) ?? [])
+                  nudged: try c.decodeIfPresent([String].self, forKey: .nudged) ?? [],
+                  memberId: try c.decodeIfPresent(String.self, forKey: .memberId),
+                  memberRev: try c.decodeIfPresent(Int.self, forKey: .memberRev) ?? 0,
+                  demoDate: try c.decodeIfPresent(String.self, forKey: .demoDate))
     }
 }

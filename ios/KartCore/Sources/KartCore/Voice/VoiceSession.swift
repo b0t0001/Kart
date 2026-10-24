@@ -7,7 +7,8 @@ public enum VoiceState: Sendable, Equatable {
 
 /// What the iPad tells the voice agent (Line `custom` events in milestone 3).
 public enum VoiceEvent: Sendable, Equatable {
-    case tripContext(cartId: String, tripId: UUID)
+    /// `memberId`: the signed-in member (member memory beta, v0.14); nil for a guest.
+    case tripContext(cartId: String, tripId: UUID, memberId: String? = nil)
     case cartChanged(CartChange)
     case suggestion(Suggestion)
     case dealChanged(Deal)
@@ -15,6 +16,8 @@ public enum VoiceEvent: Sendable, Equatable {
     /// v0.12 beta: the cart's amount doesn't match the list (Kart says `text` once).
     case nudge(Nudge)
     case uiAction(String)
+    /// v0.14 beta: a quiet minute while a member shops; Kart may ask its one question for the trip.
+    case lull
 }
 
 /// What Kart is asking right now that the iPad shows as a card (the agent's `custom` messages): deals first get a

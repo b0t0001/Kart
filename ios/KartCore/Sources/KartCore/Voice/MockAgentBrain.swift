@@ -65,7 +65,7 @@ import Foundation
             return nudge.text
         case .dealChanged(let deal):
             return "Heads up, \(shortName(deal.productId)) just went \(deal.label)."
-        case .tripContext, .cardResponse, .uiAction:
+        case .tripContext, .cardResponse, .uiAction, .lull:
             return nil
         }
     }
