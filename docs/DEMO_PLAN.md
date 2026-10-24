@@ -6,14 +6,24 @@
 >
 > | # | Shopper | Kart / cart | Shows |
 > |---|---|---|---|
-> | 0 | *(if the member beta is ready)* sign in as Dylan → "Yes, but it's 6 of us now." | "Welcome back, Dylan! Leo's team pasta dinner is tomorrow. Want that list?" → rescales the list | Personalization + editing quantities by voice |
-> | 1 | *(otherwise)* "Pasta night for my family of 4." → "Not now." | Lists spaghetti, marinara, garlic bread; "First stop is Aisle 6 for the spaghetti." → "One deal goes with your list. Want to hear it?" → "I'll tell you at the shelf." | Voice planning |
+> | 0 | *(member beta)* Sign in as **Dylan** | "Welcome back, Dylan!" | Member sign-in (one trip) |
+> | 1 | "Pasta night for my family of 4." → "Not now." | Lists spaghetti, marinara, garlic bread; "First stop is Aisle 6 for the spaghetti." → "One deal goes with your list. Want to hear it?" → "I'll tell you at the shelf." | Voice planning |
 > | 2 | "We've got garlic bread at home, take it off." | "Took garlic bread off your list." | Remove by voice |
 > | 3 | "Add something chocolate for dessert." | "Added Hershey's XL, Aisle 7 (A3 at Target)." | Add by voice from the store's catalog |
 > | 4 | Drop **spaghetti** → "Yes" → drop the **Parmesan** | "Got the Spaghetti. Parmesan is $1 off in Aisle 4. Want it?" → bill shows "saved $1" | Live bill + deal at the moment of decision |
 > | 5 | Drop the **marinara**. "Add olive oil too." | "Got the Marinara." → "We don't carry olive oil here. Safeway, about 1.5 miles away, might have it." | Honest "not sold here" |
+> | 5b | *(member beta)* "Oh, next Saturday is Leo's soccer team party, we'll need pasta for 12." → "Yes." | "Got it, I'll remember Leo's party on Saturday. Want me to save a list for it?" → "Saved: three boxes of spaghetti and two jars of marinara for Leo's party." | **Memory created by conversation** |
 > | 6 | Drop the **chocolate**. "Actually, skip the chocolate." → take it out | "Took the chocolate off your bill." (+ "take it off the list too?" → "yes") | Changing your mind |
 > | 7 | Tap **Check out** → **Pay** | Receipt with savings and time in store → "Paid. Enjoy pasta night!" | Uniqlo-style checkout |
+>
+> **ACT 2: fast-forward (member beta, ~30 s, no extra props)**
+> | # | Shopper | Kart / cart | Shows |
+> |---|---|---|---|
+> | 8 | Demo controls → **"Fast-forward to Friday"** (new trip, the date jumps ahead) → sign in as **Dylan** | **"Welcome back, Dylan! Leo's soccer party is tomorrow. Want the list you saved?"** | Memory kept across trips |
+> | 9 | "Yes." | The saved list goes on today's plan with the first stop | A ready-made list from memory |
+> | 10 *(optional)* | "What do you know about me?" | The memory sheet opens on the iPad, with **Forget** buttons | Privacy and control |
+>
+> Leo's party is **not** pre-seeded: it's created live in step 5b. Only the background purchase history is seeded.
 >
 > **Q&A only:** drop a water bottle → the "Is this…?" card (what happens if the camera is unsure).
 
