@@ -25,15 +25,30 @@ Install and autostart belong to `hardware/`. See [`hardware/README.md`](../hardw
 cp pi/config.example.json pi/config.json        # camera paths are already the measured USB ports
 ```
 
-- Put the shared env file at **`~/kart/.env`** (Dylan has the values: `ANTHROPIC_API_KEY`,
-  `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `CART_ID=7`). Without it the cart still runs: local
-  matching only, events logged to `pi/state/events.jsonl`.
+- Create **`~/kart/.env`** on the Pi (see "The Pi's `.env`" below). Without it the cart still
+  runs: local matching only, events logged to `pi/state/events.jsonl`.
 - **The cart floor needs a solid mat or cardboard.** A wire bottom shows the store floor sliding
   by, which looks like everything changed.
 - **Start with the cart empty.** On first start the cart photographs the empty basket as its
   reference. If it started with items inside, empty it and reset (below).
 - If the USB cables moved: `~/venv/bin/python tools/snap.py --list` and fix `cameras` in
   `pi/config.json` (use the `-video-index0` paths).
+
+### The Pi's `.env`
+
+The Pi needs exactly these four lines in `~/kart/.env` (Dylan has the values; never commit the file):
+
+```
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_ANON_KEY=<the anon / public key>
+CART_ID=7
+ANTHROPIC_API_KEY=<the Anthropic key>
+```
+
+**Do not** put `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_DB_URL` on the Pi. Those are admin
+credentials for backend scripts only; the cart needs nothing beyond the public anon key. After
+editing, restart: `sudo systemctl restart kart-cv`. The log should not say `local-only mode` or
+`no Supabase settings`.
 
 ### Run it by hand
 

@@ -47,6 +47,12 @@ def cart_row(sb, cart_id):
     return rows[0] if rows else None
 
 
+def reset(sb, cart_id):
+    """Leave nothing in the throwaway cart (anon can empty a cart; deleting rows is the backend's job)."""
+    url, key = sb
+    http.post_json(f"{url}/rest/v1/rpc/reset_cart", http.supabase_headers(key), {"p_cart_id": cart_id})
+
+
 def qty(row, pid):
     return sum(int(i.get("qty", 0)) for i in (row or {}).get("items") or [] if i.get("product_id") == pid)
 
@@ -54,7 +60,13 @@ def qty(row, pid):
 def test_replay_to_supabase_retry_and_trip_reset(tmp_path, sb):
     url, key = sb
     cart_id = f"cv-e2e-{uuid.uuid4().hex[:8]}"
+    try:
+        _replay_retry_and_trip_reset(tmp_path, sb, url, key, cart_id)
+    finally:
+        reset(sb, cart_id)
 
+
+def _replay_retry_and_trip_reset(tmp_path, sb, url, key, cart_id):
     catalog = fetch_catalog(url, key)
     assert catalog is not None and {PARM, PASTA} <= set(catalog.ids())
 
@@ -103,6 +115,13 @@ def test_replay_to_supabase_retry_and_trip_reset(tmp_path, sb):
 def test_unknown_added_then_removed_is_resolved_in_the_backend(tmp_path, sb):  # review C1(d)
     url, key = sb
     cart_id = f"cv-e2e-{uuid.uuid4().hex[:8]}"
+    try:
+        _unknown_resolved(tmp_path, sb, url, key, cart_id)
+    finally:
+        reset(sb, cart_id)
+
+
+def _unknown_resolved(tmp_path, sb, url, key, cart_id):
     catalog = fetch_catalog(url, key)
     cfg = Config(features="hist", cart_id=cart_id)
     gallery = Gallery(tmp_path / "gallery", HistogramFeatures())
