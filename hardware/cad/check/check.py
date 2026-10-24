@@ -57,7 +57,7 @@ def mock_run(overrides):
     # params in mm (lengths) / rad (angles), keyed by name
     units = dict((n, u) for n, _, u, _ in mod.PARAMS)
     P = dict((k, v * 10 if units.get(k) == 'mm' else v) for k, v in L['params'].items())
-    return ok, P
+    return ok, P, bool(getattr(mod, 'TIES', True))
 
 
 # ----------------------------------------------------------- 2. solids
@@ -94,7 +94,7 @@ def solids_from_log(np, CrossSection, FillRule, Manifold):
     return solids, prism
 
 
-def solid_checks(P, results):
+def solid_checks(P, results, ties=True):
     import numpy as np
     from manifold3d import CrossSection, FillRule, Manifold
     solids, prism = solids_from_log(np, CrossSection, FillRule, Manifold)
@@ -282,7 +282,9 @@ def solid_checks(P, results):
              + wq(rw + 0.05, rw + 2.5, -rp - 2.5, rp + 2.5))      # round its basket side
     t0, t1 = P['tie_x'] - P['zt_w'] / 2, P['tie_x'] + P['zt_w'] / 2
     print('\nzip-tie loops:')
-    for n, xs in [('Bracket_L', (-bx + t0, -bx + t1)), ('Bracket_R', (bx - t1, bx - t0))]:
+    if not ties:
+        print('  parked (TIES = False in the script): not checked yet')
+    for n, xs in [('Bracket_L', (-bx + t0, -bx + t1)), ('Bracket_R', (bx - t1, bx - t0))] * ties:
         report('%s: handle tie has room' % n, vol(solids[n], prism(band, *xs)))
         report('%s: wire tie has room' % n, vol(solids[n], prism(wband, *xs)))
 
@@ -347,6 +349,122 @@ def preview_png(solids, path):
     plt.savefig(path, dpi=85)
 
 
+def profile_png(solids, P, path):
+    """Side profile of Bracket_L (shopper on the left), sliced from the real
+    solid, with the cart and the iPad, member names and key numbers."""
+    import numpy as np
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Circle, PathPatch, Polygon, Rectangle
+    from matplotlib.path import Path
+    from manifold3d import CrossSection
+    # (X, Y, Z) -> (Y, Z, X) so a slice at constant X is the side view
+    back = np.array([[0, 1, 0, 0], [0, 0, 1, 0], [1, 0, 0, 0]], dtype=float)
+    br = solids['Bracket_L'].transform(back)
+    bx = P['bx_o']
+    sil = CrossSection()
+    for x in np.arange(-bx + 0.5, -bx + 34, 1.0):
+        sil = sil + br.slice(float(x))
+    fig, ax = plt.subplots(figsize=(8, 10))
+    t = P['tilt']
+    s, c = math.sin(t), math.cos(t)
+
+    def pvn(v, n):
+        return (P['ipad_y0'] + v * s + n * c, P['ipad_z0'] + v * c - n * s)
+
+    H, D = P['ipad_h'], P['ipad_d']
+    ax.add_patch(Polygon([pvn(0, 0), pvn(H, 0), pvn(H, D), pvn(0, D)], closed=True,
+                         fc='#e9edf1', ec='#8a96a3', lw=1, label='iPad'))
+    verts, codes = [], []
+    for poly in sil.to_polygons():          # outlines + holes, one compound path
+        poly = np.asarray(poly)
+        verts += list(poly) + [poly[0]]
+        codes += [Path.MOVETO] + [Path.LINETO] * (len(poly) - 1) + [Path.CLOSEPOLY]
+    ax.add_patch(PathPatch(Path(verts, codes), fc='#2f7fd8', ec='#0b3d7a', lw=1.2, alpha=0.9,
+                           label='bracket'))
+    # cart: handle, wire, middle bars, and the mesh plane they sit in
+    wc = (P['rim_dy'], -P['rim_drop'])
+    rc = P['rim_c']
+    ux, uz = P['rim_dy'] / rc, -P['rim_drop'] / rc
+    ax.plot([0, (rc + 25) * ux], [0, (rc + 25) * uz], color='#999999', lw=1, ls='--',
+            label='mesh plane (slanted wires at 60, 103, 146 mm ...)')
+    ax.add_patch(Circle((0, 0), P['handle_d'] / 2, fc='#555555', ec='k', lw=0.8, label='handle'))
+    ax.add_patch(Circle(wc, P['rim_d'] / 2, fc='#555555', ec='k', lw=0.8, label='wire'))
+    ax.add_patch(Rectangle((P['bar1_y'] - P['bar1_w'] / 2, P['bar1_z'] - P['bar1_h'] / 2),
+                           P['bar1_w'], P['bar1_h'], fc='#d62728', ec='k', lw=0.6,
+                           label='middle bars'))
+    ax.add_patch(Circle((P['bar2_y'], P['bar2_z']), P['bar2_d'] / 2, fc='#d62728', ec='k', lw=0.6))
+
+    def note(xy, text, dxy):
+        ax.annotate(text, xy=xy, xytext=(xy[0] + dxy[0], xy[1] + dxy[1]), fontsize=10,
+                    arrowprops=dict(arrowstyle='-', color='#333333', lw=0.7))
+
+    rs = P['r_sad']
+    top_y, top_z = pvn(P['top_v'], P['n_b'])
+    a0, a1 = math.radians(25), math.radians(70)
+    am = ((rs * math.cos(a0) + rs * math.cos(a1)) / 2, (rs * math.sin(a0) + rs * math.sin(a1)) / 2)
+    low_y, low_z = pvn(P['low_v'], P['n_b'])
+    note(pvn(H * 0.75, -3), 'channel (holds one short edge)', (-95, 10))
+    note((18 * math.cos(math.radians(125)), 18 * math.sin(math.radians(125))),
+         'arch on the handle', (-75, 25))
+    note(((top_y + am[0]) / 2, (top_z + am[1]) / 2), 'upper strut', (25, 5))
+    note(pvn(25, P['n_b'] + 4), 'back rib', (-60, -25))
+    note(((low_y + wc[0]) / 2, (low_z + wc[1]) / 2), 'lower strut', (-75, -15))
+    note((wc[0] - P['r_pad'] / 2, wc[1]), 'hook on the wire', (15, -25))
+    (y0, z0), (y1, z1) = pvn(0, 0), pvn(H, 0)
+    ax.annotate('screen %.0f° to the ground' % (90 - math.degrees(t)), xy=pvn(H * 0.4, 0),
+                xytext=(y0 - 45, z0 + 75), fontsize=10, arrowprops=dict(arrowstyle='-', lw=0.7))
+    ax.annotate('wire: %.0f mm toward the basket,\n%.0f mm below the handle centre'
+                % (P['rim_dy'], P['rim_drop']), xy=wc, xytext=(wc[0] + 15, wc[1] + 35), fontsize=9,
+                arrowprops=dict(arrowstyle='-', lw=0.7))
+    # Side-view clearances from the bracket's outline to each cart part
+    segs = []
+    for poly in sil.to_polygons():
+        poly = np.asarray(poly)
+        segs.append(np.stack([poly, np.roll(poly, -1, axis=0)], axis=1))
+    segs = np.concatenate(segs)
+
+    def gap(points):
+        a, b = segs[:, 0], segs[:, 1]
+        ab = b - a
+        tt = np.clip(np.einsum('ijk,jk->ij', points[:, None, :] - a[None], ab)
+                     / np.maximum((ab * ab).sum(1), 1e-12)[None], 0, 1)
+        d = np.linalg.norm(points[:, None, :] - (a[None] + tt[..., None] * ab[None]), axis=2)
+        return d.min()
+
+    def ring(cy, cz, r):
+        th = np.linspace(0, 2 * np.pi, 180, endpoint=False)
+        return np.c_[cy + r * np.cos(th), cz + r * np.sin(th)]
+
+    def box_pts(cy, cz, w, h):
+        e = np.linspace(-0.5, 0.5, 40)
+        return np.r_[np.c_[cy + e * w, np.full(40, cz - h / 2)], np.c_[cy + e * w, np.full(40, cz + h / 2)],
+                     np.c_[np.full(40, cy - w / 2), cz + e * h], np.c_[np.full(40, cy + w / 2), cz + e * h]]
+
+    gaps = [('upper middle bar', gap(box_pts(P['bar1_y'], P['bar1_z'], P['bar1_w'], P['bar1_h']))),
+            ('lower middle bar', gap(ring(P['bar2_y'], P['bar2_z'], P['bar2_d'] / 2))),
+            ('handle (bore clearance)', gap(ring(0, 0, P['handle_d'] / 2))),
+            ('wire (notch clearance)', gap(ring(wc[0], wc[1], P['rim_d'] / 2)))]
+    ax.text(0.02, 0.02, 'side-view clearances:\n' + '\n'.join('  %s: %.1f mm' % g for g in gaps),
+            transform=ax.transAxes, fontsize=9, va='bottom', family='monospace')
+    print('\nside-view clearances:')
+    for name, g in gaps:
+        print('  %-50s %.1f mm' % (name, g))
+    ax.set_aspect('equal')
+    ax.autoscale_view()
+    xl, yl = ax.get_xlim(), ax.get_ylim()
+    ax.set_xlim(xl[0] - 60, xl[1] + 70)
+    ax.set_ylim(yl[0] - 25, yl[1] + 20)
+    ax.grid(lw=0.3, color='#dddddd')
+    ax.set_xlabel('mm  (shopper ←   → basket)')
+    ax.set_ylabel('mm  (handle centre = 0)')
+    ax.set_title('KART iPad mount: bracket side profile', fontsize=12)
+    ax.legend(loc='upper left', fontsize=8, frameon=False)
+    plt.tight_layout()
+    plt.savefig(path, dpi=110)
+
+
 def main():
     global SCRIPT
     args = [a for a in sys.argv[1:] if not a.startswith('--script=')]
@@ -355,17 +473,18 @@ def main():
             SCRIPT = a.split('=', 1)[1]
     overrides = dict(a.split('=', 1) for a in args)
     os.makedirs(OUT, exist_ok=True)
-    ok, P = mock_run(overrides)
+    ok, P, ties = mock_run(overrides)
     if not ok:
         print('\nRESULT: mock run FAILED (fix this before the solid checks mean anything)')
         sys.exit(1)
     results = {}
-    ok = solid_checks(P, results)
+    ok = solid_checks(P, results, ties)
     solids = results['solids']
     for n in ['Bracket_L', 'Bracket_R', 'Spacer', 'TEST_Corner', 'TEST_Profile']:
         if n in solids:
             write_stl(solids[n], os.path.join(OUT, 'preview_%s.stl' % n.lower()))
     preview_png(solids, os.path.join(OUT, 'preview.png'))
+    profile_png(solids, P, os.path.join(OUT, 'profile.png'))
     print('\npreview STLs + preview.png -> %s' % OUT)
     print('RESULT: %s' % ('ALL CHECKS PASS' if ok else 'CHECKS FAILED'))
     sys.exit(0 if ok else 1)
