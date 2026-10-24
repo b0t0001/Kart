@@ -31,10 +31,10 @@ trips), and the reset doesn't clear them.
 | 6 | Judge | Takes something back out | Total drops |
 | 7 | Judge | "I'm done" → **Pay** | Receipt: "You saved $3.00 · N-minute trip". In the console, Store insights adds a trip and the Parmesan bar fills |
 
-**Cards never show for items already on the shopping list.** If the voice agent puts Parmesan on
-the list in beat 2, the owner's new deal appears on that list row ("$3 off") instead of as a card.
-For the card moment, keep "pasta dinner" planned as the basics; `cart.py plan pasta` does exactly
-that.
+**Cards never show for items already on the shopping list.** If Parmesan is already on the list
+when the owner creates its deal, the list row shows $3 off, and the iPad shows a one-tap "New deal"
+note (Kart says it once). The iPad agent plans only the basics for a meal (pasta, sauce, bread) and
+leaves the cheese to the deal card, as `cart.py plan pasta` does.
 
 Optional merchant beats, if a judge asks:
 - **"We're out of Rao's"** → Confirm. The shopping list shows it out of stock, and Kart stops suggesting it.

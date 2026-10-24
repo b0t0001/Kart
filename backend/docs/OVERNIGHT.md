@@ -74,10 +74,10 @@ iPad hides cards for listed items, so after a Yes no other deal could pop.
   the cart). The other rules are unchanged: each deal at most once per trip, and a deal the store
   creates later still replaces the current card.
 - **Analytics are unchanged:** an offer still counts as "taken" only when the product goes into the cart.
-- **Demo impact:** a deal on something already on the list shows on that list row ("$3 off"), not
-  as a card. The simulator and `cart.py plan pasta` now plan the basics (spaghetti, sauce, bread), so
-  the Parmesan card still pops after the spaghetti. **For the iPad chat:** if its agent plans
-  Parmesan for "pasta dinner", the merchant beat shows on the list row instead of as a card.
+- **Demo impact:** when the store creates a deal on something already on the list, the list row
+  shows $3 off, and the iPad shows a one-tap "New deal" note (Kart says it once), not the "Want it?"
+  card. The iPad agent now plans only the basics for a meal (pasta, sauce, bread), as the simulator
+  and `cart.py plan pasta` do, so the Parmesan card still pops after the spaghetti.
 - **Tests:** 3 new unit tests (53 backend in total), plus a "Yes" step in the end-to-end trip and a
   REST test that the next deal surfaces (5 end-to-end in total). All pass on local Supabase, which
   has the new SQL applied.
