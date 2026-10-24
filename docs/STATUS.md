@@ -16,10 +16,16 @@ Owned by the manager session and updated at each check-in. The newest entry is a
    - `SUPABASE_ACCESS_TOKEN`
 3. Add `ANTHROPIC_API_KEY` to `.env`.
 4. Cartesia: create an API key and the Line agent, then add `CARTESIA_API_KEY` and `CARTESIA_AGENT_ID` to `.env`. The iPad chat lists the exact steps in `ios/docs/OVERNIGHT.md`.
-5. Run `backend/go_live.sh`; it should print PASS.
+5. Run `backend/go_live.sh`; it should print PASS. Then try the merchant console with real Claude (`backend/docs/DEMO.md`). The local stack can be stopped with `supabase stop --workdir backend && colima stop`.
 6. Your teammate pulls `main` and runs the CV code on the Pi (`pi/README.md`, `hardware/README.md`).
 
 ## Log
+
+### 2026-10-24 ~01:20 · check-in
+- **Backend: DONE overnight** (idle). Local Supabase is running through colima, with values in `.env` under the `LOCAL SUPABASE` header and no Anthropic or Cartesia keys. Also done: `go_live.sh`, which was rehearsed against local and refuses to run while `.env` points at local; the end-to-end suite (`backend/e2e`); anonymous store insights; `DEMO.md`; and `cart.py` emergency levers. Tests: 50 backend, 42 merchant, 4 end-to-end, 5 Edge Function. Its message to the other chats was blocked by the app's pause, so the manager relayed "local Supabase is up" to CV and the iPad.
+- **CV: building.** Motion/settle, change detection, persistent cart memory, the few-shot gallery and the synthetic scene generator are committed; now on cloud identification.
+- **iPad: building.** The backend protocol, mock cart rules, deal suggestions with P10, checkout, simulated payment, the voice protocol with a scripted mock agent, and avatar mood are committed.
+- Synced: 19 commits pushed. No secrets in tracked files, and `.env` is untracked.
 
 ### 2026-10-24 ~01:00 · overnight build started
 - Dylan is away until morning. All three chats are building autonomously, logging their decisions in `*/docs/OVERNIGHT.md`, and committing to `main` after each piece.
