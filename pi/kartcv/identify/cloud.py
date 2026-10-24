@@ -12,7 +12,7 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-MAX_CROPS = 4
+MAX_CROPS = 2  # one per camera: smaller upload, faster answer
 MAX_SIDE = 512
 
 SYSTEM = (

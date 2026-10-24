@@ -46,7 +46,7 @@ class Config:
     local_min_margin: float = 0.08
     cloud_model: str = "claude-haiku-5-5"
     cloud_min_conf: float = 0.6
-    cloud_timeout_s: float = 3.0
+    cloud_timeout_s: float = 6.0  # Haiku vision + upload over a phone hotspot regularly exceeds 3 s
 
     # files, relative to the repo root unless absolute
     catalog_path: str = "data/store.json"

@@ -46,11 +46,11 @@ def ans(pid, conf=0.8, label="x"):
 
 def test_request_shape():
     fc = FakeClient(ans("kirkland-parmesan"))
-    CloudIdentifier(CAT, "claude-haiku-5-5", 3.0, client=fc).identify([CROP] * 6)
+    CloudIdentifier(CAT, "claude-haiku-5-5", 6.0, client=fc).identify([CROP] * 6)
     kw = fc.kwargs
     content = kw["messages"][0]["content"]
     imgs = [b for b in content if b["type"] == "image"]
-    assert kw["model"] == "claude-haiku-5-5" and fc.options == {"timeout": 3.0, "max_retries": 0} and len(imgs) == 4
+    assert kw["model"] == "claude-haiku-5-5" and fc.options == {"timeout": 6.0, "max_retries": 0} and len(imgs) == 2
     assert imgs[0]["source"]["media_type"] == "image/jpeg" and content[-1]["type"] == "text"
     assert "rao-marinara | Rao's Marinara | jar" in content[-1]["text"]
     schema = kw["output_config"]["format"]["schema"]
