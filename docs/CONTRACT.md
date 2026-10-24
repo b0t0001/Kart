@@ -1,4 +1,4 @@
-# KART integration contract — v0.19 (DRAFT)
+# KART integration contract — v0.20 (DRAFT)
 
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
@@ -169,7 +169,7 @@ Spec: `docs/specs/2026-10-24-member-memory-design.md`. Flag: `member_memory`. Ro
 - `member_forget` returns `{"forgotten": n | "all"}`.
 - **Edge-case additions (spec §3.9):**
   - RPC `member_lookup(p_member_id) → {exists, name}`, which never creates anything (used for the "Dylan N.? That's me / Not me" confirmation).
-  - iPad→agent events `{"type":"member_forgotten"}` and `{"type":"member_idle"}`; agent→iPad `{"type":"show_memories"}` (tool `show_memories`).
+  - iPad→agent events `{"type":"member_forgotten"}`, `{"type":"member_forget_failed"}` (v0.20: Kart says "Sorry, I couldn't do that just now.") and `{"type":"member_idle"}`; agent→iPad `{"type":"show_memories"}` (tool `show_memories`).
   - Sensitive categories (pharmacy, health, medicine, personal-care, baby, pregnancy, adult) are never copied into member history.
   - Undated events expire 30 days after they were saved.
   - Conversational moments:
@@ -177,7 +177,7 @@ Spec: `docs/specs/2026-10-24-member-memory-design.md`. Flag: `member_memory`. Ro
     - New agent tool `sign_out`, which calls `set_member(cart, null)`, for "that's not me".
     - "Don't remember that" → forget the memory just saved.
     - "What did I buy last time?" → answered from `last_trip`.
-- **Agent tool `shop_saved_list(memory_id)`:** puts a saved list on today's plan in one `set_plan`, keeping what's already there. Greeting example (Act 2): *"Welcome back, Dylan!" / "Leo's soccer team party is tomorrow. Want the list you saved?"* → "Yes." → *"Done, it's on your list. First stop: Aisle 6 → Spaghetti."* (fixed lines, no Claude round). Known gap: it passes meal = the list's title, so existing plan lines get relabelled.
+- **Agent tool `shop_saved_list(memory_id)`:** puts a saved list on today's plan in one `set_plan`, keeping what's already there. Greeting example (Act 2): *"Welcome back, Dylan!" / "Leo's soccer team party is tomorrow. Want the list you saved?"* → "Yes." → *"Done, it's on your list. First stop: Aisle 6 → Spaghetti."* (fixed lines, no Claude round). Existing plan lines keep their own reason and meal; only the saved items get the event's name (an item-level `meal` in `set_plan` wins over the turn's meal). On an empty trip, the event becomes the trip's meal, so a nudge names the party ("Leo's soccer team party needs three").
 - **Agent:**
   - `trip_context.member_id` (additive). When it's present, Kart fetches the profile before greeting ("Welcome back, Dylan!").
   - The tools `remember` / `save_for_later` / `forget` are offered only to signed-in members.
@@ -287,7 +287,7 @@ All additive; nothing already built breaks. **Accepted at the contract level (v0
 | P2 | `carts.status` (`idle`\|`shopping`\|`checkout`\|`paid`) + `carts.trip_started_at`, both set by `reset_cart`; RPC `set_cart_status(p_cart_id, p_status)` | screen routing, voice-started checkout, trip time on the receipt |
 | P3 | `carts.location` jsonb `{section, source: "item"\|"voice", at}`; `apply_cart_event` sets it to the added product's section; RPC `set_location(p_cart_id, p_section)` | "you are here"; feeds `next_step` routing |
 | P4 | `cart_events.resolved_at`; `apply_cart_event(..., p_resolves_event_id uuid default null)`; a manual fix that names an unrecognized event marks it resolved | confirm cards clear; checkout blocks on unresolved items |
-| P5 | RPC `dismiss_suggestion(p_cart_id)`: clears the suggestion and doesn't re-offer that deal this trip | the "No thanks" button |
+| P5 | RPC `dismiss_suggestion(p_cart_id)`: clears the suggestion and doesn't re-offer that deal this trip. **v0.20: a "No thanks" also stops other unprompted deal cards for the rest of the trip** (Kart takes no for an answer; "what's on sale?" still answers) | the "No thanks" button |
 | P6 | Table `transcript` (`id`, `cart_id`, `trip_id`, `role` user\|agent, `text`, `created_at`; realtime ON) + RPC `append_transcript`; `reset_cart` deletes the old trip's rows | live captions; privacy story |
 | P7 | Supabase Edge Function `voice-token`: uses `CARTESIA_API_KEY` to return a short-lived Line token. **The backend writes it** (it owns the Supabase project); the iPad chat specifies the request and response | keeps the key off the iPad |
 | P8 | `carts.savings` + per-item `list_price`; RPC `checkout(p_cart_id, p_provider)` writes a `receipts` row (`cart_id`, `trip_id`, `total`, `savings`, `item_count`, `duration_s`, `provider`, `status`) and sets status `paid`. Payment is simulated in v1 | "saved $x", strikethrough prices, receipt |
@@ -366,3 +366,4 @@ All three feature chats work in the **same main checkout**, so stay inside your 
 - v0.17 — The backend fully removed the personal-items pieces. Shopper-interaction RPCs are live: `add_to_plan`, `remove_from_plan`, `set_budget`, `plan.meal`, duplicate merging. Nearby stores are on hosted. The mini store puts bakery last.
 - v0.18 — Quantity nudges ON by default (over + checkout list). Demo props: one each, plus 3 spaghetti boxes; kids' scissors replace the chocolate. cam1 moves to USB port 1.3.
 - v0.19 — Member memory MERGED to main (flag still off by default; tag `stable-pre-memory`). Seed has no party by default (Act 1 captures it live). The stability-rule wording is corrected: only `set_member`/`set_demo_date` check the flag. With both betas together, a saved list's quantities count as the plan, so 3 spaghetti for a party of 12 isn't "too much".
+- v0.20 — Member follow-up merged: `member_forget_failed` event, failed lookups offer try again or shop as guest, saved lists keep today's labels, set_plan items carry their own `meal`. Deal policy: one "No thanks" quiets unprompted deal cards for the trip (backend).

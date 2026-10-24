@@ -22,7 +22,7 @@
 > | # | Shopper | Kart / cart | Shows |
 > |---|---|---|---|
 > | 8 | Demo controls → **"Fast-forward to Friday"** (new trip, the date jumps ahead) → sign in as **Dylan** | **"Welcome back, Dylan!" / "Leo's soccer team party is tomorrow. Want the list you saved?"** (fixed line, instant) | Memory kept across trips |
-> | 9 | "Yes." → drop **all 3 spaghetti boxes**, side by side or overlapping, **never stacked exactly** | "Done, it's on your list. First stop: Aisle 6 → Spaghetti." → three boxes, **no nudge** (the party needs three) | A ready-made list from memory; the nudge knows the meal, not a fixed number |
+> | 9 | "Yes." → drop **all 3 spaghetti boxes**, side by side or overlapping, **never stacked exactly**; "No thanks" to the Parmesan card on box 1 | "Done, it's on your list. First stop: Aisle 6 → Spaghetti." → "Got one Spaghetti, 2 more to go. Parmesan is $1 off in Aisle 4. Want it?" → "No thanks." → "Got one Spaghetti, one more to go." → "Got the Spaghetti." **No nudge** (the party needs three), and no more deal cards after the "No thanks" | A ready-made list from memory; the nudge knows the meal, not a fixed number; Kart takes no for an answer |
 > | 10 *(optional)* | "What do you know about me?" | The memory sheet opens on the iPad, with **Forget** buttons | Privacy and control |
 >
 > Leo's party is **not** pre-seeded: it's created live in step 5c. Only the background purchase history is seeded.
