@@ -14,6 +14,7 @@ public final class MockKartBackend: KartBackend {
     @ObservationIgnored private let clock: @MainActor () -> Date
     @ObservationIgnored private var nextEventId: Int64 = 1
     @ObservationIgnored private var nextTranscriptId: Int64 = 1
+    @ObservationIgnored private var receipt: Receipt?
 
     public init(catalog: Catalog, cartId: String = "7", clock: @escaping @MainActor () -> Date = { .now }) {
         self.catalog = catalog
@@ -30,6 +31,7 @@ public final class MockKartBackend: KartBackend {
                          plan: [], suggestedDeals: [], status: .shopping, tripStartedAt: now, updatedAt: now)
         events = []
         transcript = []
+        receipt = nil
         nextEventId = 1
         nextTranscriptId = 1
     }
@@ -47,6 +49,9 @@ public final class MockKartBackend: KartBackend {
 
     public func setPlan(_ plan: [PlanItem]) async throws {
         cart.plan = plan
+        if let suggestion = cart.suggestion, plan.contains(where: { $0.productId == suggestion.productId }) {
+            cart.suggestion = nil
+        }
         recompute()
     }
 
@@ -56,12 +61,23 @@ public final class MockKartBackend: KartBackend {
     }
 
     public func setStatus(_ status: TripStatus) async throws {
+        guard status != .paid else { throw KartBackendError.invalidStatus }
         cart.status = status
         cart.updatedAt = now
     }
 
     public func checkout(provider: String) async throws -> Receipt {
-        throw KartBackendError.noActiveTrip
+        let unresolved = events.filter(\.needsConfirmation).count
+        guard unresolved == 0 else { throw KartBackendError.unresolvedItems(count: unresolved) }
+        if let receipt, receipt.tripId == cart.tripId { return receipt }
+        let duration = cart.tripStartedAt.map { Int(now.timeIntervalSince($0)) } ?? 0
+        let receipt = Receipt(id: 1, cartId: cart.cartId, tripId: cart.tripId, total: cart.total, savings: cart.savings ?? 0,
+                              itemCount: cart.itemCount, durationS: duration, provider: provider, status: "paid",
+                              items: cart.items, createdAt: now)
+        self.receipt = receipt
+        cart.status = .paid
+        cart.updatedAt = now
+        return receipt
     }
 
     public func endTrip() async throws {
@@ -84,6 +100,28 @@ public final class MockKartBackend: KartBackend {
         connection = state
     }
 
+    /// The merchant agent creating or changing a deal (P10). A newly created eligible deal replaces
+    /// the open suggestion (contract v0.9).
+    public func pushDeal(_ deal: Deal) async {
+        let isNew = !catalog.deals.contains { $0.id == deal.id }
+        if let index = catalog.deals.firstIndex(where: { $0.id == deal.id }) {
+            catalog.deals[index] = deal
+        } else {
+            catalog.deals.append(deal)
+        }
+        repriceForDrops()
+        let inCart = Set(cart.items.map(\.productId))
+        if isNew, isEligible(deal), !inCart.isDisjoint(with: deal.pairsWith) {
+            offer(deal)
+        }
+        recompute()
+    }
+
+    public func removeDeal(id: String) async {
+        catalog.deals.removeAll { $0.id == id }
+        recompute()
+    }
+
     // MARK: Rules
 
     private func record(_ type: CartEventType, productId: String?, confidence: Double, source: CartEventSource,
@@ -95,8 +133,11 @@ public final class MockKartBackend: KartBackend {
         nextEventId += 1
         guard let product else { cart.updatedAt = now; return }
         switch type {
-        case .added: add(product)
-        case .removed: remove(product)
+        case .added:
+            add(product)
+            offerDeal(pairedWith: product)
+        case .removed:
+            remove(product)
         }
         recompute()
     }
@@ -122,6 +163,7 @@ public final class MockKartBackend: KartBackend {
                                        dealId: deal?.id, section: product.section, addedAt: now, lastAddedAt: now))
         }
         cart.location = CartLocation(section: product.section, source: "item", at: now)
+        if cart.suggestion?.productId == product.id { cart.suggestion = nil }
     }
 
     private func remove(_ product: Product) {
@@ -141,6 +183,44 @@ public final class MockKartBackend: KartBackend {
         var rounded = Decimal()
         NSDecimalRound(&rounded, &value, 2, .plain)
         return (rounded, deal)
+    }
+
+    private func offerDeal(pairedWith product: Product) {
+        guard cart.suggestion == nil,
+              let deal = catalog.deals.first(where: { $0.pairsWith.contains(product.id) && isEligible($0) }) else { return }
+        offer(deal)
+    }
+
+    private func isEligible(_ deal: Deal) -> Bool {
+        let active = deal.endsAt.map { $0 > now } ?? true
+        return active
+            && !cart.items.contains { $0.productId == deal.productId }
+            && !cart.plan.contains { $0.productId == deal.productId }
+            && !cart.suggestedDeals.contains(deal.id)
+    }
+
+    private func offer(_ deal: Deal) {
+        guard let product = catalog.product(deal.productId) else { return }
+        let aisle = catalog.section(product.section)?.aisleLabel ?? product.section
+        cart.suggestion = Suggestion(productId: product.id, dealId: deal.id,
+                                     text: "\(product.shortName) is \(deal.label) in \(aisle). Want it?",
+                                     name: product.shortName, dealLabel: deal.label, aisle: aisle,
+                                     section: product.section, price: product.price,
+                                     salePrice: effectivePrice(of: product).price, offeredAt: now)
+        cart.suggestedDeals.append(deal.id)
+    }
+
+    /// P10: drops reach items already in the cart; increases never do.
+    private func repriceForDrops() {
+        for index in cart.items.indices {
+            guard let product = catalog.product(cart.items[index].productId) else { continue }
+            let (price, deal) = effectivePrice(of: product)
+            if price < cart.items[index].price {
+                cart.items[index].price = price
+                cart.items[index].dealLabel = deal?.label
+                cart.items[index].dealId = deal?.id
+            }
+        }
     }
 
     private func recompute() {
