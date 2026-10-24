@@ -220,3 +220,31 @@ def test_big_camera_shift_is_disturbed_and_never_realigns_memory(tmp_path):  # r
     assert run(p, sc, n) == []
     assert {c: v.box for c, v in next(iter(p.cart.instances.values())).views.items()} == boxes
     assert 0 in p.status()["camera_moved"]
+
+
+TALL = Item("red-box", 300, 200, seed=1, tall=900)  # an upright bottle: reaches the top edge of both frames
+
+
+def test_tall_item_reaching_the_top_edge_is_billed_and_removed(tmp_path):  # real-cart: the Tide bottle
+    from kartcv.changes import detect_changes
+    cfg = make(tmp_path / "x")[0].cfg
+    for c in (0, 1):  # in BOTH cameras it looks exactly like an arm reaching in from the edge
+        r = detect_changes(c, Scene().render(c, 1), Scene(items=[TALL]).render(c, 2), cfg)
+        assert r.blobs and all(b.edge for b in r.blobs)
+    p, sink = make(tmp_path)
+    sc = Script(Scene()).still(1.0).drop(TALL).still(4.0)
+    assert [t for t, _ in run(p, sc)] == ["added"]
+    n = len(sc.ticks)
+    sc.take("red-box").still(4.0)
+    assert [t for t, _ in run(p, sc, n)] == ["removed"]
+    assert sink.events[0].product_id == sink.events[1].product_id and len(p.cart.instances) == 0
+
+
+def test_long_hand_rest_nets_zero_and_resolves(tmp_path):  # a hand left still for longer than the recheck
+    p, sink = make(tmp_path)
+    run(p, Script(Scene()).still(1.0).hand_rest(5.0).still(4.0))
+    assert len(p.cart.instances) == 0
+    adds = [e for e in sink.events if e.type == "added"]
+    rems = [e for e in sink.events if e.type == "removed"]
+    assert len(adds) == len(rems) and all(e.product_id is None for e in adds)
+    assert {e.resolves_event_id for e in rems} == {e.event_id for e in adds}

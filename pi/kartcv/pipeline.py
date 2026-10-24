@@ -54,6 +54,7 @@ class Pipeline:
         self._present: set[int] = set()  # cameras that had a frame on the previous tick
         self._resync: set[int] = set()   # cameras back from an outage: re-reference at the next settle
         self.camera_moved: set[int] = set()  # a big view shift with items in the cart: reset recommended
+        self._recheck_at: float | None = None  # when to re-judge a deferred edge-touching change, if still
 
     def _roi(self, cam: int):
         return self.cfg.roi.get(str(cam))
@@ -134,14 +135,27 @@ class Pipeline:
             self.references.setdefault(c, f.image)
 
         moving = {c: self.motion[c].update(f.image) for c, f in frames.items()}
+        ts = min(f.ts for f in frames.values())
         was = self.settle.state
-        settled = self.settle.update(min(f.ts for f in frames.values()), moving)
+        settled = self.settle.update(ts, moving)
+        if any(moving.values()):
+            self._recheck_at = None  # it moved: not a static object; the next settle judges it again
         if was == "idle" and self.settle.state == "motion":
             log.info("MOTION")
-        if not settled:
-            return []
-        log.info("SETTLED")
+        if settled:
+            log.info("SETTLED")
+            return self._process(frames, ts, accept_edges=False)
+        if self._recheck_at is not None and self.settle.state == "idle" and ts >= self._recheck_at - 1e-6:
+            self._recheck_at = None
+            log.info("RECHECK: the edge-touching change stayed still %.0f s more: judging it as an item",
+                     self.cfg.intrusion_recheck_s)
+            return self._process(frames, ts, accept_edges=True)
+        return []
 
+    def _process(self, frames: dict, ts: float, accept_edges: bool) -> list[Event]:
+        """Judge a still moment. Changes reaching the image edge (an arm over the rim, or a tall item
+        poking up past it) are deferred unless `accept_edges`: an arm moves on, a bottle stays, so if
+        nothing moves for intrusion_recheck_s the change is re-judged with accept_edges=True."""
         results = []
         edge_cams = set()
         for c, f in frames.items():
@@ -162,13 +176,14 @@ class Pipeline:
                     self.camera_moved.add(c)
             elif r.status == "disturbed":
                 log.warning("cam%d: %.0f%% of the view changed (lighting?); ignoring this settle", c, 100 * r.changed_frac)
-            elif r.status == "blobs":
-                # An arm over the rim (or a strap) reaches the frame edge; an item in the basket doesn't.
-                # Ignore it, and keep the old reference under it so that once it leaves, whatever it put
-                # down, took or covered is judged against the true before-picture.
+            elif r.status == "blobs" and not accept_edges:
+                # Something reaching the image edge: an arm over the rim, or a tall item poking up past it.
+                # Defer it, keeping the old reference under it, so that whatever an arm put down, took or
+                # covered is judged against the true before-picture once it leaves.
                 edge = [b for b in r.blobs if b.edge]
                 if edge:
-                    log.info("INTRUSION: cam%d sees something reaching over the edge (an arm?); ignoring it", c)
+                    log.info("INTRUSION: cam%d sees something reaching the edge (an arm? a tall item?); "
+                             "waiting %.0f s for it to leave or stay", c, self.cfg.intrusion_recheck_s)
                     edge_cams.add(c)
                     new_ref = f.image.copy()
                     for b in edge:
@@ -179,6 +194,8 @@ class Pipeline:
                         r.status = "none"
             self.references[c] = new_ref
             results.append(r)
+        if edge_cams:
+            self._recheck_at = ts + self.cfg.intrusion_recheck_s
         if not self.cart.instances:
             # Nothing in the cart and nothing new: this is a fresh empty-basket picture (tracks light drift).
             for r in results:

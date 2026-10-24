@@ -38,6 +38,7 @@ class Config:
     disturbed_frac: float = 0.60
     max_shift_px: float = 4.0
     edge_margin_px: int = 8  # full-res; a change this close to the frame edge is an arm, not an item
+    intrusion_recheck_s: float = 3.0  # an edge-touching change that then stays this still is an item (tall bottle)
     empty_thresh: float = 18.0
     crop_pad: float = 0.10
 

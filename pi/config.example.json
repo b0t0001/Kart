@@ -23,6 +23,8 @@
   "min_blob_frac": 0.004,
   "disturbed_frac": 0.6,
   "max_shift_px": 4.0,
+  "edge_margin_px": 8,
+  "intrusion_recheck_s": 3.0,
   "empty_thresh": 18.0,
   "crop_pad": 0.1,
   "features": "hist",

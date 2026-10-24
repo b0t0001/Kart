@@ -47,6 +47,7 @@ class Item:
     w: int = 120
     h: int = 90
     seed: int = 0
+    tall: int = 0  # how far (image px) the item rises above its footprint: an upright bottle near rim height
 
     @property
     def center(self) -> tuple[int, int]:
@@ -129,6 +130,12 @@ def _warped(cam: int, items: tuple[Item, ...], hand: tuple[int, int] | None, arm
     view = cv2.warpPerspective(_topdown(items, hand), _H[cam], CAM_SIZE, flags=cv2.INTER_LINEAR)
     out = np.roll(_BG, (room_shift[1], room_shift[0]), axis=(0, 1)) if room_shift != (0, 0) else _BG.copy()
     out[_MASK[cam]] = view[_MASK[cam]]
+    for it in items:
+        if it.tall:  # its body rises in the image, over the wall and possibly to the top edge
+            x, y, w, h = item_box(cam, it, pad=0.0)
+            hsv = np.uint8([[[(it.seed * 47) % 180, 200, 200]]])
+            color = tuple(int(v) for v in cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)[0, 0])
+            cv2.rectangle(out, (x + w // 6, max(0, y - it.tall)), (x + w - w // 6, y + h // 2), color, -1)
     if hand is not None and arm:
         u, v = project(cam, hand)
         cv2.line(out, (u, v + 30), (u, CAM_SIZE[1] + ARM_WIDTH), SLEEVE_BGR, ARM_WIDTH)
