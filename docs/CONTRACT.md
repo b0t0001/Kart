@@ -173,6 +173,11 @@ Spec: `docs/specs/2026-10-24-member-memory-design.md`. Flag: `member_memory`. Ro
   - iPad→agent events `{"type":"member_forgotten"}` and `{"type":"member_idle"}`; agent→iPad `{"type":"show_memories"}` (tool `show_memories`).
   - Sensitive categories (pharmacy, health, medicine, personal-care, baby, pregnancy, adult) are never copied into member history.
   - Undated events expire 30 days after they were saved.
+  - Conversational moments:
+    - `member_memories.kind` gains `reminder` (dated): it surfaces from the day before until 3 days after, and its items become picks ("batteries · reminder").
+    - New agent tool `sign_out`, which calls `set_member(cart, null)`, for "that's not me".
+    - "Don't remember that" → forget the memory just saved.
+    - "What did I buy last time?" → answered from `last_trip`.
 - **Agent tool `shop_saved_list(memory_id)`:** puts a saved list on today's plan in one `set_plan`, keeping what's already there. Greeting example: *"Welcome back, Dylan! Leo's soccer party is tomorrow. Want the nachos list?"*
 - **Agent:**
   - `trip_context.member_id` (additive). When it's present, Kart fetches the profile before greeting ("Welcome back, Dylan!").
