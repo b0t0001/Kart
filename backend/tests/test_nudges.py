@@ -178,20 +178,20 @@ def at_checkout(cart):
 def test_checkout_gathers_every_short_item_into_one_nudge(at_checkout):
     n = at_checkout("set_cart_status", p_status="checkout")["nudge"]
     assert n["kind"] == "under"
-    # walking order from where the shopper is (Aisle 5): ahead first, then back toward the entrance
+    # walking order from where the shopper is (Aisle 5): always the nearest aisle next (5 → 4 → 3 → 8)
     assert [(i["product_id"], i["have"], i["need"]) for i in n["items"]] == [
-        ("taco-seasoning", 0, 1), ("mission-tortillas", 1, 2), ("tillamook-mexican-cheese", 0, 1), ("ground-beef", 0, 2)]
+        ("taco-seasoning", 0, 1), ("tillamook-mexican-cheese", 0, 1), ("ground-beef", 0, 2), ("mission-tortillas", 1, 2)]
     assert n["items"][0] == {"product_id": "taco-seasoning", "name": "Taco Seasoning", "have": 0, "need": 1,
                              "aisle": "Aisle 5"}
     assert (n["product_id"], n["have"], n["need"], n["aisle"]) == ("taco-seasoning", 0, 1, "Aisle 5")  # compat
-    assert n["text"] == "Before you go: you still need Taco Seasoning, Tortillas, Mexican Cheese and Ground Beef."
+    assert n["text"] == "Before you go: you still need Taco Seasoning, Mexican Cheese, Ground Beef and Tortillas."
 
 
 def test_the_checkout_list_shrinks_as_items_are_fixed(at_checkout):
     at_checkout("set_cart_status", p_status="checkout")
     n = add(at_checkout, "taco-seasoning")["nudge"]
-    assert [i["product_id"] for i in n["items"]] == ["mission-tortillas", "tillamook-mexican-cheese", "ground-beef"]
-    assert n["text"] == "Before you go: you still need Tortillas, Mexican Cheese and Ground Beef."
+    assert [i["product_id"] for i in n["items"]] == ["tillamook-mexican-cheese", "ground-beef", "mission-tortillas"]
+    assert n["text"] == "Before you go: you still need Mexican Cheese, Ground Beef and Tortillas."
 
 
 def test_skip_answers_the_whole_list_once(at_checkout):

@@ -90,3 +90,14 @@ def test_anon_can_edit_the_list_and_set_a_budget(cart, db_url):
         c.execute("select remove_from_plan('7', 'queso')")
         c.execute("select set_budget('7', 30)")
         c.rollback()
+
+
+def test_taking_it_off_the_list_means_dont_pitch_it(cart):
+    """'We've got garlic bread at home, take it off' → no 'Garlic Bread is $1 off' card this trip."""
+    cart("set_plan", p_plan=[{"product_id": "barilla-spaghetti"}, {"product_id": "rao-marinara"},
+                             {"product_id": "french-baguette"}])
+    row = cart("remove_from_plan", p_product_id="french-baguette")
+    assert "d-baguette-1off" in row["suggested_deals"]
+    cart("add_to_plan", p_product_id="kirkland-parmesan")                     # Parmesan planned: no card either
+    for pid in ["barilla-spaghetti", "rao-marinara"]:
+        assert add(cart, pid)["suggestion"] is None

@@ -8,6 +8,7 @@
                                                    merchant change; carts and deals untouched)
   python backend/db.py layout --show               the active layout
   python backend/db.py judging-stock               stock = the props bought (data/judging_stock.json); pre_judging.sh runs it
+  python backend/db.py judging-summary [--cart 7]  one line: demo-prop stock + feature flags as cart 7 sees them
   python backend/db.py reset-demo [--cart 7] [--without-deal d-parm-3off]
                                                    re-seed the catalog, clear the merchant change log,
                                                    reset_cart, status idle (between demo runs)
@@ -27,7 +28,8 @@ import kartdb
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["apply", "seed", "sync-catalog", "layout", "judging-stock", "reset-demo", "show"])
+    ap.add_argument("command", choices=["apply", "seed", "sync-catalog", "layout", "judging-stock", "judging-summary",
+                                        "reset-demo", "show"])
     ap.add_argument("name", nargs="?", help="layout: data/layouts/<name>.json")
     ap.add_argument("--db-url")
     ap.add_argument("--fresh", action="store_true", help="drop our tables first (loses carts and history)")
@@ -53,6 +55,17 @@ def main() -> None:
             print("synced", kartdb.sync_catalog(conn, with_stock=args.with_stock))
         elif args.command == "judging-stock":
             print("stock set:", kartdb.set_stock_counts(conn))
+        elif args.command == "judging-summary":
+            props = [k for k in json.loads(kartdb.JUDGING_STOCK.read_text()) if not k.startswith("_")]
+            stock = dict(conn.execute("select id, short_name || ' ' || stock from products where id = any(%s)",
+                                      [props]).fetchall())
+            flags = conn.execute("select name, feature_enabled(c.features, name) from feature_flags, carts c "
+                                 "where c.cart_id = %s order by name", [args.cart]).fetchall()
+            status = conn.execute("select status, layout from carts, store_info where cart_id = %s",
+                                  [args.cart]).fetchone()
+            print(f"summary · stock: {', '.join(stock[p] for p in props if p in stock)} · cart {args.cart}: "
+                  + ", ".join(f"{n} {'on' if on else 'off'}" for n, on in flags)
+                  + (f" · {status[0]}, layout {status[1]}" if status else " · (no cart row)"))
         elif args.command == "layout" and (args.show or not args.name):
             snap = conn.execute("select layout_snapshot()").fetchone()[0]
             placed = dict(conn.execute("select section, count(*) from products where active group by section").fetchall())

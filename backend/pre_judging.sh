@@ -10,7 +10,8 @@
 #      the merchant change log, and resets cart 7 to idle (iPad on Welcome; the Pi clears its memory).
 #   3. db.py judging-stock: stock = the props actually bought (data/judging_stock.json, 1 each). A paid
 #      trip sells them out, so run this script before EACH judge group.
-#   4. members.py seed, only with --members.
+#   4. with --members: members.py seed, and cart 7's member_memory switch ON.
+# It ends with a one-line summary (stock of the demo props, flag states for cart 7) to eyeball.
 # It affects EVERY team on the database in .env, so run it once, right before judging.
 set -euo pipefail
 
@@ -40,8 +41,11 @@ echo "── 1/4 sync-catalog --with-stock";  "$PY" "$BACKEND/db.py" sync-catalo
 echo "── 2/4 reset-demo";                  "$PY" "$BACKEND/db.py" reset-demo | head -2
 echo "── 3/4 judging stock (props bought)"; "$PY" "$BACKEND/db.py" judging-stock
 if [ "$MEMBERS" = 1 ]; then
-  echo "── 4/4 members.py seed";           "$PY" "$BACKEND/members.py" seed
+  echo "── 4/4 members.py seed + cart ${CART_ID:-7} member_memory on"
+  "$PY" "$BACKEND/members.py" seed
+  "$PY" "$BACKEND/cart.py" feature member_memory on --cart "${CART_ID:-7}"
 else
   echo "── 4/4 member seed skipped (pass --members if the beta ships)"
 fi
+echo; "$PY" "$BACKEND/db.py" judging-summary --cart "${CART_ID:-7}"
 echo "Ready for judging."

@@ -131,6 +131,10 @@ declare
   v_cur    record;
   v_keep   boolean;
   v_line   record;
+  v_rows   jsonb;
+  v_left   jsonb;
+  v_pick   jsonb;
+  v_x      int;
   v_kind   text;
   v_at     timestamptz;
   v_pos    int;
@@ -190,8 +194,9 @@ begin
   end if;
   v_pos_x := coalesce(v_pos_x, (select entrance_x from store_info where id = 1), 0);
 
-  -- Plan: done items first (as they were picked up), then the rest in walking order:
-  -- aisles ahead of the shopper left to right, then the ones behind on the way back.
+  -- Plan: done items first (as they were picked up), then the rest in walking order: from where the
+  -- shopper is, always the NEAREST aisle next (ahead wins a tie), so a shopper finishing Aisle 6 goes
+  -- to Aisle 4 before Aisle 9, and back-and-forth is kept short.
   with p as (
     select elem, ord,
            greatest(coalesce((elem->>'qty')::int, 1), 1) as want,
@@ -204,27 +209,45 @@ begin
     from jsonb_array_elements(c.plan) with ordinality as t(elem, ord)
     left join product_catalog pc on pc.id = elem->>'product_id'
   )
-  select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
-           'product_id', elem->>'product_id',
-           'reason',     elem->>'reason',
-           'basis',      elem->>'basis',
-           'meal',       elem->>'meal',
-           'meals',      elem->'meals',
-           'qty',        want,
-           'done',       coalesce(have, 0) >= want,
-           'name',       coalesce(short_name, elem->>'name'),
-           'section',    section,
-           'aisle',      aisle,
-           'in_stock',   coalesce(in_stock, false),
-           'deal_label', deal_label))
-         order by
-           (coalesce(have, 0) >= want) desc,
-           case when coalesce(have, 0) >= want then got_at end,
-           case when section_x is null then 2 when section_x >= v_pos_x then 0 else 1 end,
-           case when section_x >= v_pos_x then section_x else -section_x end,
-           section_y, ord), '[]'::jsonb)
-    into v_plan
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'obj', jsonb_strip_nulls(jsonb_build_object(
+                    'product_id', elem->>'product_id',
+                    'reason',     elem->>'reason',
+                    'basis',      elem->>'basis',
+                    'meal',       elem->>'meal',
+                    'meals',      elem->'meals',
+                    'qty',        want,
+                    'done',       coalesce(have, 0) >= want,
+                    'name',       coalesce(short_name, elem->>'name'),
+                    'section',    section,
+                    'aisle',      aisle,
+                    'in_stock',   coalesce(in_stock, false),
+                    'deal_label', deal_label)),
+           'done', coalesce(have, 0) >= want, 'got_at', got_at,
+           'x', section_x, 'y', section_y, 'ord', ord)), '[]'::jsonb)
+    into v_rows
   from p;
+
+  select coalesce(jsonb_agg(r.v->'obj' order by (r.v->>'got_at')::timestamptz nulls last, (r.v->>'ord')::int),
+                  '[]'::jsonb)
+    into v_plan
+  from jsonb_array_elements(v_rows) as r(v) where (r.v->>'done')::boolean;
+  select coalesce(jsonb_agg(r.v), '[]'::jsonb) into v_left
+  from jsonb_array_elements(v_rows) as r(v) where not (r.v->>'done')::boolean;
+  v_x := v_pos_x;
+  while jsonb_array_length(v_left) > 0 loop
+    select r.v into v_pick
+    from jsonb_array_elements(v_left) as r(v)
+    order by (r.v->>'x') is null,                                  -- unknown aisles last
+             abs(coalesce((r.v->>'x')::int, 0) - v_x),             -- nearest aisle
+             coalesce((r.v->>'x')::int, 0) < v_x,                  -- tie: ahead first
+             (r.v->>'y')::int nulls last, (r.v->>'ord')::int
+    limit 1;
+    v_plan := v_plan || jsonb_build_array(v_pick->'obj');
+    v_x := coalesce((v_pick->>'x')::int, v_x);
+    select coalesce(jsonb_agg(r.v), '[]'::jsonb) into v_left
+    from jsonb_array_elements(v_left) as r(v) where (r.v->>'ord')::int <> (v_pick->>'ord')::int;
+  end loop;
   c.plan := v_plan;
 
   -- Next step: first plan item not yet in the cart and in stock.
@@ -658,12 +681,19 @@ begin
     'product_id', p_product_id, 'qty', coalesce(p_qty, 1), 'basis', p_basis, 'meal', p_meal))));
 end $$;
 
+-- Taking something off the list ("we've got garlic bread at home") also means: don't pitch it
+-- this trip. Its deals count as already offered, and its card goes away if it's showing.
 create or replace function remove_from_plan(p_cart_id text, p_product_id text)
 returns carts language plpgsql security definer set search_path = public as $$
 declare c carts;
 begin
   insert into carts (cart_id) values (p_cart_id) on conflict do nothing;
   select * into c from carts where cart_id = p_cart_id for update;
+  update carts set
+    suggested_deals = suggested_deals || array(select d.id from deals d where d.product_id = p_product_id
+                                               and not (d.id = any(c.suggested_deals))),
+    suggestion = case when suggestion->>'product_id' = p_product_id then null else suggestion end
+  where cart_id = p_cart_id;
   return set_plan(p_cart_id, coalesce(
     (select jsonb_agg(e order by o) from jsonb_array_elements(c.plan) with ordinality as t(e, o)
      where e->>'product_id' is distinct from p_product_id), '[]'::jsonb));

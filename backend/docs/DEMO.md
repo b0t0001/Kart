@@ -26,7 +26,12 @@ commands run from the repo root. `P=backend/.venv/bin/python` is shorthand below
       spare), and **1 each** of marinara, Parmesan and kids' scissors. A paid trip sells those out, and a
       sold-out Parmesan gets no deal card, so this runs **before every group**. Until pre-judging,
       live stock stays at `store.json`'s placeholders (20);
-   4. `members.py seed`, with `--members` only.
+   4. with `--members` (the member-memory demo): `members.py seed`, and cart 7's `member_memory`
+      switch on.
+
+   It ends with one line to eyeball, e.g. `summary · stock: Spaghetti 3, Marinara 1, Parmesan 1, Kids'
+   Scissors 1 · cart 7: member_memory on, quantity_nudges on, quantity_nudges_midtrip off · idle,
+   layout mini`. Run the summary alone at any time with `$P backend/db.py judging-summary`.
 
    It affects every team, so nobody else runs it or `reset-demo` on hosted. Rehearsals reset only
    their own cart: `$P backend/cart.py reset --cart <id>`.
@@ -63,20 +68,21 @@ every paid rehearsal checkout takes items off stock. The real counts go in at pr
 
 ## The final script's route (DEMO_PLAN, top)
 
-The list is Spaghetti, Marinara and Garlic Bread. Garlic Bread is removed by voice, and **Kids'
-Scissors** (Aisle 9 · Household & School, the far aisle) is added by voice. The Parmesan comes from
-the deal card. The cart's Next stop through the script (tested in
+The list is Spaghetti, Marinara and Garlic Bread. Garlic Bread is removed by voice; taking it off the
+list also means its deal card isn't offered this trip. **Kids' Scissors** (Aisle 9 · Household &
+School, the far aisle) is added by voice, and the Parmesan comes from the deal card. Routing always
+goes to the **nearest** aisle next (ahead wins a tie). Next stop through the script (tested in
 `test_trip.py::test_final_script_route`):
 
 1. Plan → **"Aisle 6 → Spaghetti"**.
 2. Spaghetti in → card **"Parmesan is $1 off in Aisle 4. Want it?"**.
-3. "Yes" → **"Aisle 6 → Marinara"**. The rest of Aisle 6 comes first; the card already named Aisle 4.
-4. Parmesan in (Aisle 4) → still **"Aisle 6 → Marinara"**.
-5. Marinara in → **"Aisle 9 → Kids' Scissors"**.
-6. Scissors in → **"All done → Checkout"**.
+3. "Yes" → **"Aisle 6 → Marinara"** (finish this aisle first).
+4. Marinara in → **"Aisle 4 → Parmesan, $1 off"** (4 is nearer than 9).
+5. 2nd spaghetti box in → "too much" nudge; next stop unchanged.
+6. Parmesan in → **"Aisle 9 → Kids' Scissors"**.
+7. Scissors in → **"All done → Checkout"**.
 
-So the walk is 6 → 4 → 6 → 9. The Hershey's bar stays in the catalog (Aisle 7) but is out of the
-demo.
+So the walk is 6 → 4 → 9. The Hershey's bar stays in the catalog (Aisle 7) but is out of the demo.
 
 ## Meal A: pasta night for 4 (headline)
 

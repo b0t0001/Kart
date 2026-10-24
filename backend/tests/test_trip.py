@@ -187,9 +187,9 @@ def test_rehearsal_carts_stay_out_of_the_numbers(cart, conn):
 
 
 def test_final_script_route(cart):
-    """DEMO_PLAN final script: list = spaghetti, marinara (+ scissors by voice); Parmesan via the deal card."""
-    row = cart("set_plan", p_plan=[{"product_id": "barilla-spaghetti"}, {"product_id": "rao-marinara"},
-                                   {"product_id": "french-baguette"}])
+    """DEMO_PLAN final script (v0.19 order): finish Aisle 6, then Aisle 4 for the Parmesan, then Aisle 9."""
+    row = cart("set_plan", p_plan=[{"product_id": "barilla-spaghetti", "basis": "1 lb serves 4"},
+                                   {"product_id": "rao-marinara"}, {"product_id": "french-baguette"}])
     assert row["next_step"] == "Aisle 6 → Spaghetti"                          # first stop
     cart("remove_from_plan", p_product_id="french-baguette")                  # "take the garlic bread off"
     row = cart("add_to_plan", p_product_id="kids-scissors")                   # "…and kids' scissors"
@@ -197,10 +197,13 @@ def test_final_script_route(cart):
     row = add(cart, "barilla-spaghetti")
     assert row["suggestion"]["text"] == "Parmesan is $1 off in Aisle 4. Want it?"
     row = cart("add_to_plan", p_product_id="kirkland-parmesan")              # "Yes"
-    assert row["next_step"] == "Aisle 6 → Marinara"                           # same aisle first
-    row = add(cart, "kirkland-parmesan")                                       # dropped in Aisle 4
-    assert row["next_step"] == "Aisle 6 → Marinara"
+    assert row["next_step"] == "Aisle 6 → Marinara"                           # finish this aisle first
     row = add(cart, "rao-marinara")
-    assert row["next_step"] == "Aisle 9 → Kids' Scissors"                     # the far aisle
+    assert row["next_step"] == "Aisle 4 → Parmesan, $1 off"                   # nearest: 4 before 9
+    row = add(cart, "barilla-spaghetti")                                       # the 2nd box: "too much"
+    assert row["nudge"]["kind"] == "over" and row["next_step"] == "Aisle 4 → Parmesan, $1 off"
+    cart("dismiss_nudge", p_action="ok")
+    row = add(cart, "kirkland-parmesan")
+    assert row["next_step"] == "Aisle 9 → Kids' Scissors"                     # then the far aisle
     row = add(cart, "kids-scissors")
     assert row["next_step"] == "All done → Checkout"
