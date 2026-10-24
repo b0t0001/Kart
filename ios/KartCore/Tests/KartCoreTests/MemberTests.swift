@@ -114,3 +114,92 @@ struct MemberContractTests {
         #expect(b.memberProfile?.memories.contains { $0.id == party.id } == false && b.cart.memberRev == rev + 1)
     }
 }
+
+/// What the screen does with member memory: sign-in order, For you, the lull, the demo date.
+@MainActor struct AppModelMemberTests {
+    func rig(flag: Bool = true) async throws -> TestRig {
+        let t = try make()
+        t.clock.now = Date(timeIntervalSince1970: 1_792_868_400)       // Saturday 2026-10-24, noon (store time)
+        if flag { try await t.backend.setFeature("member_memory", on: true) }
+        return t
+    }
+
+    @Test func signInThenTripContextCarriesMember() async throws {
+        let t = try await rig()
+        await t.model.startTrip(memberId: "1029")
+        #expect(t.backend.cart.memberId == "1029" && t.model.member?.member.name == "Dylan")
+        #expect(t.voice.sent.first == .tripContext(cartId: "7", tripId: try #require(t.backend.cart.tripId), memberId: "1029"))
+    }
+
+    @Test func signInWithFlagOffStartsGuestTrip() async throws {
+        let t = try await rig(flag: false)
+        await t.model.startTrip(memberId: "1029")
+        #expect(t.backend.cart.memberId == nil && t.model.member == nil && t.model.screen != .welcome)
+        #expect(t.voice.sent.first == .tripContext(cartId: "7", tripId: try #require(t.backend.cart.tripId)))
+    }
+
+    @Test func lullOnceAfter40sNotWithCard() async throws {
+        let t = try await rig()
+        await t.model.startTrip(memberId: "1029")
+        t.clock.now += 39
+        #expect(!t.model.lullDue(now: t.clock.now))
+        await t.backend.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "spaghetti")
+        t.clock.now += 41
+        #expect(t.model.visibleCard != nil && !t.model.lullDue(now: t.clock.now))   // a deal card is up
+        try await t.backend.dismissSuggestion()
+        #expect(t.model.visibleCard == nil && t.model.lullDue(now: t.clock.now))
+        t.model.sendLullIfDue(now: t.clock.now)
+        t.model.sendLullIfDue(now: t.clock.now + 60)
+        #expect(t.voice.sent.filter { $0 == .lull }.count == 1)
+    }
+
+    @Test func lullNeverForGuests() async throws {
+        let t = try await rig()
+        await t.model.startTrip()
+        #expect(!t.model.lullDue(now: t.clock.now + 600))
+    }
+
+    @Test func forYouHidesPicksOnPlanAndAfterDismiss() async throws {
+        let t = try await rig()
+        await t.model.startTrip(memberId: "1029")
+        #expect(t.model.forYouPicks.map(\.productId) == ["barilla-spaghetti", "whole-milk", "mission-tortillas"])
+        try await t.backend.setPlan([PlanItem(productId: "whole-milk", reason: "milk")])
+        #expect(t.model.forYouPicks.map(\.productId) == ["barilla-spaghetti", "mission-tortillas"])
+        await t.model.addPick(t.model.forYouPicks[0])
+        #expect(t.backend.cart.plan.contains { $0.productId == "barilla-spaghetti" && $0.reason == "for you" })
+        t.model.dismissForYou()
+        #expect(t.model.forYouPicks.isEmpty && t.model.savedEvent == nil)
+    }
+
+    @Test func shopSavedListAppendsItems() async throws {
+        let t = try await rig()
+        await t.model.startTrip(memberId: "1029")
+        try await t.backend.setPlan([PlanItem(productId: "whole-milk", reason: "milk")])
+        let party = try #require(t.model.savedEvent)
+        #expect(party.title == "Leo's soccer party")
+        await t.model.shopSavedList(party)
+        #expect(t.backend.cart.plan.map(\.productId) == ["whole-milk", "barilla-spaghetti", "rao-marinara", "french-baguette"])
+        #expect(t.backend.cart.plan.last?.reason == "Leo's soccer party" && t.model.savedEvent == nil)
+    }
+
+    @Test func demoJumpDayBeforeNextEvent() async throws {
+        let t = try await rig()
+        await t.model.startTrip(memberId: "1029")
+        #expect(!t.model.dayBeforeNextEventAvailable)                  // Leo's party is tomorrow: nothing to jump to
+        try await t.backend.remember(kind: "event", text: "Friendsgiving for 10", eventDate: "2026-10-31", items: [])
+        #expect(t.model.dayBeforeNextEventAvailable && t.model.nextEventTitle == "Friendsgiving for 10")
+        await t.model.jumpDemoDate(to: .dayBeforeNextEvent)
+        #expect(t.backend.cart.demoDate == "2026-10-30")
+        await t.model.jumpDemoDate(to: .plusDays(1))
+        #expect(t.backend.cart.demoDate == "2026-10-31")
+        await t.model.jumpDemoDate(to: .today)
+        #expect(t.backend.cart.demoDate == nil)
+    }
+
+    @Test func demoDateLabel() async throws {
+        let t = try await rig()
+        #expect(t.model.demoDateLabel == nil)
+        try await t.backend.setDemoDate("2026-10-30")
+        #expect(t.model.demoDateLabel == "Fri, Oct 30 · demo date")
+    }
+}
