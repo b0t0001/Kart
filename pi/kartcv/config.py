@@ -22,7 +22,7 @@ class Config:
     cameras: list[int | str] = field(default_factory=lambda: [0])
     width: int = 1280
     height: int = 720
-    fps: int = 30
+    fps: int = 15  # locked layout: 30 overloads the Pi's shared USB 2 bus with two MJPEG streams
     camera_warmup_s: float = 3.0
     rotate: dict = field(default_factory=dict)  # {"1": 90}: degrees clockwise per camera (portrait mounts)
 

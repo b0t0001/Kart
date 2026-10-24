@@ -29,3 +29,11 @@ def test_load_env(tmp_path, monkeypatch):
     assert load_env() == {"ANTHROPIC_API_KEY": "sk-test", "CART_ID": "9"}
     monkeypatch.setenv("KART_ENV_FILE", str(tmp_path / "missing"))
     load_env()  # no exception
+
+
+def test_example_config_matches_the_locked_layout():  # 2 cams, 15 fps (30 overloads the shared USB 2 bus)
+    import json
+    from kartcv.config import REPO_ROOT
+    ex = json.loads((REPO_ROOT / "pi/config.example.json").read_text())
+    assert Config().fps == 15 and ex["fps"] == 15
+    assert [c.split("usb-0:")[1].split(":")[0] for c in ex["cameras"]] == ["1.1", "1.2"]

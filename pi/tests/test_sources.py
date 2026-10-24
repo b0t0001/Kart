@@ -91,3 +91,40 @@ def test_live_camera_rotates_portrait_mounts():  # a camera mounted on its side 
         f = cam.read()
         cam.close()
         assert f is not None and f.image.shape == shape
+
+
+def _noisy(v=150):
+    return np.random.default_rng(v).normal(v, 3, (720, 1280, 3)).clip(0, 255).astype(np.uint8)
+
+
+def test_corrupt_jpeg_frames_are_recognized():  # libjpeg fills a truncated MJPEG frame's bottom with flat gray
+    from kartcv.sources import looks_corrupt
+    bad = _noisy()
+    bad[560:] = 128
+    dark = np.zeros((720, 1280, 3), np.uint8)  # a covered lens is dark, not "corrupt"
+    assert looks_corrupt(bad) and not looks_corrupt(_noisy()) and not looks_corrupt(_noisy(128)) and not looks_corrupt(dark)
+
+
+class FlakyCap(FakeCap):
+    n = 0
+
+    def read(self):
+        time.sleep(0.01)
+        FlakyCap.n += 1
+        img = _noisy(100)
+        if FlakyCap.n % 2:
+            img[500:] = 128
+        return True, img
+
+
+def test_live_camera_never_hands_out_a_corrupt_frame():
+    from kartcv.sources import looks_corrupt
+    cam = LiveCamera(0, "/dev/fake", 1280, 720, 30, warmup_s=0.0, capture_factory=lambda s: FlakyCap(s))
+    seen = []
+    for _ in range(30):
+        time.sleep(0.01)
+        f = cam.read()
+        if f is not None:
+            seen.append(looks_corrupt(f.image))
+    cam.close()
+    assert seen and not any(seen)

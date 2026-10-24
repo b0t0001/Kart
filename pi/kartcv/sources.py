@@ -50,6 +50,13 @@ def camera_paths(paths: list[str] | None = None, realpath=os.path.realpath) -> l
     return cams
 
 
+def looks_corrupt(image: np.ndarray) -> bool:
+    """A truncated MJPEG frame: libjpeg fills the missing bottom with flat mid-gray, and OpenCV still says ok.
+    Real rows always carry sensor noise, so a perfectly flat gray band at the bottom gives it away."""
+    band = image[-8:]
+    return float(band.std()) < 1.0 and abs(float(band.mean()) - 128.0) < 6.0
+
+
 def _default_capture(source: int | str):
     if sys.platform.startswith("linux"):
         return cv2.VideoCapture(source, cv2.CAP_V4L2)
@@ -79,6 +86,7 @@ class LiveCamera:
         self._opened_mono = 0.0
         self._stop = threading.Event()
         self.healthy = False
+        self.corrupt_frames = 0
         self._thread = threading.Thread(target=self._run, name=f"cam{cam}", daemon=True)
         self._thread.start()
 
@@ -109,6 +117,9 @@ class LiveCamera:
             while not self._stop.is_set():
                 ok, image = cap.read()
                 now = time.monotonic()
+                if ok and image is not None and looks_corrupt(image):
+                    self.corrupt_frames += 1  # never let it count as motion or change; the next frame is fine
+                    continue
                 if ok and image is not None:
                     last_ok = now
                     self.healthy = True
