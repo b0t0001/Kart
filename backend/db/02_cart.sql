@@ -88,6 +88,16 @@ returns text language sql immutable as $$
   end
 $$;
 
+-- Quantity nudges (BETA): markers in carts.nudged. over:<id> / under:<id> = that single nudge was
+-- shown (once per trip); done:<id> = answered final (ok / skip, or the loop guard); shop:<id> = the
+-- shopper said "go get them" (one marker per time). A checkout list may hold an item unless it's
+-- done or was already promised twice: the 3rd checkout records it done instead (loop guard).
+create or replace function nudge_listable(p_nudged text[], p_pid text)
+returns boolean language sql immutable as $$
+  select not ('done:' || p_pid = any(p_nudged))
+     and (select count(*) from unnest(p_nudged) m where m = 'shop:' || p_pid) < 2
+$$;
+
 -- Quantity nudges (BETA): one row per plan line with what the cart has against what the plan needs.
 create or replace function nudge_lines(p_items jsonb, p_plan jsonb)
 returns table (pid text, need int, have int, basis text, price numeric, got_at timestamptz,
@@ -308,8 +318,7 @@ begin
                                           'need', l.need, 'aisle', l.aisle, 'basis', l.basis) order by l.ord)
         into v_batch
       from nudge_lines(v_items, v_plan) l
-      where l.have < l.need and l.in_stock
-        and (not ('under:' || l.pid = any(c.nudged)) or l.pid = c.nudge->>'product_id');
+      where l.have < l.need and l.in_stock and nudge_listable(c.nudged, l.pid);
       if v_batch is not null then
         v_kind := 'checkout';
         v_at := now();
@@ -337,14 +346,20 @@ begin
                                             'need', l.need, 'aisle', l.aisle, 'basis', l.basis) order by l.ord)
           into v_batch
         from nudge_lines(v_items, v_plan) l
-        where l.have < l.need and l.in_stock and not ('under:' || l.pid = any(c.nudged));
+        where l.have < l.need and l.in_stock and nudge_listable(c.nudged, l.pid);
         if v_batch is not null then
           v_kind := 'checkout';
         end if;
+        -- loop guard: still short after two "go get them": record it done, don't list it again
+        v_nudged := v_nudged || array(
+          select 'done:' || l.pid from nudge_lines(v_items, v_plan) l
+          where l.have < l.need and not nudge_listable(c.nudged, l.pid)
+            and not ('done:' || l.pid = any(c.nudged)));
       else
         -- under mid-trip: short, and the shopper has moved past its aisle (one at a time)
         select * into v_line from nudge_lines(v_items, v_plan) l
         where l.have < l.need and l.in_stock and not ('under:' || l.pid = any(c.nudged))
+          and not ('shop:' || l.pid = any(c.nudged)) and not ('done:' || l.pid = any(c.nudged))
           and v_pos is not null and v_pos > l.section_x
         order by l.ord limit 1;
         if found then
@@ -376,8 +391,6 @@ begin
                        coalesce(' (' || v_line.basis || ')', ''), v_line.aisle),
         'aisle', v_line.aisle, 'at', v_at));
     elsif v_kind = 'checkout' then
-      v_nudged := v_nudged || array(select 'under:' || (x->>'product_id') from jsonb_array_elements(v_batch) x
-                                    where not ('under:' || (x->>'product_id') = any(v_nudged)));
       v_nudge := jsonb_strip_nulls(jsonb_build_object(
         'product_id', v_batch->0->>'product_id', 'name', v_batch->0->>'name', 'kind', 'under',
         'have', (v_batch->0->>'have')::int, 'need', (v_batch->0->>'need')::int,
@@ -593,8 +606,8 @@ begin
 end $$;
 
 -- The shopper answers a quantity nudge. keep (over): the plan now wants what's in the cart.
--- ok / skip: acknowledged. shop ("go get them", checkout nudge): back to shopping.
--- Either way, those products/directions aren't nudged again this trip.
+-- ok / skip: acknowledged and final for the trip (done:<id>). shop ("go get them"): back to
+-- shopping, and a promise (shop:<id>): the next checkout lists whatever is still short.
 create or replace function dismiss_nudge(p_cart_id text, p_action text)
 returns carts language plpgsql security definer set search_path = public as $$
 declare c carts;
@@ -605,6 +618,13 @@ begin
   select * into c from carts where cart_id = p_cart_id for update;
   if not found then
     raise exception 'unknown cart: %', p_cart_id;
+  end if;
+  if c.nudge is not null then
+    update carts set nudged = nudged || array(
+      select (case when p_action = 'shop' then 'shop:' else 'done:' end) || pid
+      from (select x->>'product_id' as pid from jsonb_array_elements(coalesce(c.nudge->'items',
+              case when c.nudge->>'kind' = 'under' then jsonb_build_array(c.nudge) end)) x) i)
+    where cart_id = p_cart_id;
   end if;
   if c.nudge is not null and p_action = 'keep' and c.nudge->>'kind' = 'over' then
     update carts set plan = (

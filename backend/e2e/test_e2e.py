@@ -229,6 +229,15 @@ def test_quantity_nudges_beta_on_a_throwaway_cart(rest, cart_id):
         assert n["text"].startswith("Before you go: you still need ") and n["product_id"] == n["items"][0]["product_id"]
         c = rest.rpc("dismiss_nudge", p_cart_id=cart_id, p_action="shop")       # "go get them"
         assert c["nudge"] is None and c["status"] == "shopping"
+
+        # Back at checkout with one still short: a 1-item list; "skip" is final for the trip
+        rest.rpc("apply_cart_event", **cv_to_rpc(cv_event(cart_id, "added", "tostitos-salsa", "Tostitos Salsa")))
+        c = rest.rpc("set_cart_status", p_cart_id=cart_id, p_status="checkout")
+        assert [i["product_id"] for i in c["nudge"]["items"]] == ["tostitos-chips"]
+        c = rest.rpc("dismiss_nudge", p_cart_id=cart_id, p_action="skip")
+        rest.rpc("set_cart_status", p_cart_id=cart_id, p_status="shopping")
+        c = rest.rpc("set_cart_status", p_cart_id=cart_id, p_status="checkout")
+        assert c["nudge"] is None and "done:tostitos-chips" in c["nudged"]
     finally:
         watch.close()
 

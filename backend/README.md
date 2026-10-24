@@ -76,6 +76,10 @@ Feature `quantity_nudges` (CONTRACT v0.12). The global default lives in `feature
 - At checkout, every short item goes into **one** nudge with an `items` list, in walking order from
   the shopper; the first item's fields fill `product_id`/`have`/`need` for compatibility. The list
   shrinks as items are fixed. Going to checkout upgrades a mid-trip under nudge to the full list.
+- Answers: `ok` / `skip` are final for the trip (`done:<id>` in `carts.nudged`). `shop` ("go get
+  them") is a promise (`shop:<id>`): no one-at-a-time nudges for those items while shopping, but the
+  next checkout lists whatever is still short. After two promises, the third checkout records the
+  item done instead of listing it again.
 - One nudge shows at a time, and only when no deal card is up. Each product is nudged at most once
   per direction per trip (`carts.nudged`), and a nudge clears itself when the counts match.
 - Plan lines carry the agent's `basis` either way.

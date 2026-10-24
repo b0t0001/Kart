@@ -191,8 +191,10 @@ def test_skip_answers_the_whole_list_once(at_checkout):
     at_checkout("set_cart_status", p_status="checkout")
     row = at_checkout("dismiss_nudge", p_action="skip")
     assert row["nudge"] is None and row["status"] == "checkout"
-    assert {"under:ground-beef", "under:taco-seasoning", "under:mission-tortillas"} <= set(row["nudged"])
+    assert {"done:ground-beef", "done:taco-seasoning", "done:mission-tortillas"} <= set(row["nudged"])
     assert at_checkout("set_location", p_section="A9")["nudge"] is None    # none of them comes back
+    at_checkout("set_cart_status", p_status="shopping")
+    assert at_checkout("set_cart_status", p_status="checkout")["nudge"] is None   # a skip is final
 
 
 def test_go_get_them_returns_to_shopping(at_checkout):
@@ -220,3 +222,44 @@ def test_checkout_upgrades_a_mid_trip_nudge_to_the_full_list(at_checkout):
     assert row["nudge"]["kind"] == "under" and "items" not in row["nudge"]   # mid-trip: one at a time
     n = at_checkout("set_cart_status", p_status="checkout")["nudge"]
     assert len(n["items"]) == 4                                  # including the one already showing
+
+
+
+# ── "Go get them" is a promise: the next checkout re-lists what's still short ──
+
+def test_shop_then_checkout_again_relists_only_whats_still_short(at_checkout):
+    at_checkout("set_cart_status", p_status="checkout")
+    row = at_checkout("dismiss_nudge", p_action="shop")
+    assert row["status"] == "shopping" and not any(m.startswith("done:") for m in row["nudged"])
+    for pid in ["taco-seasoning", "tillamook-mexican-cheese", "ground-beef", "ground-beef"]:
+        add(at_checkout, pid)                         # got all but the 2nd tortilla pack
+    n = at_checkout("set_cart_status", p_status="checkout")["nudge"]
+    assert [(i["product_id"], i["have"], i["need"]) for i in n["items"]] == [("mission-tortillas", 1, 2)]
+    assert n["text"] == "Before you go: you still need Tortillas."
+    at_checkout("dismiss_nudge", p_action="skip")
+    at_checkout("set_cart_status", p_status="shopping")
+    assert at_checkout("set_cart_status", p_status="checkout")["nudge"] is None
+
+
+def test_promised_items_dont_nag_one_by_one_while_shopping(at_checkout):
+    at_checkout("set_cart_status", p_status="checkout")
+    at_checkout("dismiss_nudge", p_action="shop")
+    assert at_checkout("set_location", p_section="A9")["nudge"] is None       # walking past: no singles
+
+
+def test_loop_guard_after_two_promises(at_checkout):
+    for _ in range(2):
+        assert at_checkout("set_cart_status", p_status="checkout")["nudge"]["items"]
+        at_checkout("dismiss_nudge", p_action="shop")
+    row = at_checkout("set_cart_status", p_status="checkout")             # 3rd time, still short
+    assert row["nudge"] is None
+    assert {"done:ground-beef", "done:mission-tortillas"} <= set(row["nudged"])
+
+
+def test_ok_on_a_mid_trip_nudge_is_final_for_checkout_too(nudges):
+    add(nudges, "avocados")
+    assert nudges("set_location", p_section="A3")["nudge"]["product_id"] == "mission-tortillas"
+    nudges("dismiss_nudge", p_action="ok")
+    for pid in ["tostitos-salsa", "tostitos-chips"]:
+        add(nudges, pid)
+    assert nudges("set_cart_status", p_status="checkout")["nudge"] is None    # tortillas: answered already
