@@ -24,11 +24,7 @@ Buy the **exact brands and sizes in the table if you can**. If you substitute, n
 | 8 | **Sliced jalapeños, small can** (e.g. La Costeña 12 oz) | 1 | `jalapenos` **(new)** | A5 Mexican | **Meal B:** on the list. Small-item test |
 | 9 | *(optional)* Taco seasoning packet | 1 | `taco-seasoning` | A5 Mexican | **Smallest-item** camera test only. Skip it to save money |
 
-**Free, already on hand:**
-| Item | Catalog id | Role |
-|---|---|---|
-| **Apple** | *(not in the catalog)* | **Trust moment:** the cameras see something they can't name → the **"Is this…?"** card → "Not this". Checkout is blocked until it's answered |
-| **Tide bottle** | *(not in the catalog)*, or added live as `tide` | **Tall item** (billed after the 3 s stillness check). Optionally added live in the merchant console to show **a new product with zero training** |
+**Not used in the demo:** the apple and the Tide (Dylan, 2026-10-24). The trust moment (an unknown item → "Is this…?") is optional, using any non-catalog item you have on hand.
 
 **Planned by Kart but deliberately NOT bought.** They trigger the **"Before you go: you still need…"** checkout reminder (beta):
 | Item | Catalog id | Meal |
@@ -80,8 +76,8 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 | 2 | Drop **spaghetti box 1** | `barilla-spaghetti` | settle → identify (local match, ~1.5 s) → 1 add | Bill: Spaghetti $x; list row ✓ | "Got the spaghetti." |
 | 3 | Drop **marinara** | `rao-marinara` | 1 add | Bill +marinara; **Parmesan deal card** | **"Parmesan is $1 off in Aisle 4. Want it?"** |
 | 4 | Say *"Yes"*, drop the **Parmesan shaker** | `kirkland-parmesan` | 1 add at the deal price | Bill shows the struck-through price and "saved $1" | "Added the Parmesan." |
-| 5 | Drop the **apple** | (unknown) | settle → Claude → "unknown" | **"Is this…?" card**; Pay blocked | "I'm not sure what that is. Can you check the screen?" |
-| 6 | Tap **"Not this"**, take the apple out | — | removal resolves it | Card clears | — |
+| 5 *(optional)* | Drop any **non-catalog item** you have on hand (e.g. a water bottle) | (unknown) | settle → Claude → "unknown" | **"Is this…?" card**; Pay blocked | "I'm not sure what that is. Can you check the screen?" |
+| 6 *(optional)* | Tap **"Not this"**, take it out | — | removal resolves it | Card clears | — |
 | 7 *(beta)* | Drop **spaghetti box 2** | `barilla-spaghetti` | 1 add (qty 2) | **"Too much" card** | **"That's two boxes of spaghetti, and pasta night for 4 needs one. Keep the extra?"** |
 | 8 *(beta)* | Say *"No"*, take box 2 out | — | 1 remove | Total drops; card clears | — |
 | 9 | Tap **Check out** | — | — | *(beta)* **"Before you go: you still need garlic bread (Aisle 2)"** | "Before you go: you still need garlic bread for pasta night. Want to grab it?" |
@@ -100,8 +96,6 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 | 5 *(beta)* | Check out | — | "Before you go: you still need sour cream" |
 
 ### Optional extra moments
-- **Tall item:** drop the **Tide** → billed about 4 s later (as an unknown, or as `tide` if added live).
-- **New product, zero training:** in the merchant console, *"add Tide detergent, $12.99, household aisle"* → Confirm → drop it on the next trip → recognized from its description alone.
 - **Live store change:** *"queso $1 off"* in the console → a cart holding chips gets the card within a second.
 
 ---
