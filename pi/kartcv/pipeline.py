@@ -2,6 +2,11 @@
 
 Live cameras, recordings and synthetic scripts all feed the same `step(tick)`, so whatever the tests
 prove about a script holds for a replayed recording and for the real cart.
+
+Watching (motion, settle, change detection) always runs on the caller's tick. Judging (classify,
+identify, which can wait seconds on Claude, update memory, save crops, emit) runs inline, or with
+`background=True` on one worker thread, so the cameras are never ignored while Claude thinks. One
+worker judges settles strictly in order, each against the cart as the previous one left it.
 """
 from __future__ import annotations
 
@@ -9,6 +14,7 @@ import logging
 import math
 import threading
 from collections import deque
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from pathlib import Path
 
 import cv2
@@ -25,7 +31,8 @@ log = logging.getLogger(__name__)
 
 
 class Pipeline:
-    def __init__(self, cfg, cams: list[int], identifier, features, sinks: list, state_dir: Path):
+    def __init__(self, cfg, cams: list[int], identifier, features, sinks: list, state_dir: Path,
+                 background: bool = False):
         self.cfg = cfg
         self.cams = list(cams)
         self.identifier = identifier
@@ -55,6 +62,8 @@ class Pipeline:
         self._resync: set[int] = set()   # cameras back from an outage: re-reference at the next settle
         self.camera_moved: set[int] = set()  # a big view shift with items in the cart: reset recommended
         self._recheck_at: float | None = None  # when to re-judge a deferred edge-touching change, if still
+        self._worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="judge") if background else None
+        self._jobs: list[Future] = []
 
     def _roi(self, cam: int):
         return self.cfg.roi.get(str(cam))
@@ -66,6 +75,22 @@ class Pipeline:
 
     def _empty_path(self, cam: int) -> Path:
         return self.state_dir / f"empty_cam{cam}.jpg"
+
+    # --- background judging ---
+    def _busy(self) -> bool:
+        """Settles still being judged (an add may be mid-identification)."""
+        self._jobs = [j for j in self._jobs if not j.done()]
+        return bool(self._jobs)
+
+    def drain(self, timeout: float | None = None) -> None:
+        """Wait until every queued settle has been judged."""
+        if self._jobs:
+            wait(list(self._jobs), timeout=timeout)
+
+    def close(self) -> None:
+        if self._worker is not None:
+            self.drain(timeout=15)
+            self._worker.shutdown(wait=False)
 
     # --- control (thread-safe) ---
     def request_reset(self) -> None:
@@ -88,6 +113,7 @@ class Pipeline:
 
     # --- the loop ---
     def _reset(self, frames: dict) -> None:
+        self.drain(timeout=15)  # judge what's queued first, then wipe
         self.empties = {}
         for c in self.cams:
             self._empty_path(c).unlink(missing_ok=True)
@@ -130,7 +156,7 @@ class Pipeline:
             self._reset(frames)
             return []
         for c, f in frames.items():
-            if c not in self.empties and not self.cart.instances:
+            if c not in self.empties and not self.cart.instances and not self._busy():
                 self._set_empty(c, f.image)  # a camera that came up late, while the cart is still empty
             self.references.setdefault(c, f.image)
 
@@ -172,7 +198,7 @@ class Pipeline:
                 # the room. Bill nothing; if a camera was really knocked, an empty-cart reset fixes it.
                 log.warning("cam%d view shifted by (%.0f, %.0f) px (camera knocked?): no events this settle; "
                             "if it really moved, empty the cart and reset", c, *r.shift)
-                if self.cart.instances:
+                if self.cart.instances or self._busy():
                     # Keep the old reference: if this was a false alarm, the next settle re-judges against
                     # the true before-picture; if the camera really moved, it stays flagged until a reset.
                     self.camera_moved.add(c)
@@ -199,7 +225,7 @@ class Pipeline:
             results.append(r)
         if edge_cams:
             self._recheck_at = ts + self.cfg.intrusion_recheck_s
-        if not self.cart.instances:
+        if not self.cart.instances and not self._busy():
             # Nothing in the cart and nothing new: this is a fresh empty-basket picture (tracks light drift).
             for r in results:
                 if r.cam in edge_cams:
@@ -208,7 +234,17 @@ class Pipeline:
                     self._set_empty(r.cam, r.frame)
                     self.camera_moved.discard(r.cam)
 
-        decisions = decide(results, self.empties, self.cart, self.identifier, self.features, self.cfg)
+        empties = dict(self.empties)  # a snapshot: the worker must not see later resets mid-judgment
+        if self._worker is None:
+            return self._judge(results, empties)
+        job = self._worker.submit(self._judge, results, empties)
+        job.add_done_callback(lambda j: j.exception() and log.error("judging failed", exc_info=j.exception()))
+        self._jobs.append(job)
+        return []
+
+    def _judge(self, results: list, empties: dict) -> list[Event]:
+        """Decide, update memory and emit for one settle (inline, or on the worker thread)."""
+        decisions = decide(results, empties, self.cart, self.identifier, self.features, self.cfg)
         self.last_decisions = decisions
         events = []
         for d in decisions:

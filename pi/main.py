@@ -49,7 +49,7 @@ def _catalog(cfg, env, args):
     return cat
 
 
-def build(cfg, env: dict, args, cams: list[int], send_events: bool = True):
+def build(cfg, env: dict, args, cams: list[int], send_events: bool = True, background: bool = False):
     if env.get("CART_ID"):
         cfg.cart_id = env["CART_ID"]
     state_dir = Path(args.state) if getattr(args, "state", None) else cfg.path("state_dir")
@@ -72,7 +72,7 @@ def build(cfg, env: dict, args, cams: list[int], send_events: bool = True):
         log.info("events → Supabase apply_cart_event (cart %s)", cfg.cart_id)
     elif send_events:
         log.warning("no Supabase settings: events go to %s only", state_dir / "events.jsonl")
-    pipeline = Pipeline(cfg, cams, identifier, features, sinks, state_dir)
+    pipeline = Pipeline(cfg, cams, identifier, features, sinks, state_dir, background=background)
     pipeline.catalog = catalog
     return pipeline, sinks
 
@@ -87,7 +87,8 @@ def cmd_live(cfg, env, args) -> int:
         cfg.debug_view = True
     cams = [LiveCamera(k, src, cfg.width, cfg.height, cfg.fps, warmup_s=cfg.camera_warmup_s)
             for k, src in enumerate(cfg.cameras)]
-    pipeline, sinks = build(cfg, env, args, [c.cam for c in cams])
+    # judge in the background: a Claude call must never stop the cameras from being watched
+    pipeline, sinks = build(cfg, env, args, [c.cam for c in cams], background=True)
     extras = start_extras(cfg, env, pipeline)
     log.info("watching %d camera(s); Ctrl-C to stop", len(cams))
     try:
@@ -100,6 +101,7 @@ def cmd_live(cfg, env, args) -> int:
     finally:
         for x in extras:
             x.stop()
+        pipeline.close()
         for c in cams:
             c.close()
         _close(sinks)

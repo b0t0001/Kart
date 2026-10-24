@@ -263,3 +263,43 @@ def test_a_shift_disturbed_settle_keeps_the_old_reference(tmp_path):  # a false 
     n = len(sc.ticks)
     sc.set(shift={}).take("red-box")  # the knock was transient; the removal is still seen
     assert run(p, sc, n) == [("removed", "red-box")]
+
+
+def _slow_cloud_pipeline(tmp_path, seconds=1.5):
+    import time
+    from kartcv.identify.cloud import CloudAnswer
+    from kartcv.identify.hybrid import HybridIdentifier
+    w = world(tmp_path)
+
+    class SlowCloud:  # like Claude over a phone hotspot
+        def identify(self, crops):
+            time.sleep(seconds)
+            return CloudAnswer("green-bag", 0.9, "slow answer")
+
+    sink = MemorySink()
+    ident = HybridIdentifier(None, SlowCloud(), w.catalog, w.cfg)  # no gallery: every add goes to the cloud
+    return Pipeline(w.cfg, [0, 1], ident, w.features, [sink], tmp_path / "state", background=True), sink
+
+
+def test_a_second_add_during_a_slow_cloud_call_is_still_seen(tmp_path):  # real Pi: Claude froze the loop
+    import time
+    p, sink = _slow_cloud_pipeline(tmp_path)
+    sc = Script(Scene()).still(1.0).drop(RED).drop(BLUE)
+    t0 = time.perf_counter()
+    for tick in sc.ticks:
+        p.step(tick)
+    fed = time.perf_counter() - t0
+    p.drain(timeout=10)
+    p.close()
+    assert fed < 1.5  # the loop kept watching while Claude was busy
+    assert [e.type for e in sink.events] == ["added", "added"] and len(p.cart.instances) == 2
+
+
+def test_background_judging_keeps_order_add_then_remove(tmp_path):
+    p, sink = _slow_cloud_pipeline(tmp_path)
+    for tick in Script(Scene()).still(1.0).drop(RED).take("red-box").ticks:
+        p.step(tick)
+    p.drain(timeout=10)
+    p.close()
+    assert [(e.type, e.product_id) for e in sink.events] == [("added", "green-bag"), ("removed", "green-bag")]
+    assert len(p.cart.instances) == 0
