@@ -20,6 +20,10 @@ def _short(catalog: list[dict[str, Any]], product_id: str | None) -> str:
     return "that"
 
 
+LIST_TOO = "Take it off the list too?"                # a planned item came out of the cart
+LIST_KEPT = "Okay, it stays on your list."
+
+
 def proactive_line(event: dict[str, Any], catalog: list[dict[str, Any]], plan: list[dict[str, Any]],
                    items: list[dict[str, Any]] | None = None, meal: str | None = None, nudges: bool = False) -> str | None:
     """What to say for an iPad custom event, or None to stay quiet."""
@@ -54,7 +58,12 @@ def proactive_line(event: dict[str, Any], catalog: list[dict[str, Any]], plan: l
             return f"Got one {_short(catalog, product_id)}, {'one more' if left == 1 else f'{left} more'} to go."
         return f"Got the {_short(catalog, product_id)}."
     if change == "removed":
-        return f"Took the {_short(catalog, product_id)} off your bill."
+        said = f"Took the {_short(catalog, product_id)} off your bill."
+        line = next((line for line in plan if line.get("product_id") == product_id), None)
+        have = sum(i.get("qty", 1) for i in (items or []) if i.get("product_id") == product_id)
+        if line is not None and have < (line.get("qty") or 1):   # now short of the list: put back for good?
+            return f"{said} {LIST_TOO}"
+        return said
     if change == "price_dropped" and event.get("to_price"):
         return f"Good news, {_short(catalog, product_id)} just dropped to ${float(event['to_price']):.2f}."
     return None

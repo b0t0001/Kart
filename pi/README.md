@@ -109,8 +109,11 @@ sudo systemctl stop kart-cv
 ```
 
 Cart empty → put the item in → wait for `captured 1/5: take it out` → take it out → repeat with
-a different pose (side, upright, label down). Photos land in `pi/gallery/<product-id>/`. Commit
-and push `pi/gallery/` so every machine gets them.
+a different pose (side, upright, label down). If you enable `edge_privacy` (off by default),
+**enroll tall props too** (upright bottles, boxes that reach the top of a camera's view): it keeps
+anything that enters from the frame edge on-cart, so it is never sent to Claude and is only
+recognized if it's in the gallery. Photos land in `pi/gallery/<product-id>/`. Commit and push
+`pi/gallery/` so every machine gets them.
 
 Then ask which matcher separates the real props better:
 

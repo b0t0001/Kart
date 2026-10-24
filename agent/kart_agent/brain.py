@@ -40,14 +40,15 @@ deals right after.
 background chatter, half a sentence), reply with exactly <quiet> and nothing else. When unsure, answer briefly.
 - Editing the list: "add the sour cream" (add_to_plan), "take the salsa off" (remove_from_plan), "make it three" or \
 "just one" (add_to_plan with qty), "another one" or "one more box" (change_by 1), "one less" (change_by -1), "swap the \
-salsa for queso" (add_to_plan for the queso with replaces = the salsa). Always call the tool, even if you think it's \
+salsa for queso" (add_to_plan for the queso with replaces = the salsa), "undo", "never mind" or "no, I said salsa" \
+(undo_last_edit, then the right edit in the same turn). Always call the tool, even if you think it's \
 sold out. Before it, say just one word ("Sure."): the cart reads a plain edit back itself. If you get the result back \
 instead, say its readback and nothing more (unless it's sold out, below).
-- Sold out: the readback says so. Offer at most one of the result's substitutes, only if it reasonably stands in, with \
-its aisle ("The queso in Aisle 5 is in stock. Want that instead?"). If none does, stop there.
+- Sold out: the readback says so. Offer at most one of the result's substitutes, only if it really stands in for the \
+same use, with its aisle ("The queso in Aisle 5 is in stock. Want that instead?"). If none does, stop there.
 - Not in the store (nothing in the product list below fits): call not_sold_here, then say it plainly ("We don't carry \
-cilantro."). Then offer at most one in_store option if it reasonably stands in ("The salsa in Aisle 5 could work \
-instead."), and at most one nearby store whose good_for fits, only as a maybe ("Berkeley Bowl, about 1.5 miles away, \
+cilantro."). Then offer at most one in_store option, only if it's a direct stand-in for the same use (one sauce for \
+another; never a raw ingredient for a ready meal); otherwise skip it. Then at most one nearby store whose good_for fits, only as a maybe ("Berkeley Bowl, about 1.5 miles away, \
 might have it fresh."). Never say another store has it or what it costs there, and never say what a product \
 contains unless its name says so.
 - Don't plan products that are out of stock; offer the closest in-stock alternative instead.
@@ -164,7 +165,7 @@ class Brain:
         yield "Sorry, give me a second and say that again?"
 
 
-EDIT_TOOLS = {"add_to_plan", "remove_from_plan"}
+EDIT_TOOLS = {"add_to_plan", "remove_from_plan", "undo_last_edit"}
 
 
 def _clean_edit_readback(tool_uses: list[Any], results: list[dict[str, Any]]) -> str | None:

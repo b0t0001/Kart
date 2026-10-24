@@ -42,6 +42,7 @@ def test_switching_to_target_moves_aisles_and_routing_follows(cart, conn):
     # Target's shelf prices for the demo items; departments without a confirmed aisle read plainly
     prices = dict(conn.execute("select id, price::float from products where id in ('rao-marinara', 'queso')").fetchall())
     assert prices == {"rao-marinara": 2.19, "queso": 5.19}
+    assert conn.execute("select section from products where id = 'hershey-xl'").fetchone()[0] == "A3"
     row = cart("set_plan", p_plan=[{"product_id": "french-baguette", "reason": "garlic bread"}])
     assert row["next_step"] == "Bakery → Garlic Bread, $1 off"
     assert conn.execute("select id, active, value from deals order by id").fetchall() == deals_before

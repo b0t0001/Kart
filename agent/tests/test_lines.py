@@ -15,7 +15,9 @@ def test_unplanned_item_added_is_quiet():
 
 def test_removed_item():
     assert proactive_line({"type": "cart_changed", "change": "removed", "product_id": "barilla-spaghetti"}, CATALOG, PLAN) \
-        == "Took the Spaghetti off your bill."
+        == "Took the Spaghetti off your bill. Take it off the list too?"      # on the list, none left in the cart
+    assert proactive_line({"type": "cart_changed", "change": "removed", "product_id": "bananas"}, CATALOG, PLAN) \
+        == "Took the Bananas off your bill."                                 # not on the list: nothing to ask
 
 
 def test_price_drop():

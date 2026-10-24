@@ -1,4 +1,4 @@
-# KART integration contract — v0.16 (DRAFT)
+# KART integration contract — v0.17 (DRAFT)
 
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
@@ -186,8 +186,16 @@ Spec: `docs/specs/2026-10-24-member-memory-design.md`. Flag: `member_memory`. Ro
 - **iPad:** reads `member_id`, `member_rev`, `demo_date` and `features.member_memory`. The member UI is shown only when the flag is on.
 - **Privacy** (Visa trust): demo IDs only, guest by default, sign-in lasts one trip, a "What Kart remembers" sheet with a one-tap Forget per memory, and **Forget me** (touch-only, with a confirmation).
 
-### "That's mine" / personal items: DROPPED (v0.16)
-Dylan decided physical edge cases like personal items aren't in scope. The backend's `mark_personal` RPC and `cart_events.resolution` were already deployed to hosted before the cancel. They're additive and **unused**. CV's watcher was reverted (`fd2f463`), and `edge_privacy` is **off** (`87c0c64`). The iPad has no button.
+### "That's mine" / personal items: REMOVED
+Out of scope (Dylan). The backend dropped `mark_personal` and `cart_events.resolution` from hosted and local (`d833002`). CV's watcher code exists but never runs unless `personal_items` is on (off by default); its hosted E2E test must be skipped. `edge_privacy` is off.
+
+### Shopper-interaction RPCs (v0.17, backend `14932e6`, live on hosted)
+- **`set_plan(p_cart_id, p_plan)`**: same signature. Items are `{product_id, reason?, qty?, basis?, meal?}`. Duplicate products merge into one line (qty summed, `meals` lists all). Plan rows carry `meal`.
+- **`add_to_plan(p_cart_id, p_product_id, p_qty default 1, p_basis?, p_meal?)`**: atomic. A negative qty lowers the amount, and the line drops at 0. Raises `unknown product: X`.
+- **`remove_from_plan(p_cart_id, p_product_id)`**: atomic; a no-op if the line is absent.
+- **`set_budget(p_cart_id, p_amount)`**: null clears it; `reset_cart` clears it. New columns `carts.budget`, `carts.budget_left`, `carts.plan_estimate` (the rest of the list at today's sale prices).
+- **`store_info.nearby`**: `[{name, address, distance_mi, kind, good_for}]` (4 real Berkeley stores).
+- **Mini layout:** Aisle 2 = Dairy & Eggs, Aisle 8 = Bakery & Tortillas (by checkout). Pasta night's first stop is **Aisle 6 → Spaghetti**.
 
 ### Shared hosted project rules (v0.11)
 
@@ -355,3 +363,4 @@ All three feature chats work in the **same main checkout**, so stay inside your 
 - v0.14 — Member memory (beta, flag `member_memory`, off by default) recorded from the member chat's proposal. It's built on branch `member-memory` and merged by the manager.
 - v0.15 — "That's mine": `cart_events.resolution`, RPC `mark_personal`, an iPad button and voice phrase, and the CV watcher. CV flags `personal_items` (off) and `edge_privacy` (on).
 - v0.16 — "That's mine" DROPPED (out of scope per Dylan). `edge_privacy` goes back to off by default.
+- v0.17 — The backend fully removed the personal-items pieces. Shopper-interaction RPCs are live: `add_to_plan`, `remove_from_plan`, `set_budget`, `plan.meal`, duplicate merging. Nearby stores are on hosted. The mini store puts bakery last.

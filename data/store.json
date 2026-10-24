@@ -1,11 +1,11 @@
 {
-  "version": 4,
+  "version": 5,
   "store": { "name": "Kart Demo Warehouse", "width": 20, "height": 12 },
   "entrance": { "x": 0, "y": 6 },
   "nearby": [
-    {"name": "Trader Joe's", "address": "1885 University Ave, Berkeley", "distance_mi": 1.0, "kind": "specialty", "good_for": ["snack", "snacks", "cheese", "produce", "bakery", "dip", "italian", "pasta"]},
-    {"name": "Berkeley Bowl", "address": "2020 Oregon St, Berkeley", "distance_mi": 1.5, "kind": "produce", "good_for": ["produce", "fruit", "specialty", "cheese", "bakery", "spices", "mexican", "italian"]},
-    {"name": "Safeway", "address": "1444 Shattuck Pl, Berkeley", "distance_mi": 1.5, "kind": "grocery", "good_for": ["staple", "dairy", "meat", "bakery", "produce", "household", "snacks", "canned", "sauce"]},
+    {"name": "Trader Joe's", "address": "1885 University Ave, Berkeley", "distance_mi": 1.0, "kind": "specialty", "good_for": ["snack", "snacks", "cheese", "produce", "bakery", "dip", "italian", "pasta", "oil", "pantry"]},
+    {"name": "Berkeley Bowl", "address": "2020 Oregon St, Berkeley", "distance_mi": 1.5, "kind": "produce", "good_for": ["produce", "fruit", "specialty", "cheese", "bakery", "spices", "mexican", "italian", "oil"]},
+    {"name": "Safeway", "address": "1444 Shattuck Pl, Berkeley", "distance_mi": 1.5, "kind": "grocery", "good_for": ["staple", "dairy", "meat", "bakery", "produce", "household", "snacks", "canned", "sauce", "oil", "pantry"]},
     {"name": "Walgreens", "address": "2310 Telegraph Ave, Berkeley", "distance_mi": 0.6, "kind": "pharmacy", "good_for": ["household", "staple", "snacks", "dairy", "breakfast"]}
   ],
   "sections": [
@@ -174,6 +174,17 @@
       "tags": ["tacos", "nachos", "mexican", "snack", "party"],
       "stock": 45,
       "vision_hint": "large shiny crinkly chip bag, Tostitos logo, white triangular tortilla chips pictured on the front"
+    },
+    {
+      "id": "hershey-xl",
+      "name": "Hershey's Milk Chocolate Candy Bar XL, 4.4 oz",
+      "short_name": "Chocolate Bar",
+      "price": 3.89,
+      "section": "A7",
+      "category": "candy",
+      "tags": ["dessert", "chocolate", "snack"],
+      "stock": 20,
+      "vision_hint": "flat rectangular candy bar in a dark brown wrapper with large silver HERSHEY'S lettering, about 4.4 oz XL size"
     },
     {
       "id": "avocados",

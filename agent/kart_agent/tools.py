@@ -47,6 +47,8 @@ TOOLS: list[dict[str, Any]] = [
            "basis": {"type": "string"}}, ["product_id", "reason"]),
     _tool("remove_from_plan", "Take one product off the shopping list. Returns `readback`.",
           {"product_id": {"type": "string"}}, ["product_id"]),
+    _tool("undo_last_edit", "Take back the last change to the shopping list: 'undo', 'never mind', or 'no, I said "
+          "salsa' (then add the right one). Returns `readback`."),
     _tool("not_sold_here", "The shopper wants something that isn't in the store's product list. Returns in-stock "
           "products that could stand in (matching `like`) and nearby stores that might have it. Changes nothing.",
           {"item": {"type": "string", "description": "what they asked for, e.g. 'cilantro'"},
@@ -85,17 +87,13 @@ def _sold_out(p: dict[str, Any]) -> bool:
 
 
 def _substitutes(product: dict[str, Any], catalog: list[dict[str, Any]], listed: set[str] = frozenset()) -> list[dict[str, Any]]:
-    """In-stock stand-ins for a sold-out product, not already on the list: the same kind first, then the most shared
-    tags (at least two)."""
+    """In-stock stand-ins for a sold-out product: the same kind only (one salsa for another), never one already on the
+    list; the most shared tags first."""
     tags = set(product.get("tags") or [])
-    scored = []
-    for index, p in enumerate(catalog):
-        if p["id"] == product["id"] or p["id"] in listed or _sold_out(p):
-            continue
-        same, shared = p.get("category") == product.get("category"), len(tags & set(p.get("tags") or []))
-        if same or shared >= 2:
-            scored.append((not same, -shared, index, p))
-    return [_product_view(p) for *_, p in sorted(scored, key=lambda s: s[:3])[:3]]
+    scored = [(-len(tags & set(p.get("tags") or [])), index, p) for index, p in enumerate(catalog)
+              if p["id"] != product["id"] and p["id"] not in listed and not _sold_out(p)
+              and p.get("category") == product.get("category")]
+    return [_product_view(p) for *_, p in sorted(scored, key=lambda s: s[:2])[:3]]
 
 
 def _distance(value: Any) -> Any:
@@ -114,6 +112,25 @@ async def _nearby_stores(backend: Any) -> list[dict[str, Any]]:
              "good_for": s.get("good_for") or [], **({"address": s["address"]} if s.get("address") else {}),
              "might_have_it": True}
             for s in stores if isinstance(s, dict) and isinstance(s.get("name"), str)]
+
+
+def _undo_line(kind: str, product: dict[str, Any], before: int, old: dict[str, Any] | None) -> str:
+    """What Kart says when the edit is taken back."""
+    if kind == "added":
+        return f"Took {_name(product)} back off your list."
+    if kind == "removed":
+        return f"Put {_name(product)} back on your list."
+    if kind == "swapped" and old is not None:
+        return f"Swapped back to {_name(old)}."
+    if _unit_of(product) is not None:
+        return f"Back to {_amount(before, product)}."
+    return f"{_cap(_name(product))} back to {_words(before)}."
+
+
+def _plan_lines(plan: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A list as set_plan takes it back."""
+    keys = ("product_id", "reason", "qty", "basis")
+    return [{k: line[k] for k in keys if line.get(k) is not None} for line in plan]
 
 
 def _readback(kind: str, product: dict[str, Any], qty: int, old: dict[str, Any] | None, in_cart: int) -> str:
@@ -201,6 +218,7 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
             cart = await backend.get_cart(cart_id)
             items = [{"product_id": p["product_id"], "reason": p.get("reason", ""), "qty": p.get("qty", 1),
                       "basis": p.get("basis")} for p in cart.get("plan", [])]
+            before = _plan_lines(items)                     # for undo
             product_id = _str(args, "product_id")
             product = catalog.get(product_id)
             current = next((i for i in items if i["product_id"] == product_id), None)
@@ -232,6 +250,7 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
             else:
                 edit = ("already", product_id, None, in_cart)
         else:
+            before = _plan_lines((await backend.get_cart(cart_id)).get("plan", [])) if "undo" in ctx else []
             items = args.get("items")
             if not isinstance(items, list):
                 raise ValueError("'items' must be a list")
@@ -267,7 +286,19 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
             kind, pid, old, in_cart = edit
             final = next((line["qty"] for line in lines if line["product_id"] == pid), 1)
             result["readback"] = _readback(kind, catalog[pid], final, old, in_cart)
+            if kind in ("added", "removed", "swapped", "amount") and isinstance(ctx.get("undo"), list):
+                was = next((line["qty"] for line in before if line["product_id"] == pid), 1)
+                ctx["undo"].append({"plan": before, "readback": _undo_line(kind, catalog[pid], was, old)})
+        elif name == "set_plan" and isinstance(ctx.get("undo"), list):
+            ctx["undo"].append({"plan": before, "readback": "Back to your last list."})
         return {**result, "notes": notes} if notes else result
+    if name == "undo_last_edit":
+        stack = ctx.get("undo")
+        if not stack:
+            return {"readback": "There's nothing to undo."}
+        last = stack.pop()
+        cart = await backend.rpc("set_plan", p_cart_id=cart_id, p_plan=last["plan"])
+        return {"readback": last["readback"], "next_step": cart.get("next_step")}
     if name == "get_deals":
         return [_product_view(p) for p in await backend.get_catalog() if p.get("deal_label")]
     if name == "set_location":

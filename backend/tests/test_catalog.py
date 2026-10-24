@@ -53,3 +53,12 @@ def test_bakery_is_the_last_aisle_in_the_mini_store(conn):
     placed = dict(conn.execute("select id, section from products where id in "
                                "('french-baguette', 'mission-tortillas', 'whole-milk')").fetchall())
     assert placed == {"french-baguette": "A8", "mission-tortillas": "A8", "whole-milk": "A2"}
+
+
+def test_dessert_and_not_sold_here(conn):
+    """DEMO_PLAN: 'add something chocolate' finds the Hershey's; 'add olive oil' is not sold here."""
+    row = conn.execute("select short_name, section, price::float, tags from product_catalog where id = 'hershey-xl'").fetchone()
+    assert row == ("Chocolate Bar", "A7", 3.89, ["dessert", "chocolate", "snack"])
+    assert conn.execute("select count(*) from products where name ilike '%olive%' or name ilike '%oil%'").fetchone()[0] == 0
+    nearby = conn.execute("select nearby from store_info").fetchone()[0]
+    assert {n["name"] for n in nearby if "oil" in n["good_for"]} == {"Trader Joe's", "Safeway", "Berkeley Bowl"}

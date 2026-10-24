@@ -125,6 +125,7 @@ async def test_the_prompt_says_how_to_edit_the_list_and_what_to_do_when_the_stor
     await collect(Brain(llm=llm).respond("hi", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
     system = llm.requests[0]["system"]
     assert "say its readback" in system and "change_by" in system and "replaces" in system
+    assert "undo_last_edit" in system
     assert "call not_sold_here" in system and "Never say another store has it" in system
 
 
@@ -146,3 +147,18 @@ async def test_a_sold_out_edit_goes_back_to_claude_to_offer_a_substitute():
                    Turn(chunks=["Sorry, salsa is sold out today. The queso in Aisle 5 is in stock. Want that instead?"])])
     said = await collect(Brain(llm=llm).respond("add salsa", {"backend": backend, "cart_id": "7", "trip_id": "t"}))
     assert "".join(said).endswith("Want that instead?") and not llm.turns
+
+
+async def test_no_i_said_x_undoes_the_last_edit_and_makes_the_right_one():
+    backend = FakeBackend()
+    c = {"backend": backend, "cart_id": "7", "trip_id": "t", "undo": []}
+    llm = FakeLLM([Turn(chunks=["Sure."], tools=[ToolUse("t1", "add_to_plan", {"product_id": "daisy-sour-cream",
+                                                                               "reason": "tacos"})]),
+                   Turn(chunks=["Sorry."], tools=[ToolUse("t2", "undo_last_edit", {}),
+                                                  ToolUse("t3", "add_to_plan", {"product_id": "tostitos-salsa",
+                                                                                "reason": "tacos"})])])
+    brain = Brain(llm=llm)
+    await collect(brain.respond("add sour cream", c))
+    said = await collect(brain.respond("no, I said salsa", c))
+    assert "".join(said) == "Sorry. Took sour cream back off your list. Added salsa, Aisle 5."
+    assert [p["product_id"] for p in backend.cart["plan"]] == ["tostitos-salsa"]

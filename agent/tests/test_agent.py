@@ -435,3 +435,29 @@ async def test_paid_is_said_once_the_ipad_says_so():
     assert agent.run_filter(paid)
     assert await run(agent, paid) == ["Paid. Thanks for shopping!"]
     assert not agent.run_filter(UserCustomSent(metadata={"type": "ui_action", "action": "checkout_tapped"}))
+
+
+SPAG_OUT = {"type": "cart_changed", "change": "removed", "product_id": "barilla-spaghetti"}
+
+
+async def test_a_planned_item_taken_out_asks_to_take_it_off_the_list_too():
+    agent, backend = make()                                   # no Claude turns: the answer is a fast path
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1, "done": False}]
+    assert await run(agent, UserCustomSent(metadata=SPAG_OUT)) == ["Took the Spaghetti off your bill. Take it off the list too?"]
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Yes, please.")])) == ["Took spaghetti off your list."]
+    assert backend.cart["plan"] == []
+
+
+async def test_no_keeps_the_item_on_the_list():
+    agent, backend = make()
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1, "done": False}]
+    await run(agent, UserCustomSent(metadata=SPAG_OUT))
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="No.")])) == ["Okay, it stays on your list."]
+    assert [p["product_id"] for p in backend.cart["plan"]] == ["barilla-spaghetti"]
+
+
+async def test_taking_out_an_extra_box_asks_nothing():
+    agent, backend = make()
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1, "done": True}]
+    backend.cart["items"] = [{"product_id": "barilla-spaghetti", "qty": 1}]   # box 2 came out; box 1 is still in
+    assert await run(agent, UserCustomSent(metadata=SPAG_OUT)) == ["Took the Spaghetti off your bill."]

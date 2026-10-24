@@ -139,3 +139,35 @@ def _unknown_resolved(tmp_path, sb, url, key, cart_id):
     rows = json.loads(body)
     added = next(r for r in rows if r["type"] == "added")
     assert status == 200 and added["event_id"] == mem.events[0].event_id and added["resolved_at"] is not None
+
+
+def test_thats_mine_round_trip(tmp_path, sb):  # CONTRACT v0.15: iPad/agent mark_personal → CV watcher
+    from kartcv.trip import PersonalWatcher
+    url, key = sb
+    status, body = http.get(f"{url}/rest/v1/cart_events?select=resolution&limit=1", http.supabase_headers(key))
+    if status != 200:
+        pytest.skip(f"backend has no cart_events.resolution (\"That's mine\" removed in contract v0.17): {body[:100]!r}")
+    cart_id = f"cv-e2e-{uuid.uuid4().hex[:8]}"
+    try:
+        catalog = fetch_catalog(url, key)
+        cfg = Config(features="hist", cart_id=cart_id, personal_items=True)
+        sink = HttpSink(url, key, tmp_path / "state/outbox.jsonl", start_thread=False)
+        mem = MemorySink()
+        p = Pipeline(cfg, [0, 1], HybridIdentifier(None, None, catalog, cfg), HistogramFeatures(), [sink, mem],
+                     tmp_path / "state")
+        sc = Script(Scene()).still(1.0).drop(Item("red-box", 300, 200, seed=1))
+        for tick in sc.ticks:
+            p.step(tick)
+        [ev] = mem.events
+        assert ev.product_id is None and sink.flush_once(1e9) == 1
+        assert http.post_json(f"{url}/rest/v1/rpc/mark_personal", http.supabase_headers(key),
+                              {"p_cart_id": cart_id, "p_event_id": ev.event_id}) == 200  # the iPad's "That's mine"
+        w = PersonalWatcher(url, key, cart_id, tmp_path / "state/personal.json", p.mark_personal, start_thread=False)
+        assert w.poll_once() == 1 and next(iter(p.cart.instances.values())).personal
+        n = len(sc.ticks)
+        sc.take("red-box")
+        for tick in sc.ticks[n:]:
+            p.step(tick)
+        assert len(mem.events) == 1 and len(p.cart.instances) == 0  # its removal emitted nothing
+    finally:
+        reset(sb, cart_id)
