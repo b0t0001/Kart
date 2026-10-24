@@ -12,7 +12,8 @@ from typing import Any, AsyncIterator
 from line.events import AgentSendCustom, AgentSendText, CallEnded, CallStarted, UserCustomSent, UserTurnEnded, UserTurnStarted
 
 from .brain import Brain
-from .lines import (DECLINED_LINE, KEEP_LINE, LIST_KEPT, LIST_TOO, NUDGE_OK_LINE, QUIET_OFF_LINE, QUIET_ON_LINE,
+from .lines import (DECLINED_LINE, KEEP_LINE, LIST_KEPT, LIST_KEPT_THEM, LIST_TOO, LIST_TOO_THEM, NUDGE_OK_LINE,
+                    QUIET_OFF_LINE, QUIET_ON_LINE, plural,
                     WELCOME_LINE, accepted_line, nudge_answer, only_ack, only_filler, only_thanks, proactive_line,
                     quiet_request, yes_or_no)
 from .tools import run_tool
@@ -186,7 +187,7 @@ class KartAgent:
             if plain:                                    # "Take it off the list too?" "Yes."
                 await self._caption("user", text)
                 product_id, self._list_too = self._list_too, None
-                line = LIST_KEPT
+                line = LIST_KEPT_THEM if plural(next((p for p in self._catalog if p["id"] == product_id), None)) else LIST_KEPT
                 if plain == "yes":
                     out = json.loads(await run_tool("remove_from_plan", {"product_id": product_id}, ctx))
                     line = out.get("readback") or line
@@ -287,7 +288,7 @@ class KartAgent:
                 self._last_add = None                    # said (or nothing to say): a later deal stands alone
                 if line and (money := self._budget_line()):
                     line = f"{line} {money}"
-            if line and line.endswith(LIST_TOO):
+            if line and line.endswith((LIST_TOO, LIST_TOO_THEM)):
                 self._list_too, self._last_asked = meta.get("product_id"), "list_too"
             elif line and meta.get("type") == "suggestion" and self._last_add:
                 add, at = self._last_add

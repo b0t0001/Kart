@@ -44,7 +44,7 @@ async def test_set_plan_rejects_unknown_and_sold_out_products(backend):
 async def test_add_to_plan_keeps_existing_lines(backend):
     backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta dinner", "qty": 1, "done": False}]
     await run_tool("add_to_plan", {"product_id": "kirkland-parmesan", "reason": "deal"}, ctx(backend))
-    assert [p["product_id"] for p in backend.cart["plan"]] == ["barilla-spaghetti", "kirkland-parmesan"]
+    assert {p["product_id"] for p in backend.cart["plan"]} == {"barilla-spaghetti", "kirkland-parmesan"}
 
 
 async def test_confirm_item_resolves_the_oldest_unknown(backend):
@@ -334,3 +334,22 @@ async def test_a_diet_is_kept_for_the_trip(backend):
                                                   "avoid_products": ["queso"]}, c))
     assert out == {"diet": "no dairy", "avoiding_kinds": ["cheese", "dairy"], "avoiding_products": ["queso"]}
     assert c["diet"] == {"diet": "no dairy", "kinds": {"cheese", "dairy"}, "products": {"queso"}}
+
+
+async def test_plural_items_read_back_with_they(backend):
+    backend.cart["plan"] = [{"product_id": "avocados", "reason": "tacos", "qty": 1}]
+    backend.cart["items"] = [{"product_id": "avocados", "name": "Avocados", "qty": 1, "price": 5.99}]
+    out = json.loads(await run_tool("remove_from_plan", {"product_id": "avocados"}, ctx(backend)))
+    assert out["readback"] == "Took avocados off your list. They're still in your cart."
+
+
+async def test_an_add_across_the_store_says_it_comes_last(backend):
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1, "done": False}]
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "kids-scissors", "reason": "school"}, ctx(backend)))
+    assert out["readback"] == "Added kids' scissors, Aisle 9. That's across the store, so we'll grab them last."
+
+
+async def test_an_add_a_couple_of_aisles_on_says_nothing_extra(backend):
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1, "done": False}]
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "daisy-sour-cream", "reason": "tacos"}, ctx(backend)))
+    assert out["readback"] == "Added sour cream, Aisle 8."      # last, but only two aisles on

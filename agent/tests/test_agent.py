@@ -641,3 +641,11 @@ async def test_each_turn_carries_the_live_cart_so_simple_questions_need_no_tool(
     assert agent.brain.llm.requests[-1]["messages"][-1]["content"] == (
         "(Right now: list: Spaghetti ✓ (Aisle 6); Rao's Sauce (Aisle 6); 2× Parmesan (Aisle 4, $3 off). "
         "Cart: Spaghetti ×1 $1.99. Total $1.99, saved $0.00. Next: Aisle 6 → Rao's Sauce.) What's my total?")
+
+
+async def test_plural_items_get_them_not_it():
+    agent, backend = make()
+    backend.cart["plan"] = [{"product_id": "avocados", "reason": "tacos", "qty": 1, "done": False}]
+    out = UserCustomSent(metadata={"type": "cart_changed", "change": "removed", "product_id": "avocados"})
+    assert await run(agent, out) == ["Took the Avocados off your bill. Take them off the list too?"]
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="No.")])) == ["Okay, they stay on your list."]
