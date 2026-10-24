@@ -4,20 +4,20 @@ KART iPad mount: parametric Fusion 360 script
 
 What it builds (in a NEW Fusion document, every run):
   * Bracket_L / Bracket_R: mirrored "bookends", one per side of the iPad.
-    Each one hangs on the cart handle by a printed arch, and an arm from
-    the bottom of the bracket reaches the top-basket wire, where a notched
-    pad sits on top of it. Both open downward, so the mount simply hangs:
-    hold it a couple of cm high, slide it toward the cart until the arches
-    are over the handle and the pads over the wire, and set it down. Gravity
-    seats it, the sides of the arch and the notch stop every push and twist,
-    and the only way off is straight up, which the zip ties stop. Two
-    attachment points on two different parts of the cart make a triangle,
-    so the screen can't rotate around the handle.
+    Each one hangs on the cart handle by a printed arch (opens downward).
+    Below it a web runs down beside the bars between the handle and the
+    wire, staying on the shopper's side of them, and a leg reaches a hook
+    that wraps the wire from the shopper's side (opens toward the basket).
+    To fit it: hang the arch on the handle with the bottom swung toward
+    you, and let go: gravity swings the hook onto the wire. Then the hook's
+    jaws stop it lifting, the arch stops it sliding, and the only free move
+    is swinging the screen up toward you, which gravity resists (zip ties
+    back it up). Nothing passes through the basket mesh.
     The upper part is a channel that holds one short edge of the iPad:
     ledge, side wall, front lips (on the bezel only) and a back plate.
-  * Spacer: a bar behind the iPad that slides into a socket on each bracket
-    and fixes their spacing, so the iPad can't drop between them. A zip tie
-    through each socket pins it.
+  * Spacer (optional, BUILD_SPACER): a bar between the brackets' sockets.
+    Not needed: the iPad sets the spacing, and a zip tie chained between
+    the two socket slots behind the iPad stops the brackets spreading.
   * TEST_Profile / TEST_Corner: quick fit-test prints (README, "Fit test").
   * REF_ components: handle, wire and iPad envelopes. Don't print them.
 
@@ -58,6 +58,7 @@ except NameError:
     STL_DIR = ''
 AUTO_FILLET = True      # CAD rule 3: fillet every corner by size, chamfer bed edges
 BUILD_TESTS = True      # TEST_Profile and TEST_Corner fit-test prints
+BUILD_SPACER = False    # printed spacer bar (a zip tie between the sockets does the job)
 SHOW_REFERENCE = True   # grey REF_ envelopes (handle, wire, iPad); don't print
 
 # ============================================================== PARAMETERS
@@ -97,7 +98,8 @@ PARAMS = [
     ('mesh_n',      '6',        '',   'Mesh wires modelled per side (REF_Mesh only)'),
 
     # Screen placement
-    ('tilt',        '0 deg',    'deg', 'Screen lean-back from vertical (top edge toward the cart); 15-20 reads better from standing height'),
+    ('screen_angle', '40 deg',  'deg', 'Screen angle to the ground (90 = vertical); 35-45 reads well standing at the cart'),
+    ('tilt',        '90 deg - screen_angle', 'deg', 'derived: screen lean-back from vertical (top edge toward the cart)'),
     ('v_h',         '70 mm',    'mm', 'Handle height behind the screen, measured up from the iPad bottom edge'),
     ('hook_gap',    '3 mm',     'mm', 'Gap between back plate and handle tube (a zip tie runs through it)'),
 
@@ -118,8 +120,11 @@ PARAMS = [
 
     # Hanger: arch over the handle, arm, pad on top of the wire
     ('sad_t',       '6 mm',     'mm', 'Arch wall thickness over the handle tube'),
-    ('arm_w',       '17 mm',    'mm', 'Arch and wire pad width along the handle (fits between the mesh wires)'),
-    ('arm_t',       '8 mm',     'mm', 'Web and leg thickness along the handle'),
+    ('arm_w',       '30 mm',    'mm', 'Arch width along the handle (resists twisting)'),
+    ('web_t',       '30 mm',    'mm', 'Web width along the handle (resists twisting)'),
+    ('hook_w',      '17 mm',    'mm', 'Wire hook width: must fit between the mesh wires'),
+    ('arm_t',       '8 mm',     'mm', 'Leg and brace width along the handle (outboard of the tie path)'),
+    ('web_hole',    '0.7',      '',   'Lightening window in the web, as a fraction of its size (0 = solid)'),
     ('arm_h',       '16 mm',    'mm', 'Height of the leg out to the wire pad'),
     ('pad_wall',    '6 mm',     'mm', 'Wire pad wall around the notch'),
     ('zt_w',        '5.6 mm',   'mm', 'Zip-tie tunnel width (4.8 mm ties)'),
@@ -127,7 +132,7 @@ PARAMS = [
     ('tun_floor',   '1.4 mm',   'mm', 'Plastic between the wire tie tunnel and the notch'),
 
     # Spacer (behind the iPad, above the handle)
-    ('sp_v',        '100 mm',   'mm', 'Spacer bottom, measured up the screen from the iPad bottom edge (keep it above the arch)'),
+    ('sp_v',        '120 mm',   'mm', 'Socket (zip-tie anchor) bottom, up the screen from the iPad bottom edge (keep it above the arch)'),
     ('sp_h',        '16 mm',    'mm', 'Spacer height (along the screen)'),
     ('sp_t',        '8 mm',     'mm', 'Spacer thickness (front to back)'),
     ('sfit',        '0.2 mm',   'mm', 'Slide fit per side, spacer in socket (fits table)'),
@@ -192,6 +197,7 @@ NEW = JOIN = CUT = None
 AX = {'x': 0, 'y': 1, 'z': 2}
 STEP = 'startup'          # current build step, reported if something fails
 SKIPPED = []              # dimensions Fusion had already constrained
+COMPONENTS = []           # printable parts built this run
 
 
 def VI(expr):
@@ -386,6 +392,19 @@ def LP(s, w):
     across it (positive toward the basket), as (Y, Z) expressions."""
     return ('(%s)*rim_dy/rim_c + (%s)*rim_drop/rim_c' % (s, w),
             '-(%s)*rim_drop/rim_c + (%s)*rim_dy/rim_c' % (s, w))
+
+
+def RP(a, b):
+    """Wire frame -> model (Y, Z). Origin = wire centre; b along the
+    handle-to-wire line (away from the handle), a across it: the way the
+    hook swings onto the wire (toward the basket). The hook opens toward +a."""
+    return ('rim_dy + (%s)*rim_drop/rim_c + (%s)*rim_dy/rim_c' % (a, b),
+            '-(rim_drop) + (%s)*rim_dy/rim_c - (%s)*rim_drop/rim_c' % (a, b))
+
+
+def fq(frame, a0, a1, b0, b1):
+    """Rectangle a0..a1 x b0..b1 in a frame, as a polygon shape."""
+    return ('poly', [frame(a0, b0), frame(a1, b0), frame(a1, b1), frame(a0, b1)])
 
 
 def BL(z):
@@ -637,22 +656,45 @@ def add_channel(p, top, rest_top, wall=True, top_lip=True, thick=None):
     p.add('Back rest', tq('rest_lo', rest_top, 'n_r', 'n_p + back_t/2'), '0 mm', T('wall_t + grip'))
 
 
+def web_points():
+    """Corners of the web: from the pocket bottom down behind the bars to
+    the leg. When the screen leans far back, the pocket bottom is already at
+    the web's top height, so its corner is used on its own."""
+    pts = []
+    if E('v_g') > E('v_b') + 0.05:
+        pts.append(P('v_g', 'n_p'))
+    return pts + [BL('z_gus'), BL('leg_z1'), ('web_y0', 'leg_z1'), P('v_b', 'n_p')]
+
+
 def add_hanger(p, thick=None):
-    """Arch over the handle and a pad on top of the wire, both open
-    downward, joined by an L: a web behind the back plate that follows the
-    middle bars (staying web_off on the shopper side of them), then a leg
-    out to the pad."""
+    """Arch over the handle (opens down) and a hook round the wire from the
+    shopper's side (opens toward the basket), joined by an L: a web behind
+    the back plate that follows the middle bars (web_off on the shopper's
+    side of them), then a leg out to the hook. A brace runs from the web up
+    the back plate to the arch."""
     T = lambda t: thick or t
     p.add('Arch', ('poly', [('r_sad', '0 mm'), ('r_sad', 'r_sad'),
                             P('v_c1', 'n_p'), P('v_a0', 'n_p')]), '0 mm', T('arm_w'))
-    # Web top stays a tube's width below the arch (room to slide the arch
+    # Web top stays a tube's width below the arch (room to get the arch
     # over the handle).
-    p.add('Web', ('poly', [P('v_g', 'n_p'), BL('z_gus'), BL('leg_z1'),
-                           ('web_y0', 'leg_z1'), P('v_b', 'n_p')]), '0 mm', T('arm_t'))
-    p.add('Leg', ('rect', 'web_y0', 'leg_z1 - arm_h', 'rim_dy - r_pad + 1 mm - web_y0', 'arm_h'),
-          '0 mm', T('arm_t'))
-    p.add('Wire pad', ('rect', 'rim_dy - r_pad', '-(rim_drop)', '2*r_pad', 'r_pad'),
-          '0 mm', T('arm_w'))
+    p.add('Web', ('poly', web_points()), '0 mm', T('web_t'))
+    # Brace: behind the back plate from the web's top to the arch, kept
+    # clear of where the handle passes when the arch goes on.
+    p.add('Brace', ('poly', [P('v_b', 'n_p'), P('v_a0', 'n_p'), ('-(bore_r + 2 mm)', '0 mm'),
+                             ('-(bore_r + 2 mm)', 'z_gus')]), '0 mm', T('arm_t'))
+    p.add('Leg', ('rect', 'web_y0', 'leg_z1 - arm_h',
+                  'rim_dy - r_pad*rim_drop/rim_c + 1 mm - web_y0', 'arm_h'), '0 mm', T('arm_t'))
+    p.add('Wire hook', fq(RP, '-(r_pad)', '0 mm', '-(r_pad)', 'r_pad'), '0 mm', T('hook_w'))
+
+
+def web_window():
+    """The web's corners pulled toward its centre by web_hole."""
+    pts = web_points()
+    n = len(pts)
+    cy = '((%s)/%d)' % (' + '.join('(%s)' % y for y, _ in pts), n)
+    cz = '((%s)/%d)' % (' + '.join('(%s)' % z for _, z in pts), n)
+    return ('poly', [('%s + web_hole*((%s) - %s)' % (cy, y, cy),
+                      '%s + web_hole*((%s) - %s)' % (cz, z, cz)) for y, z in pts])
 
 
 def hanger_cuts(p, ties=True):
@@ -660,11 +702,13 @@ def hanger_cuts(p, ties=True):
           '-1 mm', 'arm_w + 2 mm')
     p.cut('Wire notch', ('circle', 'rim_dy', '-(rim_drop)', 'rim_d + 2*rim_fit'),
           '-1 mm', 'arm_w + 2 mm')
-    # Straight-walled entry below the notch, so nothing blocks the wire;
-    # starts inside the notch so the cut always has material to remove.
-    p.cut('Wire mouth', ('rect', 'rim_dy - r_wb', '-(rim_drop) - r_pad - 10 mm',
-                         '2*r_wb', 'r_pad + 10 mm + r_wb/2'),
+    # Straight-walled mouth toward the basket, so nothing blocks the wire as
+    # the hook swings on; starts inside the notch so the cut always removes
+    # material.
+    p.cut('Wire mouth', fq(RP, '-(r_wb/2)', 'r_pad + 10 mm', '-(r_wb)', 'r_wb'),
           '-1 mm', 'arm_w + 2 mm')
+    if N('web_hole') > 0:
+        p.cut('Web window', web_window(), '-1 mm', 'web_t + 2 mm')
     if not ties:
         return
     # Handle tie: up the gap behind the back plate, over the arch, down its
@@ -673,10 +717,10 @@ def hanger_cuts(p, ties=True):
           tq('v_g', 'v_c1 + 8 mm',
              'n_b + (hook_gap - zt_h)/2', 'n_b + (hook_gap + zt_h)/2'),
           'tie_x - zt_w/2', 'zt_w')
-    # Wire tie: through the pad just above the notch, round under the wire.
+    # Wire tie: through the hook behind the wire, round its basket side.
     p.cut('Wire tie tunnel',
-          ('rect', 'rim_dy - r_pad - 1 mm', '-(rim_drop) + r_wb + tun_floor',
-           '2*r_pad + 2 mm', 'zt_h'),
+          fq(RP, '-(r_wb + tun_floor + zt_h)', '-(r_wb + tun_floor)',
+             '-(r_pad + 1 mm)', 'r_pad + 1 mm'),
           'tie_x - zt_w/2', 'zt_w')
 
 
@@ -769,8 +813,10 @@ def build():
     t = um.evaluateExpression('tilt', 'deg')
     left = build_bracket('Bracket_L', -1)
     right = build_bracket('Bracket_R', 1)
-    spacer = build_spacer()
+    spacer = build_spacer() if BUILD_SPACER else None
     tests = build_tests() if BUILD_TESTS else []
+    parts = [left, right] + ([spacer] if spacer else []) + tests
+    COMPONENTS[:] = parts
     if SHOW_REFERENCE:
         try:
             build_reference()
@@ -779,8 +825,9 @@ def build():
                             + traceback.format_exc().splitlines()[-1])
 
     # Rule 3 finishing, then the print-bed check
-    beds = [(left, (-1, 0, 0)), (right, (1, 0, 0)),
-            (spacer, (0, math.cos(t), -math.sin(t)))] + [(p, (-1, 0, 0)) for p in tests]
+    beds = ([(left, (-1, 0, 0)), (right, (1, 0, 0))]
+            + ([(spacer, (0, math.cos(t), -math.sin(t)))] if spacer else [])
+            + [(p, (-1, 0, 0)) for p in tests])
     for part, d in beds:
         try:
             st = finish(part, d)
@@ -796,12 +843,13 @@ def build():
             warnings.append('%s finishing failed (part is fine, add fillets by hand):\n%s'
                             % (part.name, traceback.format_exc().splitlines()[-1]))
 
-    L = E('ipad_w + 2*(clr - sp_end)') * 10
-    spacer.pts = [(0, 0), (L, 0), (L, E('sp_h') * 10), (0, E('sp_h') * 10)]
+    if spacer:
+        L = E('ipad_w + 2*(clr - sp_end)') * 10
+        spacer.pts = [(0, 0), (L, 0), (L, E('sp_h') * 10), (0, E('sp_h') * 10)]
     heights = {'Spacer': E('sp_t') * 10, 'TEST_Profile': E('test_t') * 10}
-    tallest = max(E('wall_t + grip'), E('wall_t + sk_l'), E('arm_w')) * 10
+    tallest = max(E('wall_t + grip'), E('wall_t + sk_l'), E('arm_w'), E('web_t')) * 10
     fits = []
-    for part in [left, right, spacer] + tests:
+    for part in parts:
         h = heights.get(part.name, tallest)
         res = bed_fit(part.pts, h)
         fits.append('%s: %s' % (part.name, ', '.join(
@@ -812,7 +860,7 @@ def build():
         step('STL export')
         os.makedirs(STL_DIR, exist_ok=True)
         em = design.exportManager
-        for part in [left, right, spacer] + tests:
+        for part in parts:
             path = os.path.join(STL_DIR, 'ipadmount_%s.stl' % part.name.lower())
             opts = em.createSTLExportOptions(part.B(), path)
             opts.meshRefinement = adsk.fusion.MeshRefinementSettings.MeshRefinementHigh
@@ -846,30 +894,27 @@ def run(context):
         add_params()
         warnings, report, fits = build()
         step('final checks')
-        off = math.degrees(math.atan2(abs(E('rim_dy')), E('rim_drop')))
-        lo, hi = (E('bx_o - arm_w') * 10, E('bx_o') * 10)   # hanger, mm from centre
+        if not BUILD_SPACER:
+            warnings.append('No spacer (BUILD_SPACER = False): hang both brackets, drop the '
+                            'iPad in, then chain a zip tie between the two socket slots '
+                            'behind it to stop the brackets spreading.')
+        lo, hi = (E('bx_o - hook_w') * 10, E('bx_o') * 10)  # wire hook, mm from centre
         for k in range(int(round(N('mesh_n')))):
             xk = E('mesh_x0 + %d*mesh_pitch' % k) * 10
             gap = max(lo - xk, xk - hi, 0) - E('mesh_d/2') * 10
             if gap < 2:
-                warnings.append('The arch/pad (%.0f-%.0f mm from centre) is %.1f mm from the '
-                                'mesh wire at %.0f mm: change arm_w or check the mesh numbers.'
+                warnings.append('The wire hook (%.0f-%.0f mm from centre) is %.1f mm from the '
+                                'mesh wire at %.0f mm: change hook_w or check the mesh numbers.'
                                 % (lo, hi, gap, xk))
         if N('rim_side') < 0:
             warnings.append('rim_side = -1 (wire toward the shopper): the web is laid out '
                             'for bars slanting toward the basket. Check for collisions '
                             '(check/check.py) before printing.')
-        if off > 25:
-            warnings.append('The wire is %.0f deg forward of straight below the handle. '
-                            'Past ~25 deg the pad can roll off the wire when the screen '
-                            'tips toward the shopper (check/check.py shows it): rely on '
-                            'the wire zip ties, or ask for a forward-facing notch.' % off)
         app.activeViewport.fit()
 
         measure = [n for n, _, _, c in PARAMS if c.startswith('MEASURE')]
         msg = ('KART iPad mount built.\n\n'
-               'Components: Bracket_L (grounded), Bracket_R, Spacer'
-               + (', TEST_Corner, TEST_Profile' if BUILD_TESTS else '') + '.\n'
+               'Components: ' + ', '.join(p.name for p in COMPONENTS) + '.\n'
                'Print the TEST pieces first (README, "Fit test").\n\n'
                'Print beds:\n  ' + '\n  '.join(fits) + '\n\n'
                'Still nominal (MEASURE): ' + ', '.join(measure) + '\n\n'

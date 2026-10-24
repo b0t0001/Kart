@@ -8,10 +8,11 @@
    must evaluate and every sketch dimension must match the geometry it was
    drawn at, and the auto-fillet / chamfer / STL code paths run.
 2. Rebuilds every extrusion as a real solid (manifold3d) and checks: each
-   printable part is one solid; nothing overlaps the iPad, handle, wire or
-   each other; the mount slides over the handle and wire and sits down on
-   them; nudged in any direction it hits the cart except upward (it's
-   captured); the iPad slides in from above; both zip-tie loops have room.
+   printable part is one solid; nothing overlaps the iPad, handle, wire,
+   middle bars, mesh wires or each other; the arch goes on the handle and
+   the hook swings onto the wire without hitting anything; nudged or turned
+   any way it either hits the cart or lifts the weight (gravity holds it);
+   the iPad slides in from above; both zip-tie loops have room.
 3. Writes hardware/cad/stl/preview_*.stl (no fillets or chamfers: fine for
    the fit tests; Fusion's own export is the real print file) and
    hardware/cad/stl/preview.png.
@@ -79,13 +80,17 @@ def solids_from_log(np, CrossSection, FillRule, Manifold):
         T[0, 3] = x0
         return cs.extrude(x1 - x0).transform(T)
 
-    solids = {}
-    for p in fusion.LOG['prisms']:
+    solids, empty_cuts = {}, []
+    for i, p in enumerate(fusion.LOG['prisms']):
         m = prism(section(p['shapes']), p['x0'] * 10, p['x1'] * 10)
         if p['op'] == 'CUT':
+            before = solids[p['comp']].volume()
             solids[p['comp']] = solids[p['comp']] - m
+            if before - solids[p['comp']].volume() < 1e-3:   # Fusion rejects these
+                empty_cuts.append('%s cut #%d' % (p['comp'], i))
         else:
             solids[p['comp']] = solids.get(p['comp'], Manifold()) + m
+    solids['_empty_cuts'] = empty_cuts
     return solids, prism
 
 
@@ -107,7 +112,10 @@ def solid_checks(P, results):
     def vol(a, b):
         return (a ^ b).volume()
 
-    printable = ['Bracket_L', 'Bracket_R', 'Spacer', 'TEST_Corner', 'TEST_Profile']
+    empty_cuts = solids.pop('_empty_cuts')
+    printable = [n for n in ['Bracket_L', 'Bracket_R', 'Spacer', 'TEST_Corner', 'TEST_Profile']
+                 if n in solids]
+    brackets = ['Bracket_L', 'Bracket_R']
     print('\nparts:')
     for n in printable:
         m = solids[n]
@@ -117,63 +125,80 @@ def solid_checks(P, results):
         print('  %-13s %6.1f cm3  %s' % (n, m.volume() / 1000,
                                          'one solid, ok' if good else 'FAIL (%d pieces)' % bodies))
 
+    good = not empty_cuts
+    ok &= good
+    print('  %-50s %s' % ('every cut removes material (Fusion rejects empty cuts)',
+                          'ok' if good else 'FAIL: ' + ', '.join(empty_cuts)))
+
     ipad, handle, wire = solids['REF_iPad'], solids['REF_Handle'], solids['REF_Wire']
-    bars = solids.get('REF_Bars')
-    mesh = solids.get('REF_Mesh')
+    bars, mesh = solids.get('REF_Bars'), solids.get('REF_Mesh')
     refs = [('iPad', ipad), ('handle', handle), ('wire', wire)]
     if bars is not None:
         refs.append(('middle bars', bars))
     if mesh is not None:
         refs.append(('mesh wires', mesh))
+    holders = [n for n in brackets + ['Spacer'] if n in solids]
     print('\noverlaps:')
-    for n in ['Bracket_L', 'Bracket_R', 'Spacer']:
+    for n in holders:
         for ref, m in refs:
             report('%s vs %s' % (n, ref), vol(solids[n], m))
-    for n in ['Bracket_L', 'Bracket_R']:
-        report('Spacer vs %s' % n, vol(solids['Spacer'], solids[n]))
+    if 'Spacer' in solids:
+        for n in brackets:
+            report('Spacer vs %s' % n, vol(solids['Spacer'], solids[n]))
 
-    # Install: hold the mount a little high, slide it toward the cart (+Y)
-    # until the arch is over the handle and the pad over the wire, then set
-    # it down. Relative to the bracket, the handle and the wire come in from
-    # +Y a tube-radius low, then rise into the arch and the notch.
+    # The cart in the side view, as convex pieces (so sweeping one is just a
+    # hull) with the X ranges they occupy.
     bx, hr, wr = P['bx_o'], P['handle_d'] / 2, P['rim_d'] / 2
     wc = (P['rim_dy'], -P['rim_drop'])
-    lift = hr + 1.5          # handle top passes just under the arch's jaw
-
-    def dogleg(cy, cz, r, seg):
-        low = CrossSection.circle(r, seg).translate((cy, cz - lift))
-        return ((low + CrossSection.circle(r, seg).translate((cy + 300, cz - lift))).hull()
-                + (low + CrossSection.circle(r, seg).translate((cy, cz))).hull())
-
-    handle_path = dogleg(0, 0, hr, 96)
-    wire_path = dogleg(wc[0], wc[1], wr, 48)
-    mesh_path = None
-    if mesh is not None:  # each slanted wire is a band in the side view
-        rc, md = P['rim_c'], P['mesh_d']
+    rc = P['rim_c']
+    full = [(-400.0, 400.0)]
+    feats = [('handle', [CrossSection.circle(hr, 96)], full),
+             ('wire', [CrossSection.circle(wr, 48).translate(wc)], full)]
+    if bars is not None:
+        feats.append(('middle bars',
+                      [CrossSection.square((P['bar1_w'], P['bar1_h']), True)
+                       .translate((P['bar1_y'], P['bar1_z'])),
+                       CrossSection.circle(P['bar2_d'] / 2, 48).translate((P['bar2_y'], P['bar2_z']))],
+                      full))
+    if mesh is not None:
+        md, L = P['mesh_d'], rc + 20
         ux, uz = P['rim_dy'] / rc, -P['rim_drop'] / rc        # along the line
         px, pz = P['rim_drop'] / rc, P['rim_dy'] / rc         # across it
-        L = rc + 20
-        band = CrossSection([np.array([(sa * ux + sw * px, sa * uz + sw * pz)
-                                       for sa, sw in [(0, -md / 2), (L, -md / 2),
-                                                      (L, md / 2), (0, md / 2)]])],
+        band = CrossSection([np.array([(a * ux + w * px, a * uz + w * pz)
+                                       for a, w in [(0, -md / 2), (L, -md / 2),
+                                                    (L, md / 2), (0, md / 2)]])],
                             FillRule.NonZero)
-        low = band.translate((0, -lift))
-        band_path = ((low + band.translate((300, -lift))).hull()
-                     + (low + band).hull())
-        mesh_path = Manifold()
+        xr = []
         for k in range(int(round(P['mesh_n']))):
             xk = P['mesh_x0'] + k * P['mesh_pitch']
-            for sign in (-1, 1):
-                mesh_path = mesh_path + prism(band_path, sign * xk - md / 2, sign * xk + md / 2)
-    bar_paths = None
-    if bars is not None:  # the upper bar pair is a block, the lower bar round
-        def slide(cs, cy, cz):
-            low = cs.translate((cy, cz - lift))
-            return ((low + cs.translate((cy + 300, cz - lift))).hull()
-                    + (low + cs.translate((cy, cz))).hull())
-        block = CrossSection.square((P['bar1_w'], P['bar1_h']), True)
-        bar_paths = (slide(block, P['bar1_y'], P['bar1_z'])
-                     + slide(CrossSection.circle(P['bar2_d'] / 2, 48), P['bar2_y'], P['bar2_z']))
+            xr += [(-xk - md / 2, -xk + md / 2), (xk - md / 2, xk + md / 2)]
+        feats.append(('mesh wires', [band], xr))
+
+    # Install, seen from the bracket. (1) Bottom swung toward the shopper by
+    # `swing` degrees, the arch goes over the handle: slid on from the
+    # basket side a tube-radius low, then lowered onto it. (2) The bracket
+    # swings back about the handle until the hook takes the wire. Relative to
+    # the bracket, the cart starts turned the other way and turns back.
+    swing, lift, steps = 10.0, hr + 1.5, 20
+
+    def install_path(piece):
+        start = piece.rotate(swing)
+        low = start.translate((0, -lift))
+        path = ((low + start.translate((300, -lift))).hull() + (low + start).hull())
+        for k in range(steps):
+            path = path + (piece.rotate(swing * k / steps)
+                           + piece.rotate(swing * (k + 1) / steps)).hull()
+        return path
+
+    paths = []
+    for name, pieces, xr in feats:
+        sec = CrossSection()
+        for piece in pieces:
+            sec = sec + install_path(piece)
+        solid = Manifold()
+        for x0, x1 in xr:
+            solid = solid + prism(sec, x0, x1)
+        paths.append((name, solid))
     t = P['tilt']
     s, c = math.sin(t), math.cos(t)
 
@@ -183,48 +208,57 @@ def solid_checks(P, results):
     H, D, W = P['ipad_h'], P['ipad_d'], P['ipad_w']
     ipad_path = prism(CrossSection([np.array([pvn(0, 0), pvn(H + 300, 0), pvn(H + 300, D),
                                               pvn(0, D)])], FillRule.NonZero), -W / 2, W / 2)
-    print('\nassembly paths:')
-    for n, xs in [('Bracket_L', (-bx - 1, -bx + 40)), ('Bracket_R', (bx - 40, bx + 1)),
-                  ('TEST_Profile', (-bx - 400, -bx))]:
-        report('%s: arch slides over and sits on the handle' % n,
-               vol(solids[n], prism(handle_path, *xs)))
-        report('%s: pad slides over and sits on the wire' % n,
-               vol(solids[n], prism(wire_path, *xs)))
-        if bar_paths is not None:
-            report('%s: clears the middle bars on the way' % n,
-                   vol(solids[n], prism(bar_paths, *xs)))
-        if mesh is not None:
-            report('%s: clears the mesh wires on the way' % n, vol(solids[n], mesh_path))
-    for n in ['Bracket_L', 'Bracket_R', 'Spacer']:
+    label = {'handle': 'arch goes over the handle', 'wire': 'hook swings onto the wire',
+             'middle bars': 'clears the middle bars on the way',
+             'mesh wires': 'clears the mesh wires on the way'}
+    print('\nassembly paths (arch on with the bottom swung %g deg toward you, then swing in):' % swing)
+    for n in brackets:
+        for name, path in paths:
+            report('%s: %s' % (n, label[name]), vol(solids[n], path))
+    for n in holders:
         report('%s: iPad slides in and out from above' % n, vol(solids[n], ipad_path))
 
     # Captured: nudge each bracket 3 mm every 45 degrees round the side view,
-    # and turn it 3 degrees about the handle and about the wire. Everything
-    # must hit the handle or the wire except moves with an upward component
-    # (gravity holds those; the zip ties back it up).
-    cart = (handle + wire + (bars if bars is not None else Manifold())
-            + (mesh if mesh is not None else Manifold()))
-    print('\ncaptured (only upward moves may be free):')
-    for n in ['Bracket_L', 'Bracket_R']:
-        free = []
+    # and turn it 3 degrees each way about the handle and about the wire. A
+    # move that doesn't hit the cart is only OK if it lifts the weight
+    # (bracket + half the iPad), so gravity holds it; zip ties back it up.
+    def centroid(m):
+        mesh_ = m.to_mesh()
+        v = np.asarray(mesh_.vert_properties)[:, :3]
+        tri = v[np.asarray(mesh_.tri_verts)]
+        w = np.einsum('ij,ij->i', tri[:, 0], np.cross(tri[:, 1], tri[:, 2])) / 6.0
+        return (w[:, None] * tri.sum(axis=1) / 4.0).sum(axis=0) / w.sum()
+
+    cart = Manifold()
+    for _, m in refs[1:]:
+        cart = cart + m
+    ipad_cg, ipad_g = centroid(ipad), 466.0 / 2
+    print('\ncaptured (a free move must lift the weight):')
+    for n in brackets:
+        g = solids[n].volume() / 1000 * 1.24 * 0.5          # PLA, ~half solid
+        cg = (centroid(solids[n]) * g + ipad_cg * ipad_g) / (g + ipad_g)
+        moves = []
         for deg in range(0, 360, 45):
             dy, dz = 3 * math.cos(math.radians(deg)), 3 * math.sin(math.radians(deg))
-            if vol(solids[n].translate((0, dy, dz)), cart) <= 1e-3:
-                free.append(deg)
-        for label, (cy, cz) in [('handle', (0, 0)), ('wire', wc)]:
-            for sign in (1, -1):
-                m = solids[n].translate((0, -cy, -cz)).rotate((3 * sign, 0, 0)).translate((0, cy, cz))
-                if vol(m, cart) <= 1e-3:
-                    free.append('turn about the %s %+d deg' % (label, 3 * sign))
-        upward = {45, 90, 135}
-        bad = [f for f in free if f not in upward]
+            moves.append(('move %d deg' % deg, solids[n].translate((0, dy, dz)), dz))
+        for name, (cy, cz) in [('handle', (0, 0)), ('wire', wc)]:
+            for a in (3, -3):
+                m = solids[n].translate((0, -cy, -cz)).rotate((a, 0, 0)).translate((0, cy, cz))
+                r = math.radians(a)
+                y, z = cg[1] - cy, cg[2] - cz
+                dz = (y * math.sin(r) + z * math.cos(r)) - z      # CG height change
+                moves.append(('turn %+d deg about the %s' % (a, name), m, dz))
+        free = [(name, dz) for name, m, dz in moves if vol(m, cart) <= 1e-3]
+        bad = [f for f in free if f[1] <= 0.05]
         ok &= not bad
-        print('  %-50s %s' % ('%s: free moves %s' % (n, free or 'none'),
-                              'ok' if not bad else 'FAIL (would come off)'))
+        desc = ', '.join('%s (lifts %.1f mm)' % (nm, dz) if dz > 0.05 else
+                         '%s (no lift)' % nm if dz > -0.05 else '%s (drops %.1f mm)' % (nm, -dz)
+                         for nm, dz in free) or 'none'
+        print('  %s: free moves: %s  %s' % (n, desc, 'ok' if not bad else 'FAIL (would come off)'))
 
     # Zip-tie loops, 2.5 mm bands at the tunnel X. Handle tie: up the tunnel
     # behind the back plate, over the arch, down its cart side, under the
-    # tube. Wire tie: out of the pad tunnel at both sides and under the wire.
+    # tube. Wire tie: through the hook behind the wire, round its basket side.
     rs, br, nm = P['r_sad'], P['bore_r'], P['n_b'] + P['hook_gap'] / 2
 
     def y_on(z, n):
@@ -234,10 +268,18 @@ def solid_checks(P, results):
             + box(rs + 0.05, -br - 2.5, rs + 2.5, rs + 2.5)
             + box(y_on(-br, nm) + 2, -br - 2.5, rs + 2.5, -hr - 0.05))
     rp, rw = P['r_pad'], P['r_wb']
-    z_top = wc[1] + rw + P['tun_floor']
-    wband = (box(wc[0] - rp - 2.5, wc[1] - rw - 2.5, wc[0] + rp + 2.5, wc[1] - rw - 0.05)
-             + box(wc[0] + rp + 0.05, wc[1] - rw - 2.5, wc[0] + rp + 2.5, z_top)
-             + box(wc[0] - rp - 2.5, wc[1] - rw - 2.5, wc[0] - rp - 0.05, z_top))
+    a_hat = (P['rim_drop'] / rc, P['rim_dy'] / rc)          # toward the basket
+    b_hat = (P['rim_dy'] / rc, -P['rim_drop'] / rc)         # away from the handle
+
+    def wq(a0, a1, b0, b1):
+        pts = [(wc[0] + a * a_hat[0] + b * b_hat[0], wc[1] + a * a_hat[1] + b * b_hat[1])
+               for a, b in [(a0, b0), (a1, b0), (a1, b1), (a0, b1)]]
+        return CrossSection([np.array(pts)], FillRule.NonZero)
+
+    a_t = -(rw + P['tun_floor'] + P['zt_h'])
+    wband = (wq(a_t, rw + 2.5, -rp - 2.5, -rp - 0.05)            # out over the wire
+             + wq(a_t, rw + 2.5, rp + 0.05, rp + 2.5)             # out under it
+             + wq(rw + 0.05, rw + 2.5, -rp - 2.5, rp + 2.5))      # round its basket side
     t0, t1 = P['tie_x'] - P['zt_w'] / 2, P['tie_x'] + P['zt_w'] / 2
     print('\nzip-tie loops:')
     for n, xs in [('Bracket_L', (-bx + t0, -bx + t1)), ('Bracket_R', (bx - t1, bx - t0))]:
@@ -321,7 +363,8 @@ def main():
     ok = solid_checks(P, results)
     solids = results['solids']
     for n in ['Bracket_L', 'Bracket_R', 'Spacer', 'TEST_Corner', 'TEST_Profile']:
-        write_stl(solids[n], os.path.join(OUT, 'preview_%s.stl' % n.lower()))
+        if n in solids:
+            write_stl(solids[n], os.path.join(OUT, 'preview_%s.stl' % n.lower()))
     preview_png(solids, os.path.join(OUT, 'preview.png'))
     print('\npreview STLs + preview.png -> %s' % OUT)
     print('RESULT: %s' % ('ALL CHECKS PASS' if ok else 'CHECKS FAILED'))
