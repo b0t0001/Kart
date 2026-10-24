@@ -118,9 +118,13 @@ def solid_checks(P, results):
                                          'one solid, ok' if good else 'FAIL (%d pieces)' % bodies))
 
     ipad, handle, wire = solids['REF_iPad'], solids['REF_Handle'], solids['REF_Wire']
+    bars = solids.get('REF_Bars')
+    refs = [('iPad', ipad), ('handle', handle), ('wire', wire)]
+    if bars is not None:
+        refs.append(('middle bars', bars))
     print('\noverlaps:')
     for n in ['Bracket_L', 'Bracket_R', 'Spacer']:
-        for ref, m in [('iPad', ipad), ('handle', handle), ('wire', wire)]:
+        for ref, m in refs:
             report('%s vs %s' % (n, ref), vol(solids[n], m))
     for n in ['Bracket_L', 'Bracket_R']:
         report('Spacer vs %s' % n, vol(solids['Spacer'], solids[n]))
@@ -140,6 +144,15 @@ def solid_checks(P, results):
 
     handle_path = dogleg(0, 0, hr, 96)
     wire_path = dogleg(wc[0], wc[1], wr, 48)
+    bar_paths = None
+    if bars is not None:  # the upper bar pair is a block, the lower bar round
+        def slide(cs, cy, cz):
+            low = cs.translate((cy, cz - lift))
+            return ((low + cs.translate((cy + 300, cz - lift))).hull()
+                    + (low + cs.translate((cy, cz))).hull())
+        block = CrossSection.square((P['bar1_w'], P['bar1_h']), True)
+        bar_paths = (slide(block, P['bar1_y'], P['bar1_z'])
+                     + slide(CrossSection.circle(P['bar2_d'] / 2, 48), P['bar2_y'], P['bar2_z']))
     t = P['tilt']
     s, c = math.sin(t), math.cos(t)
 
@@ -156,6 +169,9 @@ def solid_checks(P, results):
                vol(solids[n], prism(handle_path, *xs)))
         report('%s: pad slides over and sits on the wire' % n,
                vol(solids[n], prism(wire_path, *xs)))
+        if bar_paths is not None:
+            report('%s: clears the middle bars on the way' % n,
+                   vol(solids[n], prism(bar_paths, *xs)))
     for n in ['Bracket_L', 'Bracket_R', 'Spacer']:
         report('%s: iPad slides in and out from above' % n, vol(solids[n], ipad_path))
 
@@ -163,7 +179,7 @@ def solid_checks(P, results):
     # and turn it 3 degrees about the handle and about the wire. Everything
     # must hit the handle or the wire except moves with an upward component
     # (gravity holds those; the zip ties back it up).
-    cart = handle + wire
+    cart = handle + wire + (bars if bars is not None else Manifold())
     print('\ncaptured (only upward moves may be free):')
     for n in ['Bracket_L', 'Bracket_R']:
         free = []
@@ -233,7 +249,7 @@ def preview_png(solids, path):
     from manifold3d import Manifold
     clip = Manifold.cube((400, 400, 400)).translate((-200, -200, -200))
     show = [('REF_iPad', '#9aa4ad', 0.55), ('Bracket_L', '#2f7fd8', 1), ('Bracket_R', '#2f7fd8', 1),
-            ('Spacer', '#e8962e', 1), ('REF_Handle', '#444444', 0.5), ('REF_Wire', '#444444', 0.5)]
+            ('Spacer', '#e8962e', 1), ('REF_Handle', '#444444', 0.5), ('REF_Wire', '#444444', 0.5), ('REF_Bars', '#444444', 0.5)]
     light = np.array([-0.4, -0.7, 0.6])
     light /= np.linalg.norm(light)
     fig = plt.figure(figsize=(14, 7))

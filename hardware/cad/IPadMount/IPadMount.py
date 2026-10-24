@@ -82,8 +82,15 @@ PARAMS = [
     ('handle_fit',  '0.5 mm',   'mm', 'Arch bore clearance per side (the zip tie pulls it snug)'),
     ('rim_d',       '5.5 mm',   'mm', 'MEASURE: top-basket wire diameter (~5.5 by ruler; calipers please)'),
     ('rim_fit',     '0.3 mm',   'mm', 'Wire notch clearance per side'),
-    ('rim_c',       '155 mm',   'mm', 'MEASURE: handle centre to wire centre, straight line (~155 by ruler)'),
-    ('rim_drop',    'rim_c',    'mm', 'MEASURE: wire centre BELOW handle centre (= rim_c: straight below). Plumb line from the handle centre: rim_drop = drop to the wire centre'),
+    ('drop_tops',   '155 mm',   'mm', 'MEASURE (eyeballed): top of handle straight down to top of the wire'),
+    ('gap_edges',   '36 mm',    'mm', 'MEASURE (eyeballed): horizontal, handle edge to the same-side edge of the wire'),
+    ('rim_side',    '1',        '',   'Wire offset: 1 = toward the basket (assumed), -1 = toward the shopper (not supported)'),
+    ('bar1_drop',   '63 mm',    'mm', 'MEASURE (eyeballed): top of handle down to top of the upper middle bar (a pair of wires)'),
+    ('bar1_w',      '8 mm',     'mm', 'Upper middle bar pair, width (horizontal)'),
+    ('bar1_h',      '3.5 mm',   'mm', 'Upper middle bar pair, height'),
+    ('bar2_drop',   '110 mm',   'mm', 'MEASURE (eyeballed): top of handle down to top of the lower middle bar'),
+    ('bar2_d',      '3.5 mm',   'mm', 'Lower middle bar diameter'),
+    ('bar_clear',   '6 mm',     'mm', 'Gap kept between the bracket and the middle bars (bar numbers are eyeballed)'),
 
     # Screen placement
     ('tilt',        '0 deg',    'deg', 'Screen lean-back from vertical (top edge toward the cart); 15-20 reads better from standing height'),
@@ -108,8 +115,8 @@ PARAMS = [
     # Hanger: arch over the handle, arm, pad on top of the wire
     ('sad_t',       '6 mm',     'mm', 'Arch wall thickness over the handle tube'),
     ('arm_w',       '24 mm',    'mm', 'Arch and wire pad width along the handle'),
-    ('arm_t',       '10 mm',    'mm', 'Arm thickness along the handle'),
-    ('arm_h',       '16 mm',    'mm', 'Arm width (in the side view)'),
+    ('arm_t',       '10 mm',    'mm', 'Web and leg thickness along the handle'),
+    ('arm_h',       '16 mm',    'mm', 'Height of the leg out to the wire pad'),
     ('pad_wall',    '6 mm',     'mm', 'Wire pad wall around the notch'),
     ('zt_w',        '5.6 mm',   'mm', 'Zip-tie tunnel width (4.8 mm ties)'),
     ('zt_h',        '2.2 mm',   'mm', 'Zip-tie tunnel height'),
@@ -133,23 +140,27 @@ PARAMS = [
     ('n_r',         'ipad_d + clr', 'mm', 'derived: back rest face'),
     ('n_p',         'n_r + bump_relief', 'mm', 'derived: back plate front face'),
     ('n_b',         'n_p + back_t', 'mm', 'derived: back plate rear face'),
+    ('rim_drop',    'drop_tops - handle_d/2 + rim_d/2', 'mm', 'derived: wire centre below handle centre'),
+    ('rim_dy',      'rim_side*(gap_edges + rim_d/2 - handle_d/2)', 'mm', 'derived: wire centre toward the basket from handle centre'),
+    ('rim_c',       'sqrt((rim_dy/(1 mm))^2 + (rim_drop/(1 mm))^2) * (1 mm)', 'mm', 'derived: handle centre to wire centre'),
+    ('bar1_z',      '-(bar1_drop - handle_d/2 + bar1_h/2)', 'mm', 'derived: upper middle bar centre Z'),
+    ('bar1_y',      'rim_dy*(-bar1_z)/rim_drop', 'mm', 'derived: upper middle bar centre Y (on the handle-wire line)'),
+    ('bar2_z',      '-(bar2_drop - handle_d/2 + bar2_d/2)', 'mm', 'derived: lower middle bar centre Z'),
+    ('bar2_y',      'rim_dy*(-bar2_z)/rim_drop', 'mm', 'derived: lower middle bar centre Y (on the handle-wire line)'),
+    ('web_off',     'bar1_w/2 + bar_clear', 'mm', 'derived: web edge offset from the bar line, toward the shopper'),
     ('bore_r',      'handle_d/2 + handle_fit', 'mm', 'derived: arch bore radius'),
     ('r_sad',       'bore_r + sad_t', 'mm', 'derived: arch outer radius'),
     ('n_h',         'n_b + bore_r + hook_gap', 'mm', 'derived: handle centre behind the screen face'),
     ('ipad_y0',     '-(v_h*sin(tilt) + n_h*cos(tilt))', 'mm', 'derived: iPad bottom front edge Y'),
     ('ipad_z0',     '-(v_h*cos(tilt) - n_h*sin(tilt))', 'mm', 'derived: iPad bottom front edge Z'),
-    ('z_gus',       '-(2*bore_r + 2 mm)', 'mm', 'derived: gusset top (leaves room to slide the arch over the handle)'),
+    ('z_gus',       '-(2*bore_r + 2 mm)', 'mm', 'derived: web top (leaves room to slide the arch over the handle)'),
     ('v_a0',        '(n_p*sin(tilt) - ipad_z0)/cos(tilt)', 'mm', 'derived: back plate height at the arch bottom (handle centre level)'),
     ('v_c1',        '(n_p*sin(tilt) + r_sad - ipad_z0)/cos(tilt)', 'mm', 'derived: back plate height at the arch top'),
-    ('v_g',         '(n_p*sin(tilt) + z_gus - ipad_z0)/cos(tilt)', 'mm', 'derived: back plate height at the gusset top'),
-    ('rim_dy',      'sqrt((rim_c/(1 mm))^2 - (rim_drop/(1 mm))^2) * (1 mm)', 'mm', 'derived: wire centre forward of handle centre'),
+    ('v_g',         '(n_p*sin(tilt) + z_gus - ipad_z0)/cos(tilt)', 'mm', 'derived: back plate height at the web top'),
     ('r_wb',        'rim_d/2 + rim_fit', 'mm', 'derived: wire notch radius'),
     ('r_pad',       'r_wb + pad_wall', 'mm', 'derived: wire pad half size'),
-    ('arm_jy',      'ipad_y0 + v_b*sin(tilt) + n_b*cos(tilt)', 'mm', 'derived: arm start Y (bracket bottom back corner)'),
-    ('arm_jz',      'ipad_z0 + v_b*cos(tilt) - n_b*sin(tilt)', 'mm', 'derived: arm start Z'),
-    ('arm_dy',      'rim_dy - arm_jy', 'mm', 'derived: arm run to the wire pad centre, Y'),
-    ('arm_dz',      '-(rim_drop) + r_pad/2 - arm_jz', 'mm', 'derived: arm run, Z'),
-    ('arm_len',     'sqrt((arm_dy/(1 mm))^2 + (arm_dz/(1 mm))^2) * (1 mm)', 'mm', 'derived: arm length'),
+    ('web_y0',      'ipad_y0 + v_b*sin(tilt) + n_p*cos(tilt)', 'mm', 'derived: web edge Y below the pocket'),
+    ('leg_z1',      '-(rim_drop) + r_pad', 'mm', 'derived: top of the leg = top of the wire pad'),
     ('tie_x',       '(arm_t + arm_w)/2', 'mm', 'derived: tie tunnel centre, in from the outer face (clear of the arm)'),
     ('sk_v0',       'sp_v - sfit - sk_wall', 'mm', 'derived: socket bottom'),
     ('sk_v1',       'sp_v + sp_h + sfit + sk_wall', 'mm', 'derived: socket top'),
@@ -361,11 +372,11 @@ def tq(v0, v1, n0, n1):
     return ('poly', [P(v0, n0), P(v1, n0), P(v1, n1), P(v0, n1)])
 
 
-def AP(s, w):
-    """Arm frame -> model (Y, Z). s = 0..1 from the bracket's bottom back
-    corner to the wire pad centre, w = sideways offset (mm expression)."""
-    return ('arm_jy + (%s)*arm_dy - (%s)*arm_dz/arm_len' % (s, w),
-            'arm_jz + (%s)*arm_dz + (%s)*arm_dy/arm_len' % (s, w))
+def BL(z):
+    """Point at height z on the handle-to-wire line (where the middle bars
+    are), moved web_off toward the shopper, as (Y, Z) expressions."""
+    return ('rim_dy*(-(%s))/rim_drop - web_off*rim_drop/rim_c' % z,
+            '(%s) - web_off*rim_dy/rim_c' % z)
 
 
 class Part:
@@ -612,20 +623,18 @@ def add_channel(p, top, rest_top, wall=True, top_lip=True, thick=None):
 
 def add_hanger(p, thick=None):
     """Arch over the handle and a pad on top of the wire, both open
-    downward, joined by an arm from the bracket's bottom back corner and a
-    gusset."""
+    downward, joined by an L: a web behind the back plate that follows the
+    middle bars (staying web_off on the shopper side of them), then a leg
+    out to the pad."""
     T = lambda t: thick or t
     p.add('Arch', ('poly', [('r_sad', '0 mm'), ('r_sad', 'r_sad'),
                             P('v_c1', 'n_p'), P('v_a0', 'n_p')]), '0 mm', T('arm_w'))
-    p.add('Arm', ('poly', [AP('0', 'arm_h/2'), AP('1', 'arm_h/2'),
-                           AP('1', '-(arm_h/2)'), AP('0', '-(arm_h/2)')]), '0 mm', T('arm_t'))
-    # Gusset: fills the triangle between the back plate, the arch and the
-    # arm, so the arm is anchored along its root, not at one corner. Its top
-    # stays a tube's width below the arch (room to slide it over the handle)
-    # and it sits outboard of the tie path (tie_x).
-    p.add('Gusset', ('poly', [P('v_b', 'n_p'), P('v_g', 'n_p'), ('bore_r', 'z_gus'),
-                              AP('0.3', 'arm_h/2'), AP('0', 'arm_h/2'),
-                              AP('0', '-(arm_h/2)')]), '0 mm', T('arm_t'))
+    # Web top stays a tube's width below the arch (room to slide the arch
+    # over the handle).
+    p.add('Web', ('poly', [P('v_g', 'n_p'), BL('z_gus'), BL('leg_z1'),
+                           ('web_y0', 'leg_z1'), P('v_b', 'n_p')]), '0 mm', T('arm_t'))
+    p.add('Leg', ('rect', 'web_y0', 'leg_z1 - arm_h', 'rim_dy - r_pad + 1 mm - web_y0', 'arm_h'),
+          '0 mm', T('arm_t'))
     p.add('Wire pad', ('rect', 'rim_dy - r_pad', '-(rim_drop)', '2*r_pad', 'r_pad'),
           '0 mm', T('arm_w'))
 
@@ -706,12 +715,16 @@ def build_reference():
     for name, shape, start, dist in [
             ('REF_Handle', ('circle', '0 mm', '0 mm', 'handle_d'), '-300 mm', '600 mm'),
             ('REF_Wire', ('circle', 'rim_dy', '-(rim_drop)', 'rim_d'), '-250 mm', '500 mm'),
+            ('REF_Bars', ('bars',), '-250 mm', '500 mm'),
             ('REF_iPad', tq('0 mm', 'ipad_h', '0 mm', 'ipad_d'), '-(ipad_w/2)', 'ipad_w')]:
         step(name)
         c = new_component(name)
         s = Sk(c, 'yz', name)
         if shape[0] == 'circle':
             s.circle(*shape[1:])
+        elif shape[0] == 'bars':  # the two middle bars between handle and wire
+            s.rect('bar1_y - bar1_w/2', 'bar1_z - bar1_h/2', 'bar1_w', 'bar1_h')
+            s.circle('bar2_y', 'bar2_z', 'bar2_d')
         else:
             s.poly(shape[1])
         f = extrude(c, s.profiles(), NEW, dist, start=start, name=name)
@@ -798,12 +811,12 @@ def run(context):
 
         step('parameters')
         add_params()
-        if E('rim_drop') > E('rim_c'):
-            ui.messageBox('rim_drop can be at most rim_c (equal = wire straight below '
-                          'the handle). Fix PARAMS and re-run.')
-            return
         warnings, report, fits = build()
-        off = math.degrees(math.atan2(E('rim_dy'), E('rim_drop')))
+        off = math.degrees(math.atan2(abs(E('rim_dy')), E('rim_drop')))
+        if E('rim_side') < 0:
+            warnings.append('rim_side = -1 (wire toward the shopper): the web is laid out '
+                            'for bars slanting toward the basket. Check for collisions '
+                            '(check/check.py) before printing.')
         if off > 25:
             warnings.append('The wire is %.0f deg forward of straight below the handle. '
                             'Past ~25 deg the pad can roll off the wire when the screen '
