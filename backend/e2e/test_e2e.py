@@ -74,7 +74,7 @@ def test_full_trip_with_the_merchant_beat(rest, db, cart_id, merchant_changes):
         spag = cv_event(cart_id, "added", "barilla-spaghetti", "Barilla Spaghetti, 1 lb")
         c = rest.rpc("apply_cart_event", **cv_to_rpc(spag))
         assert c["total"] == 1.99 and c["location"]["section"] == "A6"
-        assert c["suggestion"]["text"] == "Garlic Bread is $1 off in Aisle 2. Want it?"
+        assert c["suggestion"]["text"] == "Garlic Bread is $1 off in Aisle 8. Want it?"
         c = rest.rpc("apply_cart_event", **cv_to_rpc(spag))
         assert qty(c, "barilla-spaghetti") == 1
         assert len(rest.get("/cart_events", event_id=f"eq.{spag['event_id']}", select="id")) == 1
@@ -189,7 +189,7 @@ def test_yes_moves_on_to_the_next_deal(rest, cart_id):
     assert rest.rpc("apply_cart_event", **ev("tostitos-salsa"))["suggestion"]["product_id"] == "tostitos-chips"
     assert rest.rpc("apply_cart_event", **ev("mission-tortillas"))["suggestion"]["product_id"] == "tostitos-chips"
     c = rest.rpc("set_plan", p_cart_id=cart_id, p_plan=[{"product_id": "tostitos-chips", "reason": "said yes"}])
-    assert c["suggestion"]["text"] == "Sour Cream is 20% off in Aisle 8. Want it?"
+    assert c["suggestion"]["text"] == "Sour Cream is 20% off in Aisle 2. Want it?"
 
 
 def test_quantity_nudges_beta_on_a_throwaway_cart(rest, cart_id):

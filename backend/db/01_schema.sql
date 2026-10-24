@@ -84,6 +84,9 @@ alter table products add constraint products_short_name_check check (char_length
 
 -- store layouts (v0.15): which layout's sections are live (data/layouts/<name>.json)
 alter table store_info add column if not exists layout text not null default 'mini';
+-- nearby stores (v0.16) for "not sold here": [{name, address, distance_mi, kind, good_for}]. Kart says
+-- "might carry it" and never claims their stock. Anon-readable like the rest of store_info.
+alter table store_info add column if not exists nearby jsonb not null default '[]';
 
 -- added after first deploy (v0.12): keep existing databases in step
 alter table carts add column if not exists features jsonb not null default '{}';

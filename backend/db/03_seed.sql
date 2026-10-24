@@ -40,7 +40,8 @@ begin
   update products set section = p_store->'sections'->0->>'id'
   where section not in (select s->>'id' from jsonb_array_elements(p_store->'sections') s);
   delete from sections where id not in (select s->>'id' from jsonb_array_elements(p_store->'sections') s);
-  update store_info set layout = coalesce(p_store->>'layout', 'mini') where id = 1;
+  update store_info set layout = coalesce(p_store->>'layout', 'mini'),
+                        nearby = coalesce(p_store->'nearby', nearby) where id = 1;
 
   delete from deals
   where id not in (select d->>'id' from jsonb_array_elements(p_store->'deals') d);

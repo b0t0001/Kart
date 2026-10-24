@@ -34,3 +34,22 @@ def test_demo_plan_catalog(conn):
     assert (parm[0], float(parm[1])) == ("$1 off", 3.99)
     assert conn.execute("select pairs_with from deals where id = 'd-chips-150off'").fetchone()[0] == ["tostitos-salsa", "queso"]
     assert conn.execute("select fmt_lcd('A5', 'Jalapeños', '')").fetchone()[0] == "A5 Jalapenos"
+
+
+def test_nearby_stores_are_public_and_never_claim_stock(conn, db_url):
+    nearby = conn.execute("select nearby from store_info where id = 1").fetchone()[0]
+    assert {n["name"] for n in nearby} == {"Trader Joe's", "Berkeley Bowl", "Safeway", "Walgreens"}
+    assert all({"name", "address", "distance_mi", "kind", "good_for"} <= n.keys() and "stock" not in n for n in nearby)
+    import psycopg
+    with psycopg.connect(db_url) as c:
+        c.execute("set local role anon")
+        assert len(c.execute("select nearby from store_info").fetchone()[0]) == 4
+        c.rollback()
+
+
+def test_bakery_is_the_last_aisle_in_the_mini_store(conn):
+    aisles = dict(conn.execute("select id, name from sections").fetchall())
+    assert aisles["A2"] == "Aisle 2 · Dairy & Eggs" and aisles["A8"] == "Aisle 8 · Bakery & Tortillas"
+    placed = dict(conn.execute("select id, section from products where id in "
+                               "('french-baguette', 'mission-tortillas', 'whole-milk')").fetchall())
+    assert placed == {"french-baguette": "A8", "mission-tortillas": "A8", "whole-milk": "A2"}

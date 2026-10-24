@@ -67,6 +67,17 @@ def sync_catalog(conn: psycopg.Connection, store_path: Path = STORE_JSON, with_s
     store = json.loads(store_path.read_text())
     stock = "stock = excluded.stock," if with_stock else ""
     with conn.transaction():
+        conn.execute("update store_info set nearby = coalesce(%s::jsonb, nearby) where id = 1",
+                     [json.dumps(store.get("nearby")) if "nearby" in store else None])
+        # store.json is the mini layout: its aisle names/positions apply only while mini is active
+        conn.execute("""
+            insert into sections (id, name, x, y, w, h)
+            select s->>'id', s->>'name', (s->>'x')::int, (s->>'y')::int, (s->>'w')::int, (s->>'h')::int
+            from jsonb_array_elements(%s::jsonb) s
+            where (select layout from store_info where id = 1) = 'mini'
+            on conflict (id) do update set name = excluded.name, x = excluded.x, y = excluded.y,
+              w = excluded.w, h = excluded.h
+            """, [json.dumps(store["sections"])])
         n = conn.execute(f"""
             insert into products (id, name, short_name, price, section, category, tags, stock, vision_hint, active, sort)
             select p->>'id', p->>'name', p->>'short_name', (p->>'price')::numeric, p->>'section',

@@ -46,10 +46,10 @@ def test_set_location_rejects_unknown_aisle(cart):
 
 def test_voice_location_drives_the_route(cart):
     cart("set_plan", p_plan=PASTA)
-    row = cart("set_location", p_section="A7")         # past the pasta aisle: walk back
+    row = cart("set_location", p_section="A7")         # past the pasta: bakery ahead, then walk back
     assert [p["product_id"] for p in row["plan"]] == [
-        "rao-marinara", "barilla-spaghetti", "kirkland-parmesan", "french-baguette"]
-    assert row["next_step"] == "Aisle 6 → Marinara"
+        "french-baguette", "rao-marinara", "barilla-spaghetti", "kirkland-parmesan"]
+    assert row["next_step"] == "Aisle 8 → Garlic Bread, $1 off"
 
 
 # ── P4 resolving unrecognized items ──

@@ -200,16 +200,16 @@ PASTA = [
 def test_plan_is_route_ordered_from_the_entrance(cart):
     row = cart("set_plan", p_plan=PASTA)
     assert [p["product_id"] for p in row["plan"]] == [
-        "french-baguette", "kirkland-parmesan", "rao-marinara", "barilla-spaghetti"]
-    assert row["next_step"] == "Aisle 2 → Garlic Bread, $1 off"
-    assert row["plan"][0]["aisle"] == "Aisle 2" and row["plan"][0]["in_stock"] is True
+        "kirkland-parmesan", "rao-marinara", "barilla-spaghetti", "french-baguette"]   # bakery is last
+    assert row["next_step"] == "Aisle 4 → Parmesan, $1 off"
+    assert row["plan"][0]["aisle"] == "Aisle 4" and row["plan"][0]["in_stock"] is True
 
 
 def test_route_continues_from_where_the_shopper_is(cart):
     cart("set_plan", p_plan=PASTA)
     row = add(cart, "rao-marinara")                   # shopper is in aisle 6 now
     order = [p["product_id"] for p in row["plan"]]
-    assert order == ["rao-marinara", "barilla-spaghetti", "kirkland-parmesan", "french-baguette"]
+    assert order == ["rao-marinara", "barilla-spaghetti", "french-baguette", "kirkland-parmesan"]
     assert row["plan"][0]["done"] is True
     assert row["next_step"] == "Aisle 6 → Spaghetti"
 

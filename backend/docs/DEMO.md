@@ -39,7 +39,7 @@ on purpose: **cards only show for items not on the list.**
 
 | # | Step | What the backend does | Cart row the iPad shows |
 |---|---|---|---|
-| 1 | "Pasta night for my family of 4" | `reset_cart`, then `set_plan` (with `basis`) | plan in walking order; `next_step` "Aisle 2 → Garlic Bread, $1 off" from the entrance |
+| 1 | "Pasta night for my family of 4" | `reset_cart`, then `set_plan` (with `basis`) | plan in walking order; `next_step` **"Aisle 6 → Spaghetti"** (Bakery is the last aisle, Aisle 8, so pasta comes first) |
 | 2 | Drop **spaghetti** | `apply_cart_event` (vision) | Spaghetti $1.99 · **suggestion "Parmesan is $1 off in Aisle 4. Want it?"** (pairs with spaghetti *or* marinara, so it doesn't matter which is dropped first) |
 | 3 | Drop **marinara** | add | Marinara on the bill; the Parmesan card stays until it's answered |
 | 4 | "Yes", drop the **Parmesan** | add at the deal price | $4.99 struck through, now $3.99; `savings` $1.00 |
@@ -85,6 +85,13 @@ cards) already follows the active layout.
   iPad shows its "New deal" note instead.
 - **Analytics:** the console's Store insights shows trips, average basket, and deals taken when
   offered. Test carts are excluded.
+
+## "Not sold here"
+
+`store_info.nearby` (anon-readable) lists Trader Joe's (1885 University Ave, ~1 mi), Berkeley Bowl
+(2020 Oregon St, ~1.5 mi), Safeway (1444 Shattuck Pl, ~1.5 mi) and Walgreens (2310 Telegraph Ave,
+~0.6 mi). Each has `kind` and `good_for` tags. Kart says a nearby store "might carry it" and never
+claims their stock. The same list applies in both layouts.
 
 ## If something fails
 

@@ -91,16 +91,17 @@ def midtrip(cart):
 
 def test_under_when_the_shopper_moves_past_the_aisle(nudges):
     midtrip(nudges)
-    add(nudges, "avocados")                           # Aisle 1
-    assert nudges("set_location", p_section="A2")["nudge"] is None        # at the tortillas: not passed yet
-    n = nudges("set_location", p_section="A3")["nudge"]
-    assert (n["kind"], n["product_id"], n["have"], n["need"], n["aisle"]) == ("under", "mission-tortillas", 0, 1, "Aisle 2")
+    nudges("set_plan", p_plan=TACOS_FOR_4[:2])          # avocados (Aisle 1) + tortillas (Aisle 8)
+    add(nudges, "avocados")
+    assert nudges("set_location", p_section="A8")["nudge"] is None        # at the tortillas: not passed yet
+    n = nudges("set_location", p_section="A9")["nudge"]
+    assert (n["kind"], n["product_id"], n["have"], n["need"], n["aisle"]) == ("under", "mission-tortillas", 0, 1, "Aisle 8")
     assert n["text"] == ("Before you go: you're 1 Tortillas short (4 people × 2 tacos ≈ 8 tortillas → 1 pack of 20). "
-                         "It's in Aisle 2.")
+                         "It's in Aisle 8.")
     assert "savings" not in n
     row = nudges("dismiss_nudge", p_action="ok")
     assert row["nudge"] is None
-    assert nudges("set_location", p_section="A4")["nudge"] is None        # not again this trip
+    assert nudges("set_location", p_section="A9")["nudge"] is None        # not again this trip
 
 
 def test_under_at_checkout_and_it_clears_when_fixed(nudges):
@@ -179,18 +180,18 @@ def test_checkout_gathers_every_short_item_into_one_nudge(at_checkout):
     assert n["kind"] == "under"
     # walking order from where the shopper is (Aisle 5): ahead first, then back toward the entrance
     assert [(i["product_id"], i["have"], i["need"]) for i in n["items"]] == [
-        ("taco-seasoning", 0, 1), ("tillamook-mexican-cheese", 0, 1), ("ground-beef", 0, 2), ("mission-tortillas", 1, 2)]
+        ("taco-seasoning", 0, 1), ("mission-tortillas", 1, 2), ("tillamook-mexican-cheese", 0, 1), ("ground-beef", 0, 2)]
     assert n["items"][0] == {"product_id": "taco-seasoning", "name": "Taco Seasoning", "have": 0, "need": 1,
                              "aisle": "Aisle 5"}
     assert (n["product_id"], n["have"], n["need"], n["aisle"]) == ("taco-seasoning", 0, 1, "Aisle 5")  # compat
-    assert n["text"] == "Before you go: you still need Taco Seasoning, Mexican Cheese, Ground Beef and Tortillas."
+    assert n["text"] == "Before you go: you still need Taco Seasoning, Tortillas, Mexican Cheese and Ground Beef."
 
 
 def test_the_checkout_list_shrinks_as_items_are_fixed(at_checkout):
     at_checkout("set_cart_status", p_status="checkout")
     n = add(at_checkout, "taco-seasoning")["nudge"]
-    assert [i["product_id"] for i in n["items"]] == ["tillamook-mexican-cheese", "ground-beef", "mission-tortillas"]
-    assert n["text"] == "Before you go: you still need Mexican Cheese, Ground Beef and Tortillas."
+    assert [i["product_id"] for i in n["items"]] == ["mission-tortillas", "tillamook-mexican-cheese", "ground-beef"]
+    assert n["text"] == "Before you go: you still need Tortillas, Mexican Cheese and Ground Beef."
 
 
 def test_skip_answers_the_whole_list_once(at_checkout):
@@ -265,11 +266,10 @@ def test_loop_guard_after_two_promises(at_checkout):
 
 def test_ok_on_a_mid_trip_nudge_is_final_for_checkout_too(nudges):
     midtrip(nudges)
+    nudges("set_plan", p_plan=TACOS_FOR_4[:2])          # avocados (Aisle 1) + tortillas (Aisle 8)
     add(nudges, "avocados")
-    assert nudges("set_location", p_section="A3")["nudge"]["product_id"] == "mission-tortillas"
+    assert nudges("set_location", p_section="A9")["nudge"]["product_id"] == "mission-tortillas"
     nudges("dismiss_nudge", p_action="ok")
-    for pid in ["tostitos-salsa", "tostitos-chips"]:
-        add(nudges, pid)
     assert nudges("set_cart_status", p_status="checkout")["nudge"] is None    # tortillas: answered already
 
 
