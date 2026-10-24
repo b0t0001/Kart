@@ -138,13 +138,27 @@ begin
   select c.member_id, e->>'product_id', (e->>'qty')::int, (e->>'price')::numeric,
          now() + (coalesce(c.demo_date, v_today) - v_today) * interval '1 day', new.trip_id, 'checkout'
   from jsonb_array_elements(new.items) e
-  where e->>'product_id' is not null;
+  left join products pr on pr.id = e->>'product_id'
+  where e->>'product_id' is not null and not member_sensitive(pr.category);
   return new;
 end $$;
 
 drop trigger if exists feed_member_history on receipts;
 create trigger feed_member_history after insert on receipts for each row
   when (new.status = 'paid') execute function receipts_feed_member_history();
+
+-- Kart never remembers sensitive purchases (§3.9: the Target pregnancy-prediction story).
+create or replace function member_sensitive(p_category text)
+returns boolean language sql immutable as $$
+  select coalesce(p_category in ('pharmacy', 'health', 'medicine', 'personal-care', 'baby', 'pregnancy', 'adult'), false)
+$$;
+
+-- The sign-in card's confirm step: is this number a member, and what's their first name? Never creates.
+create or replace function member_lookup(p_member_id text)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('exists', m.member_id is not null, 'name', m.name)
+  from (select 1) one left join members m on m.member_id = p_member_id
+$$;
 
 -- ── The profile: who they are and what fits "this week" (§4) ──
 
@@ -169,6 +183,21 @@ $$;
 -- An event's short label: the text before its first comma, at most 28 characters.
 create or replace function member_label(p_text text)
 returns text language sql immutable as $$ select left(trim(split_part(p_text, ',', 1)), 28) $$;
+
+-- An undated event stays "coming up" for 30 days after it was saved, then goes stale (§3.9).
+create or replace function member_undated_fresh(mm member_memories, p_today date)
+returns boolean language sql stable as $$
+  select mm.event_date is null and (mm.created_at at time zone member_tz())::date >= p_today - 30
+$$;
+
+-- Coming up: a dated event not yet past, a reminder until 3 days after its day, a fresh undated event.
+create or replace function member_upcoming(mm member_memories, p_today date)
+returns boolean language sql stable as $$
+  select case when mm.kind = 'event' and mm.event_date is not null then mm.event_date >= p_today
+              when mm.kind = 'event' then member_undated_fresh(mm, p_today)
+              when mm.kind = 'reminder' then mm.event_date >= p_today - 3
+              else false end
+$$;
 
 -- Everything the iPad and the agent know about a member, computed on read (null = unknown member).
 -- "today" is p_today, else the cart's demo date, else the store's real date. Purchases dated after
@@ -205,8 +234,10 @@ begin
 
   -- Every candidate, in signal order then rank within the signal.
   with p as (
-    select product_id, (bought_at at time zone member_tz())::date as d
-    from member_purchases where member_id = p_member_id and (bought_at at time zone member_tz())::date <= v_today),
+    select mp.product_id, (mp.bought_at at time zone member_tz())::date as d
+    from member_purchases mp left join products pr on pr.id = mp.product_id
+    where mp.member_id = p_member_id and (mp.bought_at at time zone member_tz())::date <= v_today
+      and not member_sensitive(pr.category)),
   days as (select distinct product_id, d from p),
   stats as (select product_id, count(*) as times, max(d) as last from days group by product_id),
   gaps as (select product_id, d - lag(d) over (partition by product_id order by d) as gap from days),
@@ -216,14 +247,17 @@ begin
   weekday_buys as (select product_id, count(*) as n from days
                    where extract(isodow from d) = extract(isodow from v_today) group by product_id),
   cands as (
-    select 1 as k, row_number() over (order by mm.event_date, mm.id, it.ord) as rank,
+    select 1 as k, row_number() over (order by mm.event_date nulls last, mm.id, it.ord) as rank,
            it.item->>'product_id' as product_id,
            member_label(mm.text) || ' · ' ||
-             case when mm.kind = 'reminder' then 'reminder' else member_when(mm.event_date, v_today) end as reason,
+             case when mm.kind = 'reminder' then 'reminder'
+                  when mm.event_date is null then 'soon'
+                  else member_when(mm.event_date, v_today) end as reason,
            mm.id as memory_id, 'event' as kind
     from member_memories mm, jsonb_array_elements(mm.items) with ordinality as it(item, ord)
     where mm.member_id = p_member_id and mm.items is not null
       and ((mm.kind = 'event' and mm.event_date between v_today and v_today + 14)
+        or (mm.kind = 'event' and mm.event_date is null and member_undated_fresh(mm, v_today))
         or (mm.kind = 'reminder' and mm.event_date - v_today between -3 and 1))
     union all
     select 2, row_number() over (order by (v_today - s.last)::numeric / md.every_days desc, s.times desc, s.product_id),
@@ -261,8 +295,10 @@ begin
 
   return (
     with p as (
-      select product_id, qty, price, (bought_at at time zone member_tz())::date as d
-      from member_purchases where member_id = p_member_id and (bought_at at time zone member_tz())::date <= v_today),
+      select mp.product_id, mp.qty, mp.price, (mp.bought_at at time zone member_tz())::date as d
+      from member_purchases mp left join products pr on pr.id = mp.product_id
+      where mp.member_id = p_member_id and (mp.bought_at at time zone member_tz())::date <= v_today
+        and not member_sensitive(pr.category)),
     days as (select distinct product_id, d from p),
     stats as (select product_id, count(*) as times, max(d) as last from days group by product_id),
     gaps as (select product_id, d - lag(d) over (partition by product_id order by d) as gap from days),
@@ -301,15 +337,16 @@ begin
                      'id', mm.id, 'kind', mm.kind, 'text', mm.text,
                      'event_date', to_char(mm.event_date, 'YYYY-MM-DD'),
                      'days_until', mm.event_date - v_today,
+                     'upcoming', member_upcoming(mm, v_today),
                      'items', (select jsonb_agg(jsonb_build_object(
                                  'product_id', it->>'product_id',
                                  'short_name', coalesce(pr.short_name, pr.name, it->>'product_id'),
                                  'qty', coalesce((it->>'qty')::int, 1)) order by o)
                                from jsonb_array_elements(mm.items) with ordinality as x(it, o)
                                left join products pr on pr.id = it->>'product_id'))
-                     order by (mm.event_date is not null and mm.event_date - v_today >= -7) desc,
-                              case when mm.event_date is not null and mm.event_date - v_today >= -7
-                                   then mm.event_date end,
+                     order by coalesce(member_upcoming(mm, v_today) or mm.event_date - v_today >= -7, false) desc,
+                              case when coalesce(member_upcoming(mm, v_today) or mm.event_date - v_today >= -7, false)
+                                   then coalesce(mm.event_date, 'infinity'::date) end,
                               mm.created_at desc, mm.id desc), '[]')
                    from member_memories mm where mm.member_id = p_member_id),
       'last_trip', (select case when ld.d is null then null else jsonb_build_object(
@@ -453,3 +490,4 @@ grant execute on function member_save_for_later(text, bigint, jsonb) to anon, au
 grant execute on function member_forget(text, bigint)      to anon, authenticated, service_role;
 revoke execute on function member_touch(text) from public, anon, authenticated;
 revoke execute on function member_memory_json(member_memories) from public, anon, authenticated;
+grant execute on function member_lookup(text) to anon, authenticated, service_role;

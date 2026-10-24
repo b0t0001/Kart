@@ -329,3 +329,52 @@ def test_seed_member_makes_the_demo_profile(conn, member):
     assert [m["text"] for m in prof["memories"]] == ["Leo's soccer party, pasta for the team", "Likes the Marinara here"]
     assert first["event_date"] == "2026-10-25"
     assert members_cli.seed_member(conn, "it-seed", "Dylan", 4, TODAY) == first          # re-runnable
+
+
+# ── Edge cases (§3.9) ──
+
+def test_lookup_known_unknown_never_creates(conn, member):
+    assert conn.execute("select member_lookup(%s)", [member]).fetchone()[0] == {"exists": True, "name": "Dylan"}
+    assert conn.execute("select member_lookup('it-zzz')").fetchone()[0] == {"exists": False, "name": None}
+    assert conn.execute("select count(*) from members where member_id = 'it-zzz'").fetchone()[0] == 0
+
+
+def test_sensitive_lines_not_stored(member_cart, conn):
+    conn.execute("update products set category = 'pharmacy' where id = 'bananas'")
+    member_cart("set_member", p_member_id="it-1")
+    add(member_cart, "bananas")
+    add(member_cart, "whole-milk")
+    member_cart("checkout")
+    assert [r[0] for r in purchases(conn, "it-1")] == ["whole-milk"]
+
+
+def test_sensitive_products_hidden_from_profile(conn, member):
+    for days in (7, 14, 21, 28):
+        buy(conn, member, "bananas", days)
+        buy(conn, member, "whole-milk", days)
+    conn.execute("update products set category = 'pregnancy' where id = 'bananas'")
+    prof = profile(conn, member)
+    seen = [p["product_id"] for p in prof["picks"]] + [u["product_id"] for u in prof["usuals"]]
+    assert "bananas" not in seen and "whole-milk" in seen
+    assert prof["last_trip"]["items"] == ["Milk"]
+
+
+def test_undated_event_expires_after_30_days(conn, member):
+    fresh = memory(conn, member, "event", "Game night sometime")
+    stale = memory(conn, member, "event", "Housewarming someday")
+    conn.execute("update member_memories set created_at = now() - interval '10 days' where id = %s", [fresh])
+    conn.execute("update member_memories set created_at = now() - interval '40 days' where id = %s", [stale])
+    memory(conn, member, "preference", "Likes the Marinara here")
+    mems = profile(conn, member, today=None)["memories"]
+    assert [(m["text"], m["upcoming"]) for m in mems] == [
+        ("Game night sometime", True), ("Likes the Marinara here", False), ("Housewarming someday", False)]
+
+
+def test_seed_prints_party_date(db_url, monkeypatch, capsys):
+    import sys
+    import members as members_cli
+    monkeypatch.setenv("KART_ENV_FILE", "/dev/null")
+    monkeypatch.setattr(sys, "argv", ["members.py", "seed", "--member", "it-cli", "--today", "2026-10-24",
+                                      "--db-url", db_url])
+    members_cli.main()
+    assert "Leo's soccer party: 2026-10-25 (tomorrow)" in capsys.readouterr().out
