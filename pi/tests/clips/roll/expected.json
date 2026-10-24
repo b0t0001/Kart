@@ -1,0 +1,97 @@
+{
+ "what_happened": "empty cart pushed ~1 m forward and pulled back by hand, nothing added",
+ "expected": [],
+ "live": [
+  "cam1: no frames for 2 s, reopening",
+  "cam1 is back: re-syncing it at the next settle"
+ ],
+ "notes": "passes live: 0 events, no false camera-moved. cam1 USB-disconnected for ~8 s mid-roll (loose socket on Pi port 1.2, since fixed by moving it to port 1.3) right after the roll; this cut ends before that gap.",
+ "roi": {
+  "0": [
+   [
+    0.01,
+    0.99
+   ],
+   [
+    0.01,
+    0.38
+   ],
+   [
+    0.1,
+    0.36
+   ],
+   [
+    0.5,
+    0.36
+   ],
+   [
+    0.8,
+    0.35
+   ],
+   [
+    0.88,
+    0.37
+   ],
+   [
+    0.94,
+    0.46
+   ],
+   [
+    0.99,
+    0.63
+   ],
+   [
+    0.99,
+    0.99
+   ]
+  ],
+  "1": [
+   [
+    0.03,
+    0.99
+   ],
+   [
+    0.03,
+    0.8
+   ],
+   [
+    0.1,
+    0.7
+   ],
+   [
+    0.25,
+    0.52
+   ],
+   [
+    0.36,
+    0.4
+   ],
+   [
+    0.41,
+    0.24
+   ],
+   [
+    0.47,
+    0.19
+   ],
+   [
+    0.62,
+    0.27
+   ],
+   [
+    0.85,
+    0.47
+   ],
+   [
+    0.85,
+    0.75
+   ],
+   [
+    0.82,
+    0.99
+   ]
+  ]
+ },
+ "setup": "FINAL 2-camera layout, zip-tied: cam0 = Logitech Brio 101 mid-front looking back down the basket; cam1 = Aoozi QS-WB-202PRO very wide-angle, high at the top-basket end looking down. Floor liner = a black T-shirt (loose, wrinkled). Makerspace lighting.",
+ "recording": "640x360, 5 Hz, re-encoded JPEG q55; still stretches trimmed by hardware/trim_clip.py (timestamps kept)"
+}
