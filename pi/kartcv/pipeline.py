@@ -167,13 +167,16 @@ class Pipeline:
             r = detect_changes(c, old_ref, f.image, self.cfg, roi=self._roi(c))
             scale = f.image.shape[1] / self.cfg.diff_size[0]
             new_ref = f.image
-            if r.status == "disturbed" and math.hypot(*r.shift) > self.cfg.max_shift_px * scale:
+            if r.moved:
                 # Never re-align memory to an estimated shift: on a real cart the estimate can lock onto
                 # the room. Bill nothing; if a camera was really knocked, an empty-cart reset fixes it.
                 log.warning("cam%d view shifted by (%.0f, %.0f) px (camera knocked?): no events this settle; "
                             "if it really moved, empty the cart and reset", c, *r.shift)
                 if self.cart.instances:
+                    # Keep the old reference: if this was a false alarm, the next settle re-judges against
+                    # the true before-picture; if the camera really moved, it stays flagged until a reset.
                     self.camera_moved.add(c)
+                    new_ref = old_ref
             elif r.status == "disturbed":
                 log.warning("cam%d: %.0f%% of the view changed (lighting?); ignoring this settle", c, 100 * r.changed_frac)
             elif r.status == "blobs" and not accept_edges:

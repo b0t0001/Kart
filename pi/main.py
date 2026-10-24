@@ -24,6 +24,7 @@ from kartcv.identify.features import load_features  # noqa: E402
 from kartcv.identify.gallery import Gallery  # noqa: E402
 from kartcv.identify.hybrid import HybridIdentifier  # noqa: E402
 from kartcv.pipeline import Pipeline  # noqa: E402
+from kartcv.roi import draw_outline  # noqa: E402
 from kartcv.server import ControlServer  # noqa: E402
 from kartcv.sinks import ConsoleSink, HttpSink, JsonlSink  # noqa: E402
 from kartcv.sources import LiveCamera, iter_ticks, load_recording  # noqa: E402
@@ -110,7 +111,8 @@ def start_extras(cfg, env, pipeline) -> list:
     extras = []
     try:
         server = ControlServer(cfg.server_port, pipeline.status, pipeline.request_reset,
-                               frames_fn=lambda: pipeline.latest_frames(overlay=True), debug_view=cfg.debug_view,
+                               frames_fn=pipeline.latest_frames, debug_view=cfg.debug_view,
+                               overlay_fn=lambda cam, img: draw_outline(img, cfg.roi.get(str(cam))),
                                crops_dir=pipeline.crops_dir)
         server.start()
         extras.append(server)

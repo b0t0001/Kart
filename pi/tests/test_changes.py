@@ -73,3 +73,33 @@ def test_item_against_the_wall_is_an_item_but_an_arm_over_the_rim_is_an_intrusio
     assert r.blobs and all(b.edge for b in r.blobs)
     r = detect_changes(0, Scene().render(0, 1), Scene(hand=(400, 250)).render(0, 2), CFG)  # no ROI: frame edge
     assert r.blobs and all(b.edge for b in r.blobs)
+
+
+def _texture():
+    import cv2
+    import numpy as np
+    rng = np.random.default_rng(0)  # coarse, high-contrast structure, like printed packaging
+    return cv2.resize((rng.random((36, 64, 3)) * 255).astype(np.uint8), (1280, 720), interpolation=cv2.INTER_CUBIC)
+
+
+def test_a_big_object_is_not_mistaken_for_a_camera_shift():  # real cart: the Tide bottle filled cam0's floor
+    import numpy as np
+    ref = _texture()
+    part = ref.copy()  # only a region "moves" (like a big printed label that phase correlation latches onto)
+    part[100:600, 200:1000] = np.roll(ref, (30, 80), axis=(0, 1))[100:600, 200:1000]
+    assert detect_changes(0, ref, part, CFG).status == "blobs"
+    r = detect_changes(0, ref, np.roll(ref, (30, 80), axis=(0, 1)), CFG)  # the whole view moved: a real knock
+    assert r.status == "disturbed" and abs(r.shift[0] - 80) <= 3
+
+
+def test_gain_matching_uses_the_unchanged_floor_only():  # a big colored item must not skew the colors
+    import numpy as np
+    from kartcv.changes import lab_distance, match_gain
+    floor = np.full((100, 100, 3), (150, 170, 190), np.uint8)
+    cur = np.clip(floor.astype(float) * 1.15, 0, 255).astype(np.uint8)  # the camera's exposure rose
+    cur[:, :70] = (20, 90, 230)  # a big orange item covers 70 % of the floor
+    unchanged = np.zeros((100, 100), np.uint8)
+    unchanged[:, 70:] = 1
+    skewed = float(lab_distance(match_gain(cur, floor)[:, 70:], floor[:, 70:]).mean())
+    right = float(lab_distance(match_gain(cur, floor, unchanged)[:, 70:], floor[:, 70:]).mean())
+    assert right < 3 < skewed

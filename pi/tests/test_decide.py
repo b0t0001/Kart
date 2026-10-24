@@ -1,6 +1,7 @@
 from helpers import settle, world
 
-from kartcv.changes import ChangeResult
+from kartcv.cart import View
+from kartcv.changes import ChangeResult, detect_changes
 from kartcv.decide import apply_decision, classify_blob, decide
 from kartcv.synth import Item, Scene
 
@@ -126,3 +127,43 @@ def test_stacked_add_is_not_mistaken_for_a_reveal_when_features_cant_discriminat
         apply_decision(w.cart, d)
     rs = settle(Scene(items=[big]), Scene(items=[big, top]), w.cfg)
     assert classify_blob(rs[0].blobs[0], rs[0], w.empties[0], w.cart, flat, w.cfg) == "added"
+
+
+def test_joint_identification_sends_the_biggest_view_first(tmp_path):  # one camera's blob may be spurious
+    w = world(tmp_path)
+    seen = []
+
+    class Spy:
+        def identify(self, crops, cloud_crops=None):
+            seen.append([c.shape[0] * c.shape[1] for c in (cloud_crops or crops)])
+            return w.identifier.identify(crops, cloud_crops)
+
+    decide(settle(Scene(), Scene(items=[RED], hidden={}), w.cfg), w.empties, w.cart, Spy(), w.features, w.cfg)
+    assert seen and seen[0] == sorted(seen[0], reverse=True)
+
+
+BIG = Item("big", 140, 80, w=540, h=360, seed=11)  # covers more than half of the floor
+SMALL = Item("red-box", 20, 400, w=110, h=80, seed=1)
+
+
+def _roi_world(tmp_path):
+    from kartcv.synth import mat_roi
+    w = world(tmp_path)
+    w.cfg.roi = {"0": mat_roi(0), "1": mat_roi(1)}
+    return w
+
+
+def test_exposure_change_with_a_big_item_still_detects_just_the_item(tmp_path):  # real cart: issue 2
+    w = _roi_world(tmp_path)
+    r = detect_changes(0, Scene().render(0, 1), Scene(items=[BIG], brightness=1.15).render(0, 2), w.cfg,
+                       roi=w.cfg.roi["0"])
+    assert r.status == "blobs" and len(r.blobs) == 1
+
+
+def test_removal_next_to_a_big_item_after_an_exposure_change_is_a_removal(tmp_path):  # real cart: issue 3
+    w = _roi_world(tmp_path)
+    w.cart.add("green-bag", "Big", {0: View(0, (300, 150, 600, 420), [0.0] * 256)})  # the big item, remembered
+    before, after = Scene(items=[BIG, SMALL], brightness=1.15), Scene(items=[BIG], brightness=1.15)
+    r = detect_changes(0, before.render(0, 1), after.render(0, 2), w.cfg, roi=w.cfg.roi["0"])
+    [b] = r.blobs
+    assert classify_blob(b, r, w.empties[0], w.cart, w.features, w.cfg) == "removed"

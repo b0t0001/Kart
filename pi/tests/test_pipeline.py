@@ -248,3 +248,18 @@ def test_long_hand_rest_nets_zero_and_resolves(tmp_path):  # a hand left still f
     rems = [e for e in sink.events if e.type == "removed"]
     assert len(adds) == len(rems) and all(e.product_id is None for e in adds)
     assert {e.resolves_event_id for e in rems} == {e.event_id for e in adds}
+
+
+def test_a_shift_disturbed_settle_keeps_the_old_reference(tmp_path):  # a false alarm must not bake in a new view
+    import numpy as np
+    p, _ = make(tmp_path)
+    sc = Script(Scene()).still(1.0).drop(RED)
+    run(p, sc)
+    before = p.references[0].copy()
+    n = len(sc.ticks)
+    sc.set(shift={0: (60, 30)})
+    run(p, sc, n)
+    assert np.array_equal(p.references[0], before) and 0 in p.status()["camera_moved"]
+    n = len(sc.ticks)
+    sc.set(shift={}).take("red-box")  # the knock was transient; the removal is still seen
+    assert run(p, sc, n) == [("removed", "red-box")]

@@ -57,3 +57,16 @@ def test_debug_frame_quality_parameter():
         assert len(high) > len(low) > 0
     finally:
         s.stop()
+
+
+def test_camera_frames_are_raw_unless_the_outline_is_asked_for():  # clips must not have the ROI burned in
+    calls = []
+    s = ControlServer(0, lambda: {}, lambda: None, frames_fn=lambda: {0: np.zeros((72, 128, 3), np.uint8)},
+                      debug_view=True, overlay_fn=lambda cam, img: calls.append(cam) or img)
+    s.start()
+    try:
+        assert get(s.port, "/cam/0.jpg")[0] == 200 and calls == []
+        assert get(s.port, "/cam/0.jpg?overlay=1")[0] == 200 and calls == [0]
+        assert b"overlay=1" in get(s.port, "/")[2]
+    finally:
+        s.stop()

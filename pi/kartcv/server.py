@@ -27,7 +27,7 @@ li{{margin:6px 0;list-style:none}}li img{{height:56px;vertical-align:middle;marg
 <body><h3>KART cart vision · debug view (local only)</h3>{cams}<h4>Last events</h4><ul id="ev"></ul>
 <script>
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}})[c]);
-setInterval(()=>{{for(const i of document.querySelectorAll('img.cam'))i.src=i.dataset.src+'?t='+Date.now()}},500);
+setInterval(()=>{{for(const i of document.querySelectorAll('img.cam'))i.src=i.dataset.src+'t='+Date.now()}},500);
 async function ev(){{const s=await (await fetch('/status')).json();
 document.getElementById('ev').innerHTML=(s.last_events||[]).slice().reverse().map(e=>
 `<li>${{(e.crops||[]).map(c=>`<img src="/crops/${{encodeURIComponent(c.split('/').pop())}}">`).join('')}}
@@ -39,8 +39,9 @@ ev();setInterval(ev,2000);
 class ControlServer:
     def __init__(self, port: int, status_fn: Callable[[], dict], reset_fn: Callable[[], None],
                  frames_fn: Callable[[], dict] | None = None, debug_view: bool = False,
-                 crops_dir: Path | None = None, host: str = "0.0.0.0"):
+                 crops_dir: Path | None = None, host: str = "0.0.0.0", overlay_fn: Callable | None = None):
         self.status_fn, self.reset_fn, self.frames_fn = status_fn, reset_fn, frames_fn
+        self.overlay_fn = overlay_fn  # (cam, img) -> img with the ROI outline; only when ?overlay=1
         self.debug_view = debug_view
         self.crops_dir = Path(crops_dir) if crops_dir else None
         self._httpd = ThreadingHTTPServer((host, port), self._handler())
@@ -82,15 +83,18 @@ class ControlServer:
                     return self._404()
                 if path == "/":
                     cams = sorted((srv.frames_fn() or {}) if srv.frames_fn else {})
-                    imgs = "".join(f'<img class="cam" data-src="/cam/{c}.jpg" src="/cam/{c}.jpg" alt="cam{c}">'
-                                   for c in cams) or "<p>no camera frames yet</p>"
+                    imgs = "".join(f'<img class="cam" data-src="/cam/{c}.jpg?overlay=1&" src="/cam/{c}.jpg?overlay=1" '
+                                   f'alt="cam{c}">' for c in cams) or "<p>no camera frames yet</p>"
                     return self._send(200, _PAGE.format(cams=imgs).encode(), "text/html; charset=utf-8")
                 m = _CAM_PATH.match(path)
                 if m and srv.frames_fn:
                     img = (srv.frames_fn() or {}).get(int(m.group(1)))
                     if img is None:
                         return self._404()
-                    q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("q", ["70"])[0]
+                    query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                    if query.get("overlay", ["0"])[0] == "1" and srv.overlay_fn:  # raw unless asked: clips stay clean
+                        img = srv.overlay_fn(int(m.group(1)), img)
+                    q = query.get("q", ["70"])[0]
                     quality = min(95, max(30, int(q))) if q.isdigit() else 70  # remote recording asks for 95
                     ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
                     return self._send(200, buf.tobytes(), "image/jpeg") if ok else self._404()

@@ -26,9 +26,12 @@ def match_gain(img: np.ndarray, target: np.ndarray, mask: np.ndarray | None = No
     Cancels global brightness and white-balance shifts (the Brio's auto white balance moves when a
     big colored item enters the frame). Medians are dominated by the mat, so items don't skew it.
     """
-    sel = mask.astype(bool) if mask is not None and mask.any() else slice(None)
-    m_img = np.median(img[sel].reshape(-1, 3), axis=0).astype(np.float32)
-    m_tgt = np.median(target[sel].reshape(-1, 3), axis=0).astype(np.float32)
+    step = 4 if img.shape[0] * img.shape[1] > 200_000 else 1  # medians from a sample: same answer, 16x cheaper
+    img_s, tgt_s = img[::step, ::step], target[::step, ::step]
+    mask_s = mask[::step, ::step] if mask is not None else None
+    sel = mask_s.astype(bool) if mask_s is not None and mask_s.any() else slice(None)
+    m_img = np.median(img_s[sel].reshape(-1, 3), axis=0).astype(np.float32)
+    m_tgt = np.median(tgt_s[sel].reshape(-1, 3), axis=0).astype(np.float32)
     gain = np.where(m_img >= 1.0, m_tgt / np.maximum(m_img, 1.0), 1.0).astype(np.float32)
     return np.clip(img.astype(np.float32) * gain, 0, 255).astype(np.uint8)
 
@@ -82,6 +85,7 @@ class ChangeResult:
     shift: tuple[float, float] = (0.0, 0.0)  # camera shift, full-res px (+x = content moved right)
     frame: np.ndarray | None = None
     reference: np.ndarray | None = None
+    moved: bool = False  # the whole view shifted (verified): the camera itself moved
 
 
 def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg, roi=None) -> ChangeResult:
@@ -92,8 +96,13 @@ def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg, ro
     ref_s = cv2.resize(reference, (w, h), interpolation=cv2.INTER_AREA)
     cur_s = cv2.resize(current, (w, h), interpolation=cv2.INTER_AREA)
 
-    def result(status, blobs=(), frac=0.0, shift=(0.0, 0.0)):
-        return ChangeResult(cam, status, list(blobs), frac, shift, current, reference)
+    def result(status, blobs=(), frac=0.0, shift=(0.0, 0.0), moved=False):
+        return ChangeResult(cam, status, list(blobs), frac, shift, current, reference, moved)
+
+    def changed(a, b, valid):
+        """Share of `valid` floor pixels that differ between a and b (b gain-matched to a)."""
+        d = lab_distance(cv2.GaussianBlur(a, (7, 7), 0), cv2.GaussianBlur(match_gain(b, a, valid), (7, 7), 0))
+        return float(((d > cfg.change_thresh) & valid).sum()) / max(1, int(valid.sum()))
 
     m = polygon_mask(roi, (w, h))
     floor = m.astype(bool) if m is not None else np.ones((h, w), bool)
@@ -108,11 +117,26 @@ def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg, ro
     (dx, dy), _ = cv2.phaseCorrelate(g_ref, g_cur, window)
     shift = (dx * sx, dy * sy)
     if math.hypot(dx, dy) > cfg.max_shift_px:
-        return result("disturbed", shift=shift)
+        # Verify before believing it: a big new object (a printed label) can win the correlation. If the
+        # camera really moved, shifting the reference by the estimate explains most of the change.
+        mx, my = int(math.ceil(abs(dx))) + 2, int(math.ceil(abs(dy))) + 2
+        valid = floor.copy()
+        valid[:my, :] = valid[-my:, :] = False
+        valid[:, :mx] = valid[:, -mx:] = False
+        plain = changed(ref_s, cur_s, valid)
+        aligned = changed(translate(ref_s, dx, dy), cur_s, valid)
+        if plain >= 0.02 and aligned < 0.5 * plain:  # a real move leaves lots to explain, and explains it
+            return result("disturbed", frac=plain, shift=shift, moved=True)
+        shift = (0.0, 0.0)  # not a camera move: compare the frames as they are
 
-    # 2. Brightness-normalized color difference, cleaned up.
-    cur_s = match_gain(cur_s, ref_s, m)
-    dist = lab_distance(cv2.GaussianBlur(ref_s, (7, 7), 0), cv2.GaussianBlur(cur_s, (7, 7), 0))
+    # 2. Brightness-normalized color difference, cleaned up. Gain comes from the floor that didn't
+    # change: a big colored item would otherwise skew the medians and make bare floor look "changed".
+    ref_b = cv2.GaussianBlur(ref_s, (7, 7), 0)
+    dist = lab_distance(ref_b, cv2.GaussianBlur(match_gain(cur_s, ref_s, m), (7, 7), 0))
+    rough = cv2.dilate((dist > cfg.change_thresh).astype(np.uint8), _CLOSE)
+    steady = floor & (rough == 0)
+    if steady.sum() > 0.05 * floor.sum():
+        dist = lab_distance(ref_b, cv2.GaussianBlur(match_gain(cur_s, ref_s, steady.astype(np.uint8)), (7, 7), 0))
     mask = (dist > cfg.change_thresh).astype(np.uint8) * 255
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, _OPEN)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, _CLOSE)

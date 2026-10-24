@@ -59,11 +59,18 @@ def _crop(img: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
     return img[y:y + h, x:x + w]
 
 
-def gain_matched(result: ChangeResult, empty: np.ndarray, roi=None):
-    """(current, reference, floor mask) brightness-matched to the empty picture, using floor pixels only.
-    Full-frame work: once per camera."""
-    m = polygon_mask(roi, (empty.shape[1], empty.shape[0]))
-    return match_gain(result.frame, empty, m), match_gain(result.reference, empty, m), m
+def gain_matched(result: ChangeResult, empty: np.ndarray, roi=None, cart: CartMemory | None = None):
+    """(current, reference, floor mask) brightness-matched to the empty picture. The gain comes from bare
+    floor only: the ROI minus every remembered item's box and every change, so a big colored item can't
+    skew the colors. Full-frame work: once per camera."""
+    h, w = empty.shape[:2]
+    m = polygon_mask(roi, (w, h))
+    bare = (m.copy() if m is not None else np.ones((h, w), np.uint8))
+    for x, y, bw, bh in [b.box for b in result.blobs] + ([v.box for _, v in cart.views_in(result.cam)] if cart else []):
+        bare[max(0, y):y + bh, max(0, x):x + bw] = 0
+    floor_px = int(m.sum()) if m is not None else w * h
+    gm = bare if bare.sum() > 0.05 * floor_px else m
+    return match_gain(result.frame, empty, gm), match_gain(result.reference, empty, gm), m
 
 
 def _mean(d: np.ndarray, m: np.ndarray | None) -> float:
@@ -74,7 +81,7 @@ def _mean(d: np.ndarray, m: np.ndarray | None) -> float:
 
 def classify_blob(blob: Blob, result: ChangeResult, empty: np.ndarray, cart: CartMemory, features, cfg,
                   matched: tuple | None = None) -> str | None:
-    cur, ref, m = matched if matched is not None else gain_matched(result, empty, cfg.roi.get(str(blob.cam)))
+    cur, ref, m = matched if matched is not None else gain_matched(result, empty, cfg.roi.get(str(blob.cam)), cart)
     empty_crop = _crop(empty, blob.box)
     after = _crop(cur, blob.box)
     before = _crop(ref, blob.box)
@@ -109,7 +116,8 @@ def _decide_added(added: dict[int, list[Blob]], identifier, features) -> list[De
         return []
     n = max(len(bs) for bs in added.values())
     if n == 1:  # the common case: both cameras saw the same single item
-        blobs = [bs[0] for bs in added.values()]
+        # biggest view first: if one camera's blob is spurious (a shadow), the good view leads (Claude gets ≤ 2)
+        blobs = sorted((bs[0] for bs in added.values()), key=lambda b: -b.area_frac)
         ident = identifier.identify([b.after_core for b in blobs], cloud_crops=[b.after for b in blobs])
         return [Decision("added", ident.product_id, ident.confidence, ident.method, ident.label,
                          sorted(b.cam for b in blobs), blobs, _views(blobs, features))]
@@ -243,7 +251,7 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
             # Without an empty-basket picture a removal looks like an addition; let the other camera decide.
             log.warning("cam%d has no empty-basket picture yet; ignoring its changes (reset with the cart empty)", r.cam)
             continue
-        matched = gain_matched(r, empty, cfg.roi.get(str(r.cam)))
+        matched = gain_matched(r, empty, cfg.roi.get(str(r.cam)), cart)
         for b in r.blobs:
             kind = classify_blob(b, r, empty, cart, features, cfg, matched)
             if kind == "added":
