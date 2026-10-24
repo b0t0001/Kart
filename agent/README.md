@@ -1,12 +1,14 @@
 # Kart: the voice agent
 
+*For the Cartesia prize write-up (features used, setup, limitations, the Managed Agents path) see [README_CARTESIA.md](README_CARTESIA.md).*
+
 Kart's voice runs on **Cartesia Line**: Cartesia handles speech-to-text, text-to-speech, turn-taking, and barge-in, and this folder is the agent's brain. The iPad streams mic audio to the hosted agent over one WebSocket and plays Kart's voice back (`ios/KartCore/Sources/KartCore/Voice/LineVoiceSession.swift`).
 
 ## What it does
 
 - **Greets** when a call starts: "Hi, I'm Kart. What are we shopping for today?"
 - **Answers the shopper** with Claude (`claude-opus-5-5` at `effort: low`, streamed so speech starts on the first words, with server-side refusal fallbacks). Claude works through store tools that read and write the live Supabase backend: `search_catalog`, `get_cart`, `set_plan`, `add_to_plan`, `get_deals`, `set_location`, `dismiss_suggestion`, `confirm_item`, `start_checkout`. Every product, price, deal and aisle Kart says comes from a tool result; the system prompt forbids inventing them.
-- **Speaks up on its own** when the iPad tells it something changed (Line `custom` events): a deal suggestion, a store-created deal, a price drop, an item added or removed. These lines are fixed templates (`kart_agent/lines.py`): fast, and they can't invent a price. Silent events (`trip_context`, `card_response`, `ui_action`) update state without cutting Kart off.
+- **Speaks up on its own** when the iPad tells it something changed (Line `custom` events): a deal suggestion, a store-created deal, a price drop, an item added or removed, a quantity nudge (beta), an item the cameras couldn't identify (`ui_action: unknown_item`), and payment (`ui_action: paid`). These lines are fixed templates (`kart_agent/lines.py`): fast, and they can't invent a price. Silent events (`trip_context`, `card_response`, `ui_action: checkout_tapped`) update state without cutting Kart off.
 - **Captions** both sides into the backend's `transcript` table, which the iPad shows live.
 - **Barge-in:** a new user turn cancels Claude's answers (Line's `UserTurnStarted`). The greeting, deal lines and yes/no replies are sent `interruptible=False`, so store chatter can't wipe them. For a loud floor, `cartesia env set KART_BARGE_IN=off` makes everything Kart says uninterruptible. Line has no turn-detection or VAD settings (its WebSocket takes only the audio format, voice and delivery pace), so these are the levers, plus hold-to-talk on the iPad.
 - **Chatter:** a filler alone ("Um.") gets nothing. For speech that clearly isn't meant for Kart, Claude answers `<quiet>`: Kart says nothing, and neither side is captioned.
