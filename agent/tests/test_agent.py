@@ -546,3 +546,34 @@ async def test_the_deals_question_waits_while_kart_has_asked_its_own():
     assert cards(outs) == []                                   # "Keep it?" is still open: no second question
     outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="No, I'll put it back.")]))
     assert spoken(outs)[0] == "Okay, take it out when you can." and cards(outs) == [{"type": "deal_digest", "count": 1}]
+
+
+async def test_be_quiet_keeps_kart_quiet_until_asked_and_cards_still_work():
+    agent, backend = make()                                   # no Claude: both are fast paths
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Be quiet, please.")])) == \
+        ["Okay, I'll stay quiet. Just ask if you need me."]
+    backend.cart["plan"] = [{"product_id": "rao-marinara", "reason": "pasta", "qty": 1, "done": True}]
+    backend.cart["items"] = [{"product_id": "rao-marinara", "qty": 1}]
+    await agent._refresh()
+    assert not agent.run_filter(UserCustomSent(metadata={"type": "cart_changed", "change": "added", "product_id": "rao-marinara"}))
+    assert not agent.run_filter(UserCustomSent(metadata=PARM_OFFER))      # the card shows; Kart doesn't read it out
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Yes.")])) == ["Added Parmesan to your list."]
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="You can talk again.")])) == ["Okay, I'm back."]
+    assert agent.run_filter(UserCustomSent(metadata={"type": "cart_changed", "change": "added", "product_id": "rao-marinara"}))
+
+
+async def test_thanks_gets_a_youre_welcome_when_nothing_is_asked():
+    agent, backend = make()
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Thanks!")])) == ["You're welcome!"]
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Okay.")])) == []     # an ack still gets nothing
+
+
+async def test_kart_remembers_which_deals_it_offered():
+    agent, backend = planned_agent()
+    backend_turn = Turn(chunks=["That was Parmesan, $3 off in Aisle 4."])
+    agent.brain.llm.turns.append(backend_turn)
+    await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    await outputs(agent, UserTurnEnded(content=[UserTextSent(content="Not now.")]))
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="What was that deal again?")]))
+    heard = agent.brain.llm.requests[-1]["messages"][-1]["content"]
+    assert heard == "(Deals Kart offered this trip: Parmesan is $3 off in Aisle 4.) What was that deal again?"

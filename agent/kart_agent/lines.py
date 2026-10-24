@@ -159,6 +159,36 @@ def only_filler(text: str) -> bool:
     return all(word in _FILLERS for word in re.sub(r"[^a-z' ]", " ", text.lower()).split())
 
 
+QUIET_ON_LINE = "Okay, I'll stay quiet. Just ask if you need me."
+QUIET_OFF_LINE = "Okay, I'm back."
+WELCOME_LINE = "You're welcome!"
+_QUIET_ON = {"be quiet", "quiet", "shh", "shhh", "hush", "stay quiet", "be quiet for a bit", "stop talking so much",
+             "less talking", "quiet mode"}
+_QUIET_OFF = {"you can talk again", "you can speak again", "talk to me again", "you can start talking again",
+              "start talking again", "you can talk now"}
+_THANKS = {"thanks", "thank you", "thank you so much", "thanks a lot", "thanks so much", "cheers", "perfect thanks",
+           "great thanks", "awesome thanks", "thank you very much"}
+
+
+def _phrase(text: str) -> str:
+    words = re.sub(r"[^a-z' ]", " ", text.lower()).split()
+    while words and words[0] in _FILLERS | {"okay", "ok"}:
+        words = words[1:]
+    while words and words[-1] in {"please", "kart", "now"}:
+        words = words[:-1]
+    return " ".join(words)
+
+
+def quiet_request(text: str) -> str | None:
+    """ "Be quiet." -> "on"; "You can talk again." -> "off"; anything else -> None (Claude's to answer)."""
+    phrase = _phrase(text).removeprefix("please ").removeprefix("can you ")
+    return "on" if phrase in _QUIET_ON else "off" if phrase in _QUIET_OFF else None
+
+
+def only_thanks(text: str) -> bool:
+    return _phrase(text) in _THANKS
+
+
 def only_ack(text: str) -> bool:
     """"Okay, so." / "Yeah.": nothing to answer when Kart hasn't asked anything."""
     return all(word in _FILLERS | _ACKS for word in re.sub(r"[^a-z' ]", " ", text.lower()).split())

@@ -12,11 +12,14 @@ from typing import Any, AsyncIterator
 from line.events import AgentSendCustom, AgentSendText, CallEnded, CallStarted, UserCustomSent, UserTurnEnded, UserTurnStarted
 
 from .brain import Brain
-from .lines import (DECLINED_LINE, KEEP_LINE, LIST_KEPT, LIST_TOO, NUDGE_OK_LINE, accepted_line, nudge_answer, only_ack,
-                    only_filler, proactive_line, yes_or_no)
+from .lines import (DECLINED_LINE, KEEP_LINE, LIST_KEPT, LIST_TOO, NUDGE_OK_LINE, QUIET_OFF_LINE, QUIET_ON_LINE,
+                    WELCOME_LINE, accepted_line, nudge_answer, only_ack, only_filler, only_thanks, proactive_line,
+                    quiet_request, yes_or_no)
 from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
+_ABOUT_DEALS = re.compile(r"\b(deal|deals|sale|on sale|discount|offer|coupon)\b", re.IGNORECASE)
+QUIETED = {"suggestion", "nudge", "deal_changed", "cart_changed", "ui_action"}   # unspoken in quiet mode (cards show)
 _POINTING = re.compile(r"\b(this|that|these|those)\b|\bis it\b", re.IGNORECASE)   # "how much is this?"
 ADD_THEN_DEAL_SECONDS = 3.0                         # a deal this soon after an add says "Got the X." first
 SPEAKING_EVENTS = {"suggestion", "nudge", "deal_changed", "cart_changed", "ui_action", "reconnected"}
@@ -70,6 +73,8 @@ class KartAgent:
         self._list_too: str | None = None         # the product Kart asked "Take it off the list too?" about
         self._latest_added: str | None = None     # the last product into the cart: what "this" means
         self._unknown_open = False                # an "Is this...?" card is on screen
+        self._quiet = False                       # "be quiet": Kart only answers; cards still show
+        self._offered: list[str] = []             # deals Kart has offered this trip, for "what was that deal?"
         self._offer: dict[str, Any] | None = None   # the deal Kart just asked about, until it's answered
         self._nudge: dict[str, Any] | None = None   # the quantity nudge Kart just said (v0.12 beta)
         self._last_asked: str | None = None         # "offer" or "nudge": a plain answer goes to the latest question
@@ -89,6 +94,7 @@ class KartAgent:
                 if meta.get("trip_id") and meta.get("trip_id") != self.trip_id:   # a new trip starts fresh
                     self._said, self._meal, self._offer, self._nudge = set(), None, None, None
                     self._undo, self._latest_added, self._unknown_open = [], None, False
+                    self._quiet, self._offered = False, []
                     self._digest, self._digest_asked, self._digest_due = None, set(), False
                 self.trip_id = meta.get("trip_id") or self.trip_id
                 self._context.set()
@@ -120,7 +126,9 @@ class KartAgent:
                     self._nudge = None
                 else:
                     self._offer = None
-            if meta.get("type") not in SPEAKING_EVENTS:
+            if meta.get("type") == "suggestion" and meta.get("text"):
+                self._remember_offer(meta["text"])
+            if meta.get("type") not in SPEAKING_EVENTS or (self._quiet and meta.get("type") in QUIETED):
                 return False
             line = proactive_line(meta, self._catalog, self._plan, self._items, self._meal, self._nudges)
             if not line:
@@ -152,7 +160,18 @@ class KartAgent:
             text = " ".join(part.content for part in event.content if hasattr(part, "content") and part.content).strip()
             if not text or only_filler(text):            # "Um." gets no answer and no caption
                 return
-            if not self._offer and not self._nudge and not self._digest and not self._list_too and only_ack(text):
+            quiet = quiet_request(text)
+            nothing_asked = not self._offer and not self._nudge and not self._digest and not self._list_too
+            if quiet or (nothing_asked and only_thanks(text)):   # "Be quiet." / "Thanks!": no Claude round
+                await self._caption("user", text)
+                if quiet:
+                    self._quiet = quiet == "on"
+                line = (QUIET_ON_LINE if self._quiet else QUIET_OFF_LINE) if quiet else WELCOME_LINE
+                self.brain.remember(text, line)
+                async for out in self._say([line], interruptible=False):
+                    yield out
+                return
+            if nothing_asked and only_ack(text):
                 return
             await self._refresh()
             ctx = self._ctx()
@@ -221,6 +240,8 @@ class KartAgent:
                 self._offer = None
             elif _POINTING.search(text) and (seen := await self._what_this_is()):
                 heard = f"({seen}) {text}"
+            elif _ABOUT_DEALS.search(text) and self._offered:
+                heard = f"(Deals Kart offered this trip: {' '.join(self._offered)}) {text}"
             said = []
             async for out in self._say(self._caption_first(text, self.brain.respond(heard, ctx)), interruptible=self.barge_in):
                 said.append(out.text)
@@ -280,10 +301,14 @@ class KartAgent:
         return [{"deal": d, "product": p} for _, d, p in sorted(found, key=lambda x: x[0])][:3]
 
     async def _offer_digest(self) -> AsyncIterator[Any]:
+        if self._quiet:                                  # "be quiet": the cards will still show at the shelf
+            return
         await self._refresh()
         deals = await self._relevant_deals()
         if not deals:
             return
+        for entry in deals:
+            self._remember_offer(self._deal_line(entry))
         self._digest_asked |= {d["deal"]["id"] for d in deals}
         await asyncio.sleep(self.digest_delay_seconds)
         self._digest, self._last_asked = {"deals": deals, "i": -1}, "digest"
@@ -406,6 +431,11 @@ class KartAgent:
             lines = []
         self.brain.seed([(line.get("role", ""), line.get("text", "")) for line in lines])
         self._digest_asked |= {entry["deal"]["id"] for entry in await self._relevant_deals()}
+
+    def _remember_offer(self, text: str) -> None:
+        said = re.sub(r"\s*Want (it|them)\?$", "", text).strip()
+        if said and said not in self._offered:
+            self._offered.append(said)
 
     def _ctx(self) -> dict[str, Any]:
         """What the tools get: the backend, this cart and trip, and the trip's undo history."""
