@@ -228,7 +228,7 @@ def build_tools(section_ids: list[str]) -> list[dict]:
                            "(price, aisle). Stages only; the owner confirms.",
             "input_schema": {"type": "object", "properties": {
                 "name": {"type": "string", "description": "Full name with brand and size, e.g. \"Fresh Basil, 0.75 oz\"."},
-                "short_name": {"type": "string", "description": "At most 11 characters, used on the cart screen and by the voice, e.g. \"Basil\"."},
+                "short_name": {"type": "string", "description": "At most 16 characters, the natural spoken name used on the cart screen and by the voice, e.g. \"Fresh Basil\"."},
                 "price": {"type": "number", "description": "List price in USD."},
                 "section": {"type": "string", "enum": section_ids},
                 "category": {"type": "string", "description": "One lowercase word, e.g. \"produce\"."},
@@ -411,8 +411,8 @@ class Tools:
         name, short = inp["name"].strip(), inp["short_name"].strip()
         if not name or not short:
             raise ToolError("Name and short_name are required.")
-        if len(short) > 11:
-            raise ToolError(f"short_name must be 11 characters or fewer ({short!r} is {len(short)}).")
+        if len(short) > 16:
+            raise ToolError(f"short_name must be 16 characters or fewer ({short!r} is {len(short)}).")
         price = Decimal(str(inp["price"])).quantize(Decimal("0.01"))
         if price <= 0 or price >= 10000:
             raise ToolError("Price must be between $0.01 and $9,999.99.")
