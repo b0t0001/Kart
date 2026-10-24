@@ -56,12 +56,16 @@ class FakeBackend:
     calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     catalog: list[dict[str, Any]] = field(default_factory=lambda: copy.deepcopy(CATALOG))
     nearby: list[dict[str, Any]] | None = field(default_factory=lambda: copy.deepcopy(NEARBY))   # None: the read fails
+    feature_defaults: dict[str, bool] = field(default_factory=dict)   # feature_flags.enabled_default
 
     async def get_cart(self, cart_id: str) -> dict[str, Any]:
         return copy.deepcopy(self.cart)
 
     async def get_catalog(self) -> list[dict[str, Any]]:
         return copy.deepcopy(self.catalog)
+
+    async def get_feature_defaults(self) -> dict[str, bool]:
+        return dict(self.feature_defaults)
 
     async def get_transcript(self, cart_id: str, trip_id: str | None) -> list[dict[str, Any]]:
         return [{"role": role, "text": text} for role, text in self.transcript]

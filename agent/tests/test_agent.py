@@ -649,3 +649,13 @@ async def test_plural_items_get_them_not_it():
     out = UserCustomSent(metadata={"type": "cart_changed", "change": "removed", "product_id": "avocados"})
     assert await run(agent, out) == ["Took the Avocados off your bill. Take them off the list too?"]
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="No.")])) == ["Okay, they stay on your list."]
+
+
+async def test_a_feature_on_by_default_counts_unless_the_cart_turns_it_off():
+    agent, backend = make()
+    backend.feature_defaults = {"quantity_nudges": True}        # the backend flipped enabled_default
+    await agent._refresh()
+    assert agent._nudges                                       # carts.features is {}: the default applies
+    backend.cart["features"] = {"quantity_nudges": False}        # this cart's own switch wins
+    await agent._refresh()
+    assert not agent._nudges

@@ -24,6 +24,11 @@ class SupabaseBackend:
         """Active deals with what they pair with (for "deals that go with your list")."""
         return await self._get("deals", {"select": "id,product_id,label,pairs_with,ends_at", "active": "eq.true"})
 
+    async def get_feature_defaults(self) -> dict[str, bool]:
+        """Each feature flag's enabled_default; a cart's own carts.features entry overrides it."""
+        return {row["name"]: bool(row.get("enabled_default")) for row in
+                await self._get("feature_flags", {"select": "name,enabled_default"})}
+
     async def get_transcript(self, cart_id: str, trip_id: str | None) -> list[dict[str, Any]]:
         """The trip's captions, oldest first (the last 16), for a call that rejoins a trip."""
         params = {"cart_id": f"eq.{cart_id}", "select": "role,text", "order": "id.desc", "limit": "16"}

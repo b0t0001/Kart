@@ -86,7 +86,8 @@ class KartAgent:
         self._last_asked: str | None = None         # "offer" or "nudge": a plain answer goes to the latest question
         self._said: set[str] = set()                # deals and nudges already said this trip (repeats are dropped)
         self._meal: str | None = None               # "taco night for 4", from Claude's set_plan
-        self._nudges = False                        # the cart's quantity_nudges beta (carts.features)
+        self._nudges = False                        # quantity nudges: carts.features, else the flag's default
+        self._feature_defaults: dict[str, bool] | None = None
 
     # Line filters --------------------------------------------------------------------------------
 
@@ -520,7 +521,13 @@ class KartAgent:
             self.trip_id = self.trip_id or cart.get("trip_id")
             self._plan = cart.get("plan", [])
             self._items = cart.get("items", [])
-            self._nudges = bool((cart.get("features") or {}).get("quantity_nudges"))
+            if self._feature_defaults is None:           # feature_flags.enabled_default, read once per call
+                try:
+                    self._feature_defaults = await self.backend.get_feature_defaults()
+                except Exception:
+                    self._feature_defaults = {}
+            features = {**self._feature_defaults, **(cart.get("features") or {})}   # the cart's own switch wins
+            self._nudges = bool(features.get("quantity_nudges"))
             self._budget, self._total = cart.get("budget"), float(cart.get("total") or 0)
             self._cart = cart
             live = cart.get("nudge") if "nudge" in cart else self._nudge
