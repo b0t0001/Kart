@@ -16,7 +16,9 @@ targets:
         buildPhase: resources
     dependencies:
       - package: KartCore
-    scheme: {}
+    scheme:
+      testTargets:
+        - KartUITests
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kart.app
@@ -29,3 +31,16 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"
+  KartUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: KartUITests
+    dependencies:
+      - target: Kart
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kart.app.uitests
+        TARGETED_DEVICE_FAMILY: "2"
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
