@@ -22,6 +22,7 @@ class Event:
     cameras: list[int] = field(default_factory=list)
     crops: list[str] = field(default_factory=list)
     ts: str = ""
+    resolves_event_id: str | None = None  # removal of an unrecognized item: clears its "Is this…?" card
 
     @classmethod
     def new(cls, **fields) -> Event:

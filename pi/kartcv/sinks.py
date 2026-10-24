@@ -61,6 +61,7 @@ def rpc_body(e: dict) -> dict:
         "p_camera": e["cameras"][0] if e["cameras"] else None,
         "p_event_id": e["event_id"],  # apply_cart_event is idempotent on it, so retries can't double-bill
         "p_method": e["method"],
+        "p_resolves_event_id": e.get("resolves_event_id"),
     }
 
 

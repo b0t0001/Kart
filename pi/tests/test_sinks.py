@@ -48,7 +48,7 @@ def test_http_payload(tmp_path):
     assert headers["apikey"] == "k" and headers["Authorization"] == "Bearer k"
     assert body == {"p_cart_id": "7", "p_type": "added", "p_product_id": "kirkland-parmesan", "p_confidence": 0.93,
                     "p_source": "vision", "p_label": "Parm", "p_camera": 0, "p_event_id": e.event_id,
-                    "p_method": "local"}
+                    "p_method": "local", "p_resolves_event_id": None}
 
 
 def test_outbox_order_backoff_and_restart(tmp_path):

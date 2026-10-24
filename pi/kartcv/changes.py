@@ -53,12 +53,27 @@ class Blob:
         return crop[y:y + h, x:x + w] if w > 0 and h > 0 else crop
 
     @property
+    def core_box(self) -> tuple[int, int, int, int]:
+        """The unpadded changed box in full-res frame pixels."""
+        x, y, w, h = self.core
+        if w <= 0 or h <= 0:
+            return self.box
+        return (self.box[0] + x, self.box[1] + y, w, h)
+
+    @property
     def before_core(self) -> np.ndarray:
         return self._core(self.before)
 
     @property
     def after_core(self) -> np.ndarray:
         return self._core(self.after)
+
+
+def touches_edge(blob: Blob, frame: np.ndarray, margin: int) -> bool:
+    """A change reaching the frame edge comes from outside the basket: an arm over the rim, a strap."""
+    x, y, w, h = blob.core_box
+    fh, fw = frame.shape[:2]
+    return x <= margin or y <= margin or x + w >= fw - margin or y + h >= fh - margin
 
 
 @dataclass

@@ -88,3 +88,20 @@ def test_gain_matching_runs_once_per_camera_not_per_blob(tmp_path, monkeypatch):
     items = [RED, BLUE, Item("green-bag", 80, 60, seed=3)]
     decide(settle(Scene(), Scene(items=items), w.cfg), w.empties, w.cart, w.identifier, w.features, w.cfg)
     assert len(calls) <= 2 * 2  # (current, reference) once per camera, however many blobs
+
+
+def test_removal_of_something_never_billed_removes_nothing(tmp_path):  # review C1(c): location gating
+    w = world(tmp_path)
+    step(w, Scene(), Scene(items=[BLUE]))  # only BLUE is in memory; RED arrives unbilled
+    assert step(w, Scene(items=[RED, BLUE]), Scene(items=[BLUE])) == [] and w.cart.count("blue-can") == 1
+
+
+def test_every_unit_whose_spot_emptied_is_removed(tmp_path):  # review C1(c)
+    from kartcv.cart import View
+    w = world(tmp_path)
+    step(w, Scene(), Scene(items=[RED]))
+    red = next(iter(w.cart.instances.values()))
+    w.cart.add(None, "a hand?", {c: View(c, v.box, v.fingerprint) for c, v in red.views.items()})  # same spot
+    ds = step(w, Scene(items=[RED]), Scene())
+    assert sorted((d.kind, d.product_id or "") for d in ds) == [("removed", ""), ("removed", "red-box")]
+    assert len(w.cart.instances) == 0

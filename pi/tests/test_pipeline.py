@@ -50,11 +50,46 @@ def test_no_false_events(tmp_path):
     assert run(p, sc) == []
 
 
-def test_hand_rest_nets_zero(tmp_path):  # Review Focus 1
+def test_hand_rest_bills_nothing(tmp_path):  # Review Focus 1, review C1: not even an add+remove pair
     p, _ = make(tmp_path)
-    ev = run(p, Script(Scene()).still(1.0).hand_rest(1.5))
-    assert len(p.cart.instances) == 0
-    assert sum(t == "added" for t, _ in ev) == sum(t == "removed" for t, _ in ev)
+    assert run(p, Script(Scene()).still(1.0).hand_rest(1.5)) == [] and len(p.cart.instances) == 0
+
+
+def test_hand_lingering_after_placing_bills_only_the_item(tmp_path):  # review C1
+    p, _ = make(tmp_path)
+    assert run(p, Script(Scene()).still(1.0).drop(RED, linger_s=1.5)) == [("added", "red-box")]
+    assert len(p.cart.instances) == 1
+
+
+def test_grab_pause_lift_removes_the_item(tmp_path):  # review C1: the shopper must not pay for it
+    p, _ = make(tmp_path)
+    sc = Script(Scene()).still(1.0).drop(RED)
+    run(p, sc)
+    n = len(sc.ticks)
+    sc.take("red-box", linger_s=1.5)
+    assert run(p, sc, n) == [("removed", "red-box")] and len(p.cart.instances) == 0
+
+
+def test_hover_over_item_bills_nothing_new(tmp_path):  # review C1
+    p, _ = make(tmp_path)
+    sc = Script(Scene()).still(1.0).drop(Item("red-box", 340, 200, seed=1))
+    run(p, sc)
+    n = len(sc.ticks)
+    sc.hand_rest(1.5)
+    assert run(p, sc, n) == [] and p.cart.count("red-box") == 1
+
+
+def test_armless_hand_unknown_is_resolved_when_it_leaves(tmp_path):  # review C1(d): no blocked checkout
+    p, sink = make(tmp_path)
+    run(p, Script(Scene(arm=False)).still(1.0).hand_rest(1.5))
+    assert [(e.type, e.product_id) for e in sink.events] == [("added", None), ("removed", None)]
+    assert sink.events[1].resolves_event_id == sink.events[0].event_id and len(p.cart.instances) == 0
+
+
+def test_object_left_on_the_frame_edge_cannot_stall_billing(tmp_path):  # review C1: bounded waiting
+    p, _ = make(tmp_path)
+    sc = Script(Scene()).still(1.0).set(edge_object=True).drop(RED)  # e.g. a bag strap over the rim
+    assert run(p, sc) == [("added", "red-box")]
 
 
 def test_bump_or_lighting_drift_then_remove(tmp_path):  # Review Focus 4

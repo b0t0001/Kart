@@ -22,8 +22,10 @@ MAT_SIZE = (800, 500)   # (w, h), top-down mat pixels
 MAT_BGR = (150, 170, 190)
 WALL_BGR = 90
 GRID_BGR = 60
-HAND_BGR = (120, 160, 220)
+HAND_BGR = (90, 120, 210)    # visible against the mat (lab distance 37 > change_thresh)
+SLEEVE_BGR = (60, 60, 140)   # the arm: reaches the frame edge, as a real arm over the basket rim does
 HAND_AXES = (70, 45)  # half of 140 × 90
+ARM_WIDTH = 60
 
 _MAT_CORNERS = np.float32([[0, 0], [MAT_SIZE[0], 0], [MAT_SIZE[0], MAT_SIZE[1]], [0, MAT_SIZE[1]]])
 _QUADS = {
@@ -111,14 +113,17 @@ def _topdown(items: tuple[Item, ...], hand: tuple[int, int] | None) -> np.ndarra
     return mat
 
 
-def _warped(cam: int, items: tuple[Item, ...], hand: tuple[int, int] | None) -> np.ndarray:
-    key = (cam, items, hand)
+def _warped(cam: int, items: tuple[Item, ...], hand: tuple[int, int] | None, arm: bool = True) -> np.ndarray:
+    key = (cam, items, hand, arm)
     if key in _CACHE:
         _CACHE.move_to_end(key)
         return _CACHE[key]
     view = cv2.warpPerspective(_topdown(items, hand), _H[cam], CAM_SIZE, flags=cv2.INTER_LINEAR)
     out = _BG.copy()
     out[_MASK[cam]] = view[_MASK[cam]]
+    if hand is not None and arm:
+        u, v = project(cam, hand)
+        cv2.line(out, (u, v + 30), (u, CAM_SIZE[1] + ARM_WIDTH), SLEEVE_BGR, ARM_WIDTH)
     _CACHE[key] = out
     if len(_CACHE) > 64:
         _CACHE.popitem(last=False)
@@ -134,6 +139,8 @@ class Scene:
     tint: tuple[float, float, float] = (1.0, 1.0, 1.0)  # per-channel BGR gain
     shift: dict[int, tuple[int, int]] = field(default_factory=dict)  # per-camera wobble/bump, px
     hidden: dict[int, set[str]] = field(default_factory=dict)        # items a camera can't see
+    arm: bool = True                                                 # draw a sleeve from the hand to the frame edge
+    edge_object: bool = False                                        # something static over the rim (a strap)
 
     def copy(self) -> Scene:
         return copy.deepcopy(self)
@@ -142,7 +149,11 @@ class Scene:
         hidden = self.hidden.get(cam, set())
         items = tuple(it for it in self.items if it.item_id not in hidden)
         hand = tuple(int(v) for v in self.hand) if self.hand is not None else None
-        img = _warped(cam, items, hand)
+        img = _warped(cam, items, hand, self.arm)
+        if self.edge_object:
+            img = img.copy()
+            u, v = project(cam, (MAT_SIZE[0] - 60, MAT_SIZE[1] - 60))
+            cv2.line(img, (u, v), (CAM_SIZE[0], v), SLEEVE_BGR, 40)
 
         if self.brightness != 1.0 or self.tint != (1.0, 1.0, 1.0) or self.shade:
             f = img.astype(np.float32) * self.brightness * np.float32(self.tint)
@@ -232,17 +243,17 @@ class Script:
     def _find(self, item_id: str) -> Item:
         return next(it for it in self.scene.items if it.item_id == item_id)
 
-    def drop(self, item: Item) -> Script:
-        return self._trip(item.center, lambda: self.scene.items.append(item))
+    def drop(self, item: Item, linger_s: float = 0.0) -> Script:
+        return self._trip(item.center, lambda: self.scene.items.append(item), rest_s=linger_s)
 
     def drop_many(self, items: list[Item]) -> Script:
         cx = sum(it.center[0] for it in items) / len(items)
         cy = sum(it.center[1] for it in items) / len(items)
         return self._trip((cx, cy), lambda: self.scene.items.extend(items))
 
-    def take(self, item_id: str) -> Script:
+    def take(self, item_id: str, linger_s: float = 0.0) -> Script:
         item = self._find(item_id)
-        return self._trip(item.center, lambda: self.scene.items.remove(item))
+        return self._trip(item.center, lambda: self.scene.items.remove(item), rest_s=linger_s)
 
     def move(self, item_id: str, dx: int, dy: int) -> Script:
         item = self._find(item_id)

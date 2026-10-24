@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 
 from kartcv.cart import CartMemory
-from kartcv.changes import detect_changes, translate
+from kartcv.changes import detect_changes, touches_edge, translate
 from kartcv.decide import Decision, apply_decision, decide
 from kartcv.events import Event
 from kartcv.motion import MotionDetector, SettleTracker
@@ -128,13 +128,16 @@ class Pipeline:
         log.info("SETTLED")
 
         results = []
+        edge_cams = set()
         for c, f in frames.items():
             if c in self._resync:
                 self.references[c] = f.image
                 self._resync.discard(c)
                 continue
-            r = detect_changes(c, self.references[c], f.image, self.cfg)
+            old_ref = self.references[c]
+            r = detect_changes(c, old_ref, f.image, self.cfg)
             scale = f.image.shape[1] / self.cfg.diff_size[0]
+            new_ref = f.image
             if r.status == "disturbed" and math.hypot(*r.shift) > self.cfg.max_shift_px * scale:
                 log.warning("cam%d moved by (%.0f, %.0f) px: re-aligning its empty picture and cart memory", c, *r.shift)
                 if c in self.empties:
@@ -142,11 +145,28 @@ class Pipeline:
                 self.cart.shift_views(c, *r.shift)
             elif r.status == "disturbed":
                 log.warning("cam%d: %.0f%% of the view changed (lighting?); ignoring this settle", c, 100 * r.changed_frac)
-            self.references[c] = f.image
+            elif r.status == "blobs":
+                # An arm over the rim (or a strap) reaches the frame edge; an item in the basket doesn't.
+                # Ignore it, and keep the old reference under it so that once it leaves, whatever it put
+                # down, took or covered is judged against the true before-picture.
+                edge = [b for b in r.blobs if touches_edge(b, f.image, self.cfg.edge_margin_px)]
+                if edge:
+                    log.info("INTRUSION: cam%d sees something reaching over the edge (an arm?); ignoring it", c)
+                    edge_cams.add(c)
+                    new_ref = f.image.copy()
+                    for b in edge:
+                        x, y, w, h = b.box
+                        new_ref[y:y + h, x:x + w] = old_ref[y:y + h, x:x + w]
+                    r.blobs = [b for b in r.blobs if b not in edge]
+                    if not r.blobs:
+                        r.status = "none"
+            self.references[c] = new_ref
             results.append(r)
         if not self.cart.instances:
             # Nothing in the cart and nothing new: this is a fresh empty-basket picture (tracks light drift).
             for r in results:
+                if r.cam in edge_cams:
+                    continue
                 if r.status == "none" or (r.status == "disturbed" and math.hypot(*r.shift) <= self.cfg.max_shift_px
                                           * r.frame.shape[1] / self.cfg.diff_size[0]):
                     self._set_empty(r.cam, r.frame)
@@ -161,6 +181,9 @@ class Pipeline:
             ev = Event.new(cart_id=self.cfg.cart_id, type=d.kind, product_id=d.product_id,
                            confidence=round(float(d.confidence), 3), method=d.method, label=d.label,
                            cameras=list(d.cameras), crops=[])
+            if d.kind == "removed" and d.product_id is None:
+                inst = self.cart.instances.get(d.instance_id)
+                ev.resolves_event_id = (inst.event_id or None) if inst else None
             for b in d.blobs:
                 name = f"{ev.event_id}_cam{b.cam}.jpg"
                 cv2.imwrite(str(self.crops_dir / name), b.after if d.kind == "added" else b.before)
@@ -175,7 +198,9 @@ class Pipeline:
                     s.send(ev)
                 except Exception:  # one broken sink must not stop the cart
                     log.exception("sink %s failed", type(s).__name__)
-            apply_decision(self.cart, d)
+            inst = apply_decision(self.cart, d)
+            if d.kind == "added" and inst is not None:
+                self.cart.set_event_id(inst.instance_id, ev.event_id)
             with self._lock:
                 self._last_events.append(ev.to_json())
             events.append(ev)

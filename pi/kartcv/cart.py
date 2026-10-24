@@ -25,6 +25,7 @@ class Instance:
     label: str
     added_ts: str
     views: dict[int, View] = field(default_factory=dict)
+    event_id: str = ""  # the "added" event this unit was billed by
 
 
 class CartMemory:
@@ -43,6 +44,10 @@ class CartMemory:
         inst = self.instances.pop(instance_id)
         self.save()
         return inst
+
+    def set_event_id(self, instance_id: str, event_id: str) -> None:
+        self.instances[instance_id].event_id = event_id
+        self.save()
 
     def update_views(self, instance_id: str, views: dict[int, View]) -> None:
         self.instances[instance_id].views.update(views)
@@ -82,6 +87,7 @@ class CartMemory:
             for d in json.loads(mem.path.read_text())["instances"]:
                 views = {int(c): View(int(v["cam"]), tuple(v["box"]), list(v["fingerprint"]), v.get("crop_path", ""))
                          for c, v in d["views"].items()}
-                inst = Instance(d["instance_id"], d["product_id"], d["label"], d["added_ts"], views)
+                inst = Instance(d["instance_id"], d["product_id"], d["label"], d["added_ts"], views,
+                                d.get("event_id", ""))
                 mem.instances[inst.instance_id] = inst
         return mem

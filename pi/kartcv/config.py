@@ -37,6 +37,7 @@ class Config:
     min_blob_frac: float = 0.004
     disturbed_frac: float = 0.60
     max_shift_px: float = 4.0
+    edge_margin_px: int = 8  # full-res; a change this close to the frame edge is an arm, not an item
     empty_thresh: float = 18.0
     crop_pad: float = 0.10
 

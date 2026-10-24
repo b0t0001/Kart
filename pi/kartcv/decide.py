@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 
 IOU_OVERLAP = 0.1
 IOU_WEIGHT = 0.2
+VANISHED_COVERAGE = 0.6  # a remembered unit whose box is this much inside an emptied spot is gone
 
 
 @dataclass
@@ -130,33 +131,57 @@ def _decide_added(added: dict[int, list[Blob]], identifier, features) -> list[De
     return decisions
 
 
-def _decide_removed(removed: dict[int, list[Blob]], cart: CartMemory, features) -> list[Decision]:
+def _coverage(inner: tuple[int, int, int, int], outer: tuple[int, int, int, int]) -> float:
+    """Fraction of box `inner` that lies inside box `outer`."""
+    ix = max(0, min(inner[0] + inner[2], outer[0] + outer[2]) - max(inner[0], outer[0]))
+    iy = max(0, min(inner[1] + inner[3], outer[1] + outer[3]) - max(inner[1], outer[1]))
+    area = inner[2] * inner[3]
+    return ix * iy / area if area > 0 else 0.0
+
+
+def _decide_removed(removed: dict[int, list[Blob]], cart: CartMemory, features, cfg) -> list[Decision]:
+    """Match removal blobs to remembered units, by place first.
+
+    A unit this camera remembers only qualifies if it overlaps the emptied spot; a unit it never saw
+    qualifies only on a strong look-alike match. Every unit whose spot emptied counts, so an item and
+    an unknown remembered at the same spot both go. Nothing qualifies → nothing is removed (taking out
+    something that was never billed must not remove something else).
+    """
     if not removed or not cart.instances:
         return []
-    n = min(max(len(bs) for bs in removed.values()), len(cart.instances))
     fps = {id(b): features(b.before_core) for bs in removed.values() for b in bs}
     totals: dict[str, float] = {}
     best_sim: dict[str, float] = {}
     best_blobs: dict[str, dict[int, Blob]] = {}
+    wanted = 0
     for cam, bs in removed.items():
+        vanished = 0
         for inst in cart.instances.values():
             best = None
             for b in bs:
                 if cam in inst.views:
                     v = inst.views[cam]
+                    iou = _iou(b.box, v.box)
+                    if iou <= 0.0:
+                        continue
                     sim = _sim(fps[id(b)], v.fingerprint)
-                    score = sim + IOU_WEIGHT * _iou(b.box, v.box)
+                    score = sim + IOU_WEIGHT * iou
                 else:
                     sim = max((_sim(fps[id(b)], v.fingerprint) for v in inst.views.values()), default=0.0)
+                    if sim < cfg.local_min_score:
+                        continue
                     score = sim
                 if best is None or score > best[0]:
                     best = (score, sim, b)
+            if cam in inst.views and any(_coverage(inst.views[cam].box, b.box) >= VANISHED_COVERAGE for b in bs):
+                vanished += 1
             if best is not None:
                 iid = inst.instance_id
                 totals[iid] = totals.get(iid, 0.0) + best[0]
                 best_sim[iid] = max(best_sim.get(iid, 0.0), best[1])
                 best_blobs.setdefault(iid, {})[cam] = best[2]
-    chosen = sorted(totals, key=lambda iid: -totals[iid])[:n]
+        wanted = max(wanted, len(bs), vanished)
+    chosen = sorted(totals, key=lambda iid: -totals[iid])[:min(wanted, len(totals))]
     out = []
     for iid in chosen:
         inst: Instance = cart.instances[iid]
@@ -210,7 +235,7 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
                 added.setdefault(r.cam, []).append(b)
             elif kind == "removed":
                 removed.setdefault(r.cam, []).append(b)
-    decisions = _decide_added(added, identifier, features) + _decide_removed(removed, cart, features)
+    decisions = _decide_added(added, identifier, features) + _decide_removed(removed, cart, features, cfg)
     return _cancel_nudges(decisions, cart, cfg)
 
 
