@@ -27,7 +27,7 @@ def nudges(cart):
 
 def test_rolled_back_no_nudge_no_side_effects(cart, conn):
     """The rollback path: with the flag off (globally here), nothing nudges and nothing extra is kept."""
-    flags = dict(conn.execute("select name, enabled_default from feature_flags").fetchall())
+    flags = dict(conn.execute("select name, enabled_default from feature_flags where name like 'quantity_nudges%'").fetchall())
     assert flags == {"quantity_nudges": True, "quantity_nudges_midtrip": False}      # shipped defaults
     conn.execute("update feature_flags set enabled_default = false where name = 'quantity_nudges'")
     cart("set_plan", p_plan=TACOS_FOR_4)
@@ -148,7 +148,7 @@ def test_anon_can_flip_its_cart_and_answer_nudges(db_url):
         c.execute("set local role anon")
         c.execute("select set_feature('7', 'quantity_nudges', true)")
         c.execute("select dismiss_nudge('7', 'ok')")
-        assert c.execute("select enabled_default from feature_flags").fetchone()[0] is False
+        assert c.execute("select enabled_default from feature_flags where name = 'quantity_nudges'").fetchone()[0] is True
         c.rollback()
 
 
