@@ -1,0 +1,11 @@
+# secrets — shared env file lives here, never commit it
+.env
+.env.*
+!.env.example
+# app-made worktrees
+.claude/worktrees/
+# OS / editor
+.DS_Store
+__pycache__/
+venv/
+node_modules/
