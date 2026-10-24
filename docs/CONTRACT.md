@@ -1,4 +1,4 @@
-# KART integration contract — v0.10 (DRAFT)
+# KART integration contract — v0.11 (DRAFT)
 
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
@@ -105,6 +105,12 @@ Writers **only** use these; nobody writes `carts.items` directly.
   **Idempotent on `p_event_id`** (v0.3): CV retries failed sends from a disk outbox, so a repeated `event_id` must return the current cart without applying the event again. `cart_events` gets `event_id uuid unique` and `method text` (`local` \| `cloud` \| `memory` \| `none` \| `manual`).
 - `set_plan(p_cart_id text, p_plan jsonb) → carts row` — voice agent writes the trip plan; recomputes `next_step` / `lcd_line1`.
 - `reset_cart(p_cart_id text) → carts row` — clears items/plan/suggestion **and sets a new `carts.trip_id` (uuid)**. For new trips and demo resets.
+
+### Shared hosted project rules (v0.11)
+
+- **Only the demo operator runs `db.py reset-demo` on hosted**, right before judging. It re-seeds the catalog, wipes the merchant change log, and resets cart 7 for everyone.
+- Tests and rehearsals use **throwaway carts** (`cv-e2e-*`, `ios-it-*`, `agent-it-*`, `ipad-live`), never cart `7`. They reset only their own cart: `backend/.venv/bin/python backend/cart.py reset --cart <id>`.
+- Never put the service-role key, DB URL or access token on the Pi or the iPad.
 
 ### 3a. As built (backend `1955f3c`, v0.7): additive fields, nothing renamed
 
@@ -259,3 +265,4 @@ All three feature chats work in the **same main checkout**, so stay inside your 
 - v0.8 — All of P2–P8 and P10 are built (`4feb9ba`). `checkout` returns the receipt and blocks on unresolved items. Env var name unified to `CARTESIA_AGENT_ID`; added `SUPABASE_PROJECT_REF` and `SUPABASE_ACCESS_TOKEN`.
 - v0.9 — Merchant agent built (`d5d3c2b`): it stages changes, the owner confirms, and every change has an audit log and undo. `suggestion.offered_at`: a newer store deal replaces the current suggestion. CV reads the catalog from Supabase at startup and on each trip change, with `store.json` as the fallback. Live-deal demo option added.
 - v0.10 — CV events gain `resolves_event_id`: a vision removal of an unknown unit resolves it, so checkout isn't blocked by a stray hand. Overnight as-built notes for CV.
+- v0.11 — Hosted is live (`go_live.sh` PASS). Shared hosted rules: only the demo operator runs `reset-demo`, and tests and rehearsals use throwaway carts. The merchant agent passed its real-Claude smoke test (`merchant/smoke.py`).
