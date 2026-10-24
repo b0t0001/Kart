@@ -23,6 +23,13 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 late morning · real-Claude tests pass; voice is unblocked
+- **Merchant agent on hosted with real Claude: PASS** (`7cfd108`, rerun with `merchant/smoke.py`). All four prompts: preview → Confirm → log → Undo. The parmesan beat reaches the cart 0.1 s after Confirm; owner message → preview takes 3–6 s.
+- **CV on hosted:** end-to-end 2/2. The real-Claude identifier got 12/12 on printed-name crops, median 1.6 s (an upper bound; the real props come after enrollment). 87 tests.
+- **Hardware (James's PC, real Pi):** 80 tests pass on the Pi, and snap, live and /status work. The cams aren't mounted yet, and the Pi still needs `git pull` and its `.env`.
+- **Cartesia:** the key works; voice-token is deployed to hosted (200, short-lived token). The iPad chat is now deploying the Line agent. Dylan approves `cartesia auth login` in the browser.
+- New shared rule: no `reset-demo` on hosted from tests or rehearsals (contract v0.11).
+
 ### 2026-10-24 morning · HOSTED SUPABASE IS LIVE
 - Project **kart** (org KART, West US, free plan, ref `gbwcrsqxtoppwzckedry`). Dylan pasted the keys into `.env`; the manager checked their format without reading them out (anon and service_role roles match the project, the DB URL uses the session pooler, the token is a valid PAT, and the Anthropic key returns HTTP 200).
 - **`backend/go_live.sh`: PASS.** Migrations, seed, demo simulation over REST, end-to-end (4 passed, 1 skipped), reset-demo. Cart 7 is idle. The voice-token deploy waits for a Cartesia key.
