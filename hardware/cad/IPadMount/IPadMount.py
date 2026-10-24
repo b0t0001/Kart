@@ -791,9 +791,9 @@ def run(context):
 
         step('parameters')
         add_params()
-        if E('rim_drop') >= E('rim_c'):
-            ui.messageBox('rim_drop must be smaller than rim_c (it is one side of '
-                          'the triangle rim_c is the long side of). Fix PARAMS and re-run.')
+        if E('rim_drop') > E('rim_c'):
+            ui.messageBox('rim_drop can be at most rim_c (equal = wire straight below '
+                          'the handle). Fix PARAMS and re-run.')
             return
         warnings, report, fits = build()
         app.activeViewport.fit()
