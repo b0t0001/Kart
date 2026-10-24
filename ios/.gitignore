@@ -1,0 +1,6 @@
+build/
+Kart.xcodeproj/
+KartCore/.build/
+*.xcuserstate
+.swiftpm/
+Config.xcconfig

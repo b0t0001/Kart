@@ -1,0 +1,31 @@
+name: Kart
+options:
+  bundleIdPrefix: com.kart
+  deploymentTarget:
+    iOS: "26.0"
+packages:
+  KartCore:
+    path: KartCore
+targets:
+  Kart:
+    type: application
+    platform: iOS
+    sources:
+      - path: Kart
+      - path: ../data/store.json
+        buildPhase: resources
+    dependencies:
+      - package: KartCore
+    scheme: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kart.app
+        TARGETED_DEVICE_FAMILY: "2"
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Kart
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UIStatusBarHidden: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
