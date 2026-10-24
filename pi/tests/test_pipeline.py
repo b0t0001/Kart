@@ -122,6 +122,38 @@ def test_nudge_two_items_hidden_stack(tmp_path):
         [("added", "blue-can"), ("added", "red-box"), ("removed", "red-box")]
 
 
+BAG = Item("green-bag", 300, 200, w=200, h=150, seed=3)  # a soft bag: it slumps after it's put down
+
+
+def test_a_soft_item_slumping_in_place_is_not_billed_again(tmp_path):  # real cart: four-corners' almond bag
+    p, _ = make(tmp_path)
+    sc = Script(Scene()).still(1.0).drop(BAG).still(2.0)
+    assert run(p, sc) == [("added", "green-bag")]
+    box = next(iter(p.cart.instances.values())).views[0].box
+    n = len(sc.ticks)
+    sc.set(items=[Item("green-bag", 308, 214, w=214, h=136, seed=3)]).still(2.0)  # no hand: it just settles
+    assert run(p, sc, n) == [] and len(p.cart.instances) == 1
+    assert next(iter(p.cart.instances.values())).views[0].box != box  # memory follows it to its new shape
+
+
+def test_a_different_item_laid_over_one_its_size_is_still_billed(tmp_path):
+    p, _ = make(tmp_path)
+    big = Item("blue-can", 250, 150, w=300, h=220, seed=2)
+    cover = Item("green-bag", 255, 155, w=300, h=220, seed=3)
+    sc = Script(Scene()).still(1.0).drop(big).still(1.0).drop(cover).still(2.0)
+    assert run(p, sc) == [("added", "blue-can"), ("added", "green-bag")]
+
+
+def test_a_second_unit_set_against_the_first_is_billed_not_taken_for_a_reveal(tmp_path):  # counting boxes
+    p, _ = make(tmp_path)
+    sc = Script(Scene()).still(1.0).drop(RED).still(1.0)
+    run(p, sc)
+    n = len(sc.ticks)
+    # the first box gets bumped as the second lands right against it: one change covers both
+    sc.set(items=[Item("red-box", 318, 200, seed=1), Item("red-box", 428, 200, seed=1)]).still(2.0)
+    assert run(p, sc, n) == [("added", "red-box")] and p.cart.count("red-box") == 2
+
+
 def test_reset_restart_and_missing_camera(tmp_path):
     p, _ = make(tmp_path)
     sc = Script(Scene()).still(1.0).drop(RED)
@@ -240,6 +272,20 @@ def test_tall_item_reaching_the_top_edge_is_billed_and_removed(tmp_path):  # rea
     assert sink.events[0].product_id == sink.events[1].product_id and len(p.cart.instances) == 0
 
 
+def test_a_tall_item_judged_at_the_recheck_reaches_claude_whole(tmp_path):  # real cart: the almond bag, cam0
+    from kartcv.synth import mat_roi
+    w = world(tmp_path)
+    w.cfg.roi = {"0": mat_roi(0), "1": mat_roi(1)}
+    p = Pipeline(w.cfg, [0, 1], w.identifier, w.features, [MemorySink()], tmp_path / "state")
+    tall = Item("red-box", 300, 30, seed=1, tall=900)  # at the far edge of the floor, up to the top of the frame
+    added = []
+    for tick in Script(Scene()).still(1.0).drop(tall).still(4.0).ticks:
+        p.step(tick)
+        added += [b for d in p.last_decisions if d.kind == "added" for b in d.blobs]
+    [b0] = [b for b in added if b.cam == 0]
+    assert b0.edge and b0.box[1] > 40 and b0.ident_box[1] == 0  # judged against the true before-picture
+
+
 def test_long_hand_rest_nets_zero_and_resolves(tmp_path):  # a hand left still for longer than the recheck
     p, sink = make(tmp_path)
     run(p, Script(Scene()).still(1.0).hand_rest(5.0).still(4.0))
@@ -283,15 +329,21 @@ def _slow_cloud_pipeline(tmp_path, seconds=1.5):
 
 def test_a_second_add_during_a_slow_cloud_call_is_still_seen(tmp_path):  # real Pi: Claude froze the loop
     import time
-    p, sink = _slow_cloud_pipeline(tmp_path)
-    sc = Script(Scene()).still(1.0).drop(RED).drop(BLUE)
-    t0 = time.perf_counter()
-    for tick in sc.ticks:
-        p.step(tick)
-    fed = time.perf_counter() - t0
-    p.drain(timeout=10)
-    p.close()
-    assert fed < 1.5  # the loop kept watching while Claude was busy
+    slow = 1.5
+
+    def feed(seconds, name):
+        p, sink = _slow_cloud_pipeline(tmp_path / name, seconds)
+        t0 = time.perf_counter()
+        for tick in Script(Scene()).still(1.0).drop(RED).drop(BLUE).ticks:
+            p.step(tick)
+        fed = time.perf_counter() - t0
+        p.drain(timeout=10)
+        p.close()
+        return fed, sink, p
+
+    baseline, _, _ = feed(0.0, "instant")  # just watching: ~0.5 s on a Mac, ~2.2 s on the Pi 4
+    fed, sink, p = feed(slow, "slow")
+    assert fed < baseline + slow  # the loop kept watching while Claude was busy (inline: + 2 calls)
     assert [e.type for e in sink.events] == ["added", "added"] and len(p.cart.instances) == 2
 
 

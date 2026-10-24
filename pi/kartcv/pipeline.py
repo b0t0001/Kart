@@ -221,8 +221,8 @@ class Pipeline:
                              "waiting %.0f s for it to leave or stay", c, self.cfg.intrusion_recheck_s)
                     edge_cams.add(c)
                     new_ref = f.image.copy()
-                    for b in edge:
-                        x, y, w, h = b.box
+                    for b in edge:  # with the item's body above the floor, so the recheck sees it whole
+                        x, y, w, h = b.ident_box if b.ident is not None else b.box
                         new_ref[y:y + h, x:x + w] = old_ref[y:y + h, x:x + w]
                     r.blobs = [b for b in r.blobs if b not in edge]
                     r.deferred = [b.box for b in edge]
@@ -277,7 +277,7 @@ class Pipeline:
             ev.resolves_event_id = (inst.event_id or None) if inst else None
         for b in d.blobs if not crops and not d.private else []:  # private: its photos never leave memory
             name = f"{ev.event_id}_cam{b.cam}.jpg"
-            cv2.imwrite(str(self.crops_dir / name), b.after if d.kind == "added" else b.before)
+            cv2.imwrite(str(self.crops_dir / name), b.ident_crop if d.kind == "added" else b.before)
             rel = f"{self.state_dir.name}/crops/{name}"
             ev.crops.append(rel)
             crops.append(rel)

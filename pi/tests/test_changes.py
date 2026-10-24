@@ -1,6 +1,6 @@
 from kartcv.changes import detect_changes
 from kartcv.config import Config
-from kartcv.synth import Item, Scene, project
+from kartcv.synth import Item, Scene, item_box, mat_roi, project
 
 CFG = Config()
 RED = Item("red-box", 300, 200, seed=1)
@@ -133,3 +133,23 @@ def test_working_size_follows_the_frame_orientation():
     from kartcv.changes import work_size
     assert work_size((720, 1280, 3), (640, 360)) == (640, 360)
     assert work_size((1280, 720, 3), (640, 360)) == (360, 640)  # portrait: same detail both ways, no squash
+
+
+def test_a_tall_items_identification_crop_shows_it_above_the_floor():  # real cart: the almond bag was gray
+    import numpy as np
+    cfg = Config(roi={"0": mat_roi(0)})
+    tall = Item("red-box", 300, 30, seed=1, tall=60)  # at the far edge: its body rises past the floor outline
+    before, after = Scene().render(0, 1), Scene(items=[tall]).render(0, 2)
+    [b] = detect_changes(0, before, after, cfg, roi=cfg.roi["0"]).blobs
+    top = item_box(0, tall, pad=0.0)[1] - tall.tall  # where its body ends in the image
+    x, y, w, h = b.box
+    assert not b.edge and y > top  # detection still only sees the part on the floor
+    ix, iy, iw, ih = b.ident_box  # identification reaches up over the item's own body...
+    assert (ix, iw) == (x, w) and iy + ih == y + h and top - 0.25 * h <= iy <= top
+    assert np.array_equal(b.ident, after[iy:iy + ih, ix:ix + iw])  # ...unmasked, and no higher than it
+
+
+def test_identification_crops_stay_inside_the_floor_box_for_a_flat_item():
+    cfg = Config(roi={"0": mat_roi(0)})
+    [b] = detect_changes(0, Scene().render(0, 1), Scene(items=[RED]).render(0, 2), cfg, roi=cfg.roi["0"]).blobs
+    assert b.ident_box == b.box  # nothing rises above the floor: Claude gets the same box as before

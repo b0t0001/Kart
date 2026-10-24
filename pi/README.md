@@ -38,7 +38,8 @@ cp pi/config.example.json pi/config.json        # camera paths are already the m
 
 The cameras see the mesh walls and the room beyond the cart; when the cart rolls, that moves.
 Give each camera a polygon of the basket **floor** so everything outside it is ignored. This is
-required on a real cart with open mesh walls.
+required on a real cart with open mesh walls. (Detection only looks at the floor; the photo Claude gets
+of a tall item also shows its body rising above the floor, up to where the item ends.)
 
 ```bash
 ~/venv/bin/python tools/snap.py                                   # tools/out/cam0.jpg, cam1.jpg
@@ -100,6 +101,7 @@ Logs from the service: `journalctl -u kart-cv -f`.
 | 6 | With Supabase in `.env`, add/remove items; then turn the hotspot off, add one, turn it back on | the iPad / `carts` row updates; the offline item arrives once Wi-Fi is back (no double count) |
 | 7 | From the laptop: `curl http://smartcart.local:8080/status` | JSON with `items`, `state`, `last_events` |
 | 8 | `bash hardware/install_service.sh --now`, then unplug and replug the Pi | it starts watching by itself (`journalctl -u kart-cv -f`) |
+| 9 | Drop a soft bag and let it slump; stand a tall bag at the far end | one `ADDED` each (the tall one after `RECHECK`, named by Claude); a slump or a nudge logs `SETTLED IN PLACE … not billed` |
 
 ### Teach it the props (enrollment, ~1 min each)
 

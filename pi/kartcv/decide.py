@@ -22,6 +22,8 @@ log = logging.getLogger(__name__)
 IOU_OVERLAP = 0.1
 IOU_WEIGHT = 0.2
 VANISHED_COVERAGE = 0.6  # a remembered unit whose box is this much inside an emptied spot is gone
+SAME_SPOT_IOU = 0.5      # a change this much on a remembered unit's box, still looking like it, is that unit
+GROWTH = 1.5             # ...unless this much more of the spot is covered now: something else was put down
 
 
 @dataclass
@@ -83,8 +85,25 @@ def _mean(d: np.ndarray, m: np.ndarray | None) -> float:
     return float(d.mean())
 
 
+def _covered(crop: np.ndarray, empty_crop: np.ndarray, m: np.ndarray | None, cfg) -> float:
+    """Share of the floor in this crop that something lies on (differs from the empty basket)."""
+    return _mean((lab_distance(crop, empty_crop) > cfg.change_thresh).astype(np.float32), m)
+
+
+def settled_unit(blob: Blob, cart: CartMemory, fp_after, cfg) -> Instance | None:
+    """The remembered unit this change sits on and still looks like, if any (best overlap first)."""
+    best = None
+    for inst, view in cart.views_in(blob.cam):
+        iou = _iou(view.box, blob.box)
+        if iou >= SAME_SPOT_IOU and _sim(fp_after, view.fingerprint) >= cfg.local_min_score:
+            if best is None or iou > best[0]:
+                best = (iou, inst)
+    return best[1] if best else None
+
+
 def classify_blob(blob: Blob, result: ChangeResult, empty: np.ndarray, cart: CartMemory, features, cfg,
                   matched: tuple | None = None) -> str | None:
+    """One of "added", "removed", "settled" (a remembered unit changed shape or shifted in its spot), or None."""
     cur, ref, m = matched if matched is not None else gain_matched(result, empty, cfg.roi.get(str(blob.cam)), cart)
     empty_crop = _crop(empty, blob.box)
     after = _crop(cur, blob.box)
@@ -98,9 +117,13 @@ def classify_blob(blob: Blob, result: ChangeResult, empty: np.ndarray, cart: Car
         return "removed"
     if before_empty:
         return "added"
-    # Something on something: if what's visible now looks like an item we remembered under this spot,
-    # and clearly MORE like it than what was there before, the top one left. Relative, so features
-    # that find everything similar (pooled CNN embeddings on look-alike packs) can't fake a reveal.
+    # Something on something. If clearly more of the spot is covered now, something was put down (a
+    # second box set against the first, nudging it): an add, never a reveal.
+    if _covered(after, empty_crop, mc, cfg) >= GROWTH * max(_covered(before, empty_crop, mc, cfg), 0.05):
+        return "added"
+    # If what's visible now looks like an item we remembered under this spot, and clearly MORE like it
+    # than what was there before, the top one left. Relative, so features that find everything
+    # similar (pooled CNN embeddings on look-alike packs) can't fake a reveal.
     fp_after, fp_before = features(blob.after_core), features(blob.before_core)
     for _, view in cart.views_in(blob.cam):
         if _iou(view.box, blob.box) <= IOU_OVERLAP:
@@ -108,6 +131,11 @@ def classify_blob(blob: Blob, result: ChangeResult, empty: np.ndarray, cart: Car
         s_after, s_before = _sim(fp_after, view.fingerprint), _sim(fp_before, view.fingerprint)
         if s_after >= cfg.local_min_score and s_after - s_before >= cfg.local_min_margin:
             return "removed"
+    # A remembered unit that changed in its own spot, covering about as much as before: a soft bag
+    # slumping, a box nudged. Same unit: memory follows it, nothing is billed. Laying a different item
+    # over it fails the look-alike test; a smaller one stacked on top fails the overlap test.
+    if settled_unit(blob, cart, fp_after, cfg) is not None:
+        return "settled"
     return "added"
 
 
@@ -123,13 +151,13 @@ def _decide_added(added: dict[int, list[Blob]], identifier, features, cfg) -> li
         # biggest view first: if one camera's blob is spurious (a shadow), the good view leads (Claude gets ≤ 2)
         blobs = sorted((bs[0] for bs in added.values()), key=lambda b: -b.area_frac)
         private = cfg.edge_privacy and any(b.edge for b in blobs)
-        ident = identifier.identify([b.after_core for b in blobs], cloud_crops=[b.after for b in blobs],
+        ident = identifier.identify([b.after_core for b in blobs], cloud_crops=[b.ident_crop for b in blobs],
                                     allow_cloud=not private)
         return [Decision("added", ident.product_id, ident.confidence, ident.method, ident.label,
                          sorted(b.cam for b in blobs), blobs, _views(blobs, features), count=max(1, ident.count),
                          personal=ident.personal, private=private)]
 
-    idents = {id(b): identifier.identify([b.after_core], cloud_crops=[b.after],
+    idents = {id(b): identifier.identify([b.after_core], cloud_crops=[b.ident_crop],
                                          allow_cloud=not (cfg.edge_privacy and b.edge))
               for bs in added.values() for b in bs}
     by_pid: dict[str, dict[int, list[Blob]]] = {}
@@ -253,6 +281,7 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
            identifier, features, cfg) -> list[Decision]:
     added: dict[int, list[Blob]] = {}
     removed: dict[int, list[Blob]] = {}
+    settled: list[Decision] = []
     for r in results:
         if r.status != "blobs":
             continue
@@ -268,6 +297,12 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
                 added.setdefault(r.cam, []).append(b)
             elif kind == "removed":
                 removed.setdefault(r.cam, []).append(b)
+            elif kind == "settled":
+                inst = settled_unit(b, cart, features(b.after_core), cfg)
+                log.info("SETTLED IN PLACE: cam%d sees %s shift or change shape in its spot: updated, not billed",
+                         r.cam, inst.label)
+                settled.append(Decision("moved", inst.product_id, 1.0, "memory", inst.label, [r.cam], [b],
+                                        _views([b], features), inst.instance_id))
     # A camera held back when an item was billed (an arm in its view) now sees that spot: the same unit,
     # seen late. Attach the view instead of billing it twice.
     late = []
@@ -289,7 +324,7 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
     for d in decisions:
         if d.kind == "added":
             d.awaiting = {c: boxes for c, boxes in held.items() if c not in d.cameras}
-    return late + _cancel_nudges(decisions, cart, cfg)
+    return late + settled + _cancel_nudges(decisions, cart, cfg)
 
 
 def apply_decision(cart: CartMemory, d: Decision) -> Instance | None:

@@ -11,6 +11,8 @@ from kartcv.roi import gray_outside, polygon_mask
 
 _OPEN = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
 _CLOSE = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+RAISE_MAX = 2.0  # an identification box rises at most this many times its own height above the floor box
+BODY_SOLID = 0.5  # ...through rows where at least this share of the item's own columns changed
 
 
 def work_size(shape, base: tuple[int, int]) -> tuple[int, int]:
@@ -63,9 +65,11 @@ def translate(img: np.ndarray, dx: float, dy: float) -> np.ndarray:
 
 @dataclass
 class Blob:
-    """A changed region. `before`/`after` are padded crops (context for Claude and for people);
-    `core` is the unpadded changed box inside them, which is what fingerprints are taken from,
-    so whatever surrounds the item (mat, or another grocery under it) doesn't skew the match."""
+    """A changed region. `before`/`after` are padded crops of the floor (gray outside it); `core` is
+    the unpadded changed box inside them, which is what fingerprints are taken from, so whatever
+    surrounds the item (mat, or another grocery under it) doesn't skew the match. `ident` is what
+    Claude and the shopper see of it: the unmasked frame over `box` raised over the item's own body,
+    where it rises past the floor (a tall bag in front of the mesh)."""
 
     cam: int
     box: tuple[int, int, int, int]  # x, y, w, h in full-res pixels, padded and clipped
@@ -74,6 +78,12 @@ class Blob:
     after: np.ndarray
     core: tuple[int, int, int, int] = (0, 0, 0, 0)  # x, y, w, h inside the crops; zero size = whole crop
     edge: bool = False  # part of a change that reaches the image edge: an arm over the rim, a strap
+    ident: np.ndarray | None = None
+    ident_box: tuple[int, int, int, int] = (0, 0, 0, 0)  # x, y, w, h in full-res pixels
+
+    @property
+    def ident_crop(self) -> np.ndarray:
+        return self.ident if self.ident is not None else self.after
 
     def _core(self, crop: np.ndarray) -> np.ndarray:
         x, y, w, h = self.core
@@ -194,10 +204,24 @@ def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg, ro
         x0, y0 = max(0, int(cx0 - px)), max(0, int(cy0 - py))
         x1, y1 = min(full_w, int(math.ceil(cx1 + px))), min(full_h, int(math.ceil(cy1 + py)))
         mc = full_mask[y0:y1, x0:x1] if full_mask is not None else None
-        edge = bool(reaching_edge) and bool(reaching_edge & set(np.unique(full_labels[labels == i])))
+        comps = set(np.unique(full_labels[labels == i])) - {0}
+        edge = bool(reaching_edge & comps)
+        # Identification gets the item, not a floor cutout: where the item leaves the floor at its top,
+        # the box rises over its body for as long as the body stays solid in those columns (changed and
+        # connected to this blob). A passer-by seen through the mesh behind it is patchy, not a solid
+        # column, and the rise is capped, so no more of the room than the item covers goes to Claude.
+        top = y0
+        if comps and by > 0:
+            neck = np.nonzero((labels[by:by + max(2, bh // 10), bx:bx + bw] == i).any(axis=0))[0] + bx
+            solid = np.isin(full_labels[:by, neck], list(comps)).mean(axis=1) >= BODY_SOLID
+            gaps = np.nonzero(~solid)[0]
+            body_top = gaps[-1] + 1 if gaps.size else 0  # the topmost row of the solid run above the blob
+            if body_top < by:
+                top = min(y0, max(0, int(body_top * sy - py), int(y0 - RAISE_MAX * (y1 - y0))))
         blobs.append(Blob(cam, (x0, y0, x1 - x0, y1 - y0), area / (w * h),
                           gray_outside(reference[y0:y1, x0:x1], mc), gray_outside(current[y0:y1, x0:x1], mc),
-                          (cx0 - x0, cy0 - y0, cx1 - cx0, cy1 - cy0), edge))
+                          (cx0 - x0, cy0 - y0, cx1 - cx0, cy1 - cy0), edge,
+                          current[top:y1, x0:x1].copy(), (x0, top, x1 - x0, y1 - top)))
     if not blobs:
         return result("none", frac=frac, shift=shift)
     return result("blobs", blobs, frac, shift)

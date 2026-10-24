@@ -2,7 +2,8 @@
 
 A polygon of normalized [x, y] points (0..1, x right, y down), so one polygon fits full-size live
 frames and half-size clips alike. Everything outside it (the mesh walls, the room, people walking by)
-is ignored by motion, change detection and the camera-shift estimate, and painted gray in crops.
+is ignored by motion, change detection and the camera-shift estimate, and painted gray in floor crops
+(Claude's crop of a tall item also shows its body above the floor: changes.Blob.ident).
 """
 from __future__ import annotations
 

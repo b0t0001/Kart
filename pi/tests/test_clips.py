@@ -4,9 +4,13 @@ Each clip replays through the real pipeline with its own floor ROI, offline (no 
 products come out unknown), and must produce exactly the ground-truth "expected" events. The "live"
 lines in expected.json are what a past live run printed, including known false ones (a cardboard flap,
 a cloth outside the floor); they are history, not expectations, so they are asserted absent implicitly.
+
+After the last frame the cart stands still for a few seconds, as it did live, so a pending intrusion
+recheck is judged too (four-corners: the slumped almond bag was billed a second time at exactly that point).
 """
 import json
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -22,6 +26,15 @@ from kartcv.sources import iter_ticks, load_recording
 CLIPS = sorted(p for p in (Path(__file__).parent / "clips").glob("*") if (p / "expected.json").exists())
 
 
+def held(ticks, seconds: float, hz: float = 5.0):
+    """The clip's ticks, then its last frames held still for `seconds` more."""
+    last = None
+    for last in ticks:
+        yield last
+    for i in range(1, int(seconds * hz) + 1):
+        yield {c: replace(f, ts=f.ts + i / hz) if f is not None else None for c, f in last.items()}
+
+
 def replay(clip: Path):
     exp = json.loads((clip / "expected.json").read_text())
     cfg = Config(features="hist", roi=exp.get("roi", {}))
@@ -30,7 +43,7 @@ def replay(clip: Path):
     sources = load_recording(clip)
     p = Pipeline(cfg, [s.cam for s in sources], HybridIdentifier(None, None, catalog, cfg), HistogramFeatures(),
                  [sink], Path(tempfile.mkdtemp()) / "state")
-    for tick in iter_ticks(sources):
+    for tick in held(iter_ticks(sources), cfg.settle_s + cfg.intrusion_recheck_s + 1.0):
         p.step(tick)
     return exp, sink.events, p
 
