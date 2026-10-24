@@ -4,7 +4,7 @@ import Testing
 
 @Test func loadsPublishedStoreFile() throws {
     let c = try Fixtures.catalog()
-    #expect(c.products.count == 21)
+    #expect(c.products.count == (try Fixtures.productCount()))   // every product in the file decodes
     #expect(c.deals.count == 5)
     #expect(c.layout.sections.count == 10)
     #expect(c.layout.store.width == 20 && c.layout.store.height == 12)

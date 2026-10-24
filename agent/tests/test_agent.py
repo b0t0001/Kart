@@ -149,8 +149,7 @@ async def test_a_spoken_yes_takes_the_offered_deal_without_claude():
     agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
     said = await run(agent, UserTurnEnded(content=[UserTextSent(content="Yeah, sure.")]))
     assert said == ["Added Parmesan to your list."]
-    plans = [p["p_plan"] for name, p in backend.calls if name == "set_plan"]
-    assert plans and any(line["product_id"] == "kirkland-parmesan" for line in plans[-1])
+    assert any(line["product_id"] == "kirkland-parmesan" for line in backend.cart["plan"])
 
 
 async def test_a_spoken_no_dismisses_the_offered_deal():
@@ -395,8 +394,7 @@ async def test_yes_walks_the_deals_one_at_a_time():
     outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="Yes.")]))
     assert spoken(outs) == ["Added Parmesan to your list. That's all the deals."]
     assert cards(outs) == [{"type": "digest_done"}]
-    assert any(name == "set_plan" and any(l["product_id"] == "kirkland-parmesan" for l in p["p_plan"])
-               for name, p in backend.calls)
+    assert any(line["product_id"] == "kirkland-parmesan" for line in backend.cart["plan"])
     assert not agent.run_filter(UserCustomSent(metadata=PARM_OFFER))   # walked already: never read out again
 
 
@@ -461,3 +459,164 @@ async def test_taking_out_an_extra_box_asks_nothing():
     backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1, "done": True}]
     backend.cart["items"] = [{"product_id": "barilla-spaghetti", "qty": 1}]   # box 2 came out; box 1 is still in
     assert await run(agent, UserCustomSent(metadata=SPAG_OUT)) == ["Took the Spaghetti off your bill."]
+
+
+async def test_a_new_list_asks_about_its_own_deals_but_never_the_same_deal_twice():
+    pasta = ToolUse("t1", "set_plan", {"meal": "pasta night for 4", "items": [{"product_id": "barilla-spaghetti", "reason": "pasta"}]})
+    again = ToolUse("t2", "set_plan", {"meal": "pasta night for 6", "items": [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 2}]})
+    nachos = ToolUse("t3", "set_plan", {"meal": "nachos", "items": [{"product_id": "tostitos-salsa", "reason": "nachos"}]})
+    agent, backend = make([Turn(chunks=["One sec."], tools=[pasta]), Turn(chunks=["Spaghetti's on."]),
+                           Turn(chunks=["One sec."], tools=[again]), Turn(chunks=["Two boxes."]),
+                           Turn(chunks=["One sec."], tools=[nachos]), Turn(chunks=["Salsa's on."])])
+    backend.deals.append({"id": "d-queso", "product_id": "queso", "label": "$1 off", "pairs_with": ["tostitos-salsa"],
+                          "ends_at": None})
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    assert cards(outs) == [{"type": "deal_digest", "count": 1}]
+    await outputs(agent, UserTurnEnded(content=[UserTextSent(content="Not now.")]))
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="it's six people now")]))
+    assert cards(outs) == []                                   # the Parmesan was already asked about
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="actually make it nachos")]))
+    assert cards(outs) == [{"type": "deal_digest", "count": 1}]  # the new list has its own deal (queso)
+
+
+async def test_this_means_the_last_item_into_the_cart():
+    agent, backend = make([Turn(chunks=["The spaghetti is $1.99."])])
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1, "done": True}]
+    backend.cart["items"] = [{"product_id": "barilla-spaghetti", "qty": 1}]
+    await agent._refresh()
+    agent.run_filter(UserCustomSent(metadata={"type": "cart_changed", "change": "added", "product_id": "barilla-spaghetti"}))
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="How much is this?")]))
+    heard = agent.brain.llm.requests[-1]["messages"][-1]["content"]
+    assert heard == "(The last item into the cart: Spaghetti.) How much is this?"
+
+
+async def test_this_means_the_card_on_screen_when_one_is_open():
+    agent, backend = make([Turn(chunks=["It's $3.99 with the deal."])])
+    backend.unresolved = [{"event_id": "e1"}]
+    agent.run_filter(UserCustomSent(metadata={"type": "ui_action", "action": "unknown_item"}))
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="What is that?")]))
+    heard = agent.brain.llm.requests[-1]["messages"][-1]["content"]
+    assert heard.startswith("(On screen: an \"Is this...?\" card for an item the cameras couldn't identify.)")
+
+
+async def test_a_card_that_closed_by_itself_is_not_what_this_means():
+    agent, backend = make([Turn(chunks=["Which one?"])])
+    agent.run_filter(UserCustomSent(metadata={"type": "ui_action", "action": "unknown_item"}))
+    backend.unresolved = []                                    # the item came out of the cart: the card is gone
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="What is that?")]))
+    assert agent.brain.llm.requests[-1]["messages"][-1]["content"] == "What is that?"
+
+
+async def test_a_plain_question_gets_no_extra_context():
+    agent, backend = make([Turn(chunks=["Aisle 5."])])
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="Where is the salsa?")]))
+    assert agent.brain.llm.requests[-1]["messages"][-1]["content"] == "Where is the salsa?"
+
+
+async def test_after_a_dropped_call_kart_asks_what_was_said():
+    agent, backend = make()
+    lost = UserCustomSent(metadata={"type": "reconnected", "unanswered": True})
+    assert agent.run_filter(lost)
+    assert await run(agent, lost) == ["Sorry, I lost you for a second. What was that?"]
+    assert not agent.run_filter(UserCustomSent(metadata={"type": "reconnected", "unanswered": False}))
+
+
+async def test_a_rejoined_call_remembers_the_meal_and_the_conversation():
+    agent, backend = make([Turn(chunks=["Aisle 6."])])
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta night for 4", "qty": 1, "done": False},
+                            {"product_id": "kirkland-parmesan", "reason": "deal", "qty": 1, "done": False}]
+    backend.transcript = [("agent", GREETING), ("user", "Pasta night for 4."), ("agent", "You're set with spaghetti."),
+                          ("user", "Where's the")]                  # cut off by the drop: never answered
+    assert await run(agent, CallStarted()) == []                     # a trip in progress: no greeting
+    assert await run(agent, UserCustomSent(metadata={"type": "ui_action", "action": "paid"})) == ["Paid. Enjoy pasta night!"]
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="Where's the spaghetti?")]))
+    assert agent.brain.llm.requests[-1]["messages"][:3] == [
+        {"role": "user", "content": "Pasta night for 4."}, {"role": "assistant", "content": "You're set with spaghetti."},
+        {"role": "user", "content": "Where's the spaghetti?"}]
+
+
+async def test_the_deals_question_waits_while_kart_has_asked_its_own():
+    tacos = ToolUse("t1", "set_plan", {"meal": "tacos", "items": [{"product_id": "barilla-spaghetti", "reason": "pasta"}]})
+    agent, backend = make([Turn(chunks=["One sec."], tools=[tacos]),
+                           Turn(chunks=["Tacos it is. The salsa's already in your cart. Keep it?"]),
+                           Turn(chunks=["Okay, take it out when you can."])])
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="actually make it tacos")]))
+    assert cards(outs) == []                                   # "Keep it?" is still open: no second question
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="No, I'll put it back.")]))
+    assert spoken(outs)[0] == "Okay, take it out when you can." and cards(outs) == [{"type": "deal_digest", "count": 1}]
+
+
+async def test_be_quiet_keeps_kart_quiet_until_asked_and_cards_still_work():
+    agent, backend = make()                                   # no Claude: both are fast paths
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Be quiet, please.")])) == \
+        ["Okay, I'll stay quiet. Just ask if you need me."]
+    backend.cart["plan"] = [{"product_id": "rao-marinara", "reason": "pasta", "qty": 1, "done": True}]
+    backend.cart["items"] = [{"product_id": "rao-marinara", "qty": 1}]
+    await agent._refresh()
+    assert not agent.run_filter(UserCustomSent(metadata={"type": "cart_changed", "change": "added", "product_id": "rao-marinara"}))
+    assert not agent.run_filter(UserCustomSent(metadata=PARM_OFFER))      # the card shows; Kart doesn't read it out
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Yes.")])) == ["Added Parmesan to your list."]
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="You can talk again.")])) == ["Okay, I'm back."]
+    assert agent.run_filter(UserCustomSent(metadata={"type": "cart_changed", "change": "added", "product_id": "rao-marinara"}))
+
+
+async def test_thanks_gets_a_youre_welcome_when_nothing_is_asked():
+    agent, backend = make()
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Thanks!")])) == ["You're welcome!"]
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Okay.")])) == []     # an ack still gets nothing
+
+
+async def test_kart_remembers_which_deals_it_offered():
+    agent, backend = planned_agent()
+    backend_turn = Turn(chunks=["That was Parmesan, $3 off in Aisle 4."])
+    agent.brain.llm.turns.append(backend_turn)
+    await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    await outputs(agent, UserTurnEnded(content=[UserTextSent(content="Not now.")]))
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="What was that deal again?")]))
+    heard = agent.brain.llm.requests[-1]["messages"][-1]["content"]
+    assert heard == "(Deals Kart offered this trip: Parmesan is $3 off in Aisle 4.) What was that deal again?"
+
+
+async def test_kart_says_once_when_the_bill_gets_close_to_the_budget():
+    agent, backend = make()
+    backend.cart.update({"budget": 30, "total": 27.4})
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1, "done": True}]
+    backend.cart["items"] = [{"product_id": "barilla-spaghetti", "qty": 1}]
+    agent.coalesce_seconds = 0
+    added = UserCustomSent(metadata={"type": "cart_changed", "change": "added", "product_id": "barilla-spaghetti"})
+    await agent._refresh()
+    assert await run(agent, added) == ["Got the Spaghetti. You're at $27.40 of $30."]
+    assert await run(agent, added) == ["Got the Spaghetti."]
+    backend.cart["total"] = 31.2
+    assert await run(agent, added) == ["Got the Spaghetti. That's $31.20, over your $30."]
+
+
+def no_dairy(agent):
+    agent._diet.update({"diet": "no dairy", "kinds": {"cheese", "dairy"}, "products": set()})
+
+
+async def test_a_deal_that_breaks_the_diet_is_never_read_out_and_its_card_goes_away():
+    agent, backend = make()
+    await agent._refresh()
+    no_dairy(agent)
+    assert agent.run_filter(UserCustomSent(metadata=PARM_OFFER))         # handled, quietly
+    assert await run(agent, UserCustomSent(metadata=PARM_OFFER)) == []
+    assert ("dismiss_suggestion", {"p_cart_id": "7"}) in backend.calls and agent._offer is None
+
+
+async def test_the_deals_question_leaves_out_deals_that_break_the_diet():
+    agent, backend = planned_agent()
+    no_dairy(agent)
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    assert cards(outs) == []                                       # the only deal (Parmesan) is cheese
+
+
+async def test_a_deal_on_something_taken_off_the_list_is_not_offered():
+    drop = ToolUse("t1", "remove_from_plan", {"product_id": "kirkland-parmesan"})
+    agent, backend = make([Turn(chunks=["Sure."], tools=[drop])])
+    backend.cart["plan"] = [{"product_id": "kirkland-parmesan", "reason": "pasta", "qty": 1, "done": False}]
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="We've got parmesan at home, take it off.")])) == \
+        ["Sure.", " Took parmesan off your list."]
+    assert agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
+    assert await run(agent, UserCustomSent(metadata=PARM_OFFER)) == []     # "we have some at home": no deal on it
+    assert ("dismiss_suggestion", {"p_cart_id": "7"}) in backend.calls

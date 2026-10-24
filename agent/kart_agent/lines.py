@@ -20,6 +20,7 @@ def _short(catalog: list[dict[str, Any]], product_id: str | None) -> str:
     return "that"
 
 
+RECONNECT_LINE = "Sorry, I lost you for a second. What was that?"   # the call dropped before Kart answered
 LIST_TOO = "Take it off the list too?"                # a planned item came out of the cart
 LIST_KEPT = "Okay, it stays on your list."
 
@@ -33,6 +34,8 @@ def proactive_line(event: dict[str, Any], catalog: list[dict[str, Any]], plan: l
         return event.get("text") or None
     if kind == "nudge":
         return _nudge_line(event, catalog, meal)
+    if kind == "reconnected":                             # a new call mid-trip; the shopper's last turn went unanswered
+        return RECONNECT_LINE if event.get("unanswered") else None
     if kind == "ui_action":                               # the iPad tells Kart what just happened on screen
         if event.get("action") == "paid":
             dish = _dish(meal)
@@ -154,6 +157,36 @@ _ACKS = {"okay", "ok", "alright", "right", "yeah", "yep", "cool", "nice", "sure"
 def only_filler(text: str) -> bool:
     """"Um." / "Hmm": nothing to answer."""
     return all(word in _FILLERS for word in re.sub(r"[^a-z' ]", " ", text.lower()).split())
+
+
+QUIET_ON_LINE = "Okay, I'll stay quiet. Just ask if you need me."
+QUIET_OFF_LINE = "Okay, I'm back."
+WELCOME_LINE = "You're welcome!"
+_QUIET_ON = {"be quiet", "quiet", "shh", "shhh", "hush", "stay quiet", "be quiet for a bit", "stop talking so much",
+             "less talking", "quiet mode"}
+_QUIET_OFF = {"you can talk again", "you can speak again", "talk to me again", "you can start talking again",
+              "start talking again", "you can talk now"}
+_THANKS = {"thanks", "thank you", "thank you so much", "thanks a lot", "thanks so much", "cheers", "perfect thanks",
+           "great thanks", "awesome thanks", "thank you very much"}
+
+
+def _phrase(text: str) -> str:
+    words = re.sub(r"[^a-z' ]", " ", text.lower()).split()
+    while words and words[0] in _FILLERS | {"okay", "ok"}:
+        words = words[1:]
+    while words and words[-1] in {"please", "kart", "now"}:
+        words = words[:-1]
+    return " ".join(words)
+
+
+def quiet_request(text: str) -> str | None:
+    """ "Be quiet." -> "on"; "You can talk again." -> "off"; anything else -> None (Claude's to answer)."""
+    phrase = _phrase(text).removeprefix("please ").removeprefix("can you ")
+    return "on" if phrase in _QUIET_ON else "off" if phrase in _QUIET_OFF else None
+
+
+def only_thanks(text: str) -> bool:
+    return _phrase(text) in _THANKS
 
 
 def only_ack(text: str) -> bool:

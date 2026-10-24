@@ -24,6 +24,7 @@ struct ShoppingView: View {
         .overlay(alignment: .top) { ReconnectingBanner(connection: model.backend.connection) }
         .overlay(alignment: .top) { StillHereBanner(model: model) }
         .overlay { StillShoppingPrompt(model: model) }
+        .simultaneousGesture(TapGesture().onEnded { model.noteActivity() })   // any tap counts (and wakes Kart)
         .task {                                               // member memory beta: a quiet minute → Kart's one question
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))

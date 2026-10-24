@@ -2,7 +2,8 @@ import Foundation
 import Observation
 
 public enum VoiceState: Sendable, Equatable {
-    case idle, connecting, listening, userSpeaking, thinking, agentSpeaking, offline
+    /// `paused`: the call is closed after a quiet spell (no Cartesia minutes); the mic still listens on the iPad.
+    case idle, connecting, listening, userSpeaking, thinking, agentSpeaking, offline, paused
 }
 
 /// What the iPad tells the voice agent (Line `custom` events in milestone 3).
@@ -22,6 +23,8 @@ public enum VoiceEvent: Sendable, Equatable {
     case memberForgotten
     /// v0.14 beta: 3 quiet minutes while signed in ("Still shopping, Dylan?").
     case memberIdle
+    /// A new call mid-trip (after a drop or a pause); `unanswered`: the shopper's last words never got a reply.
+    case reconnected(unanswered: Bool)
 }
 
 /// What Kart is asking right now that the iPad shows as a card (the agent's `custom` messages): deals first get a
@@ -51,6 +54,11 @@ public enum AgentPrompt: Sendable, Equatable {
     var agentPrompt: AgentPrompt? { get }
     /// After a tap: hide the card until Kart sends the next one.
     func clearAgentPrompt()
+    /// When the shopper or Kart last spoke, or the iPad last told Kart something: the quiet timer's other half.
+    var lastActiveAt: Date? { get }
+    /// Close the call after a quiet spell; speech, a cart event or `resume()` opens a new one.
+    func pause()
+    func resume() async
 }
 
 /// Text-to-speech. Returns when the line has finished playing.

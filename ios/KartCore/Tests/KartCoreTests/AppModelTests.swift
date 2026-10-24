@@ -10,6 +10,9 @@ import Testing
     var holdToTalk = false
     var isHeld = false
     var agentPrompt: AgentPrompt?
+    var lastActiveAt: Date?
+    var pauseCount = 0
+    var resumeCount = 0
     var sent: [VoiceEvent] = []
     var startCount = 0
     var stopCount = 0
@@ -20,6 +23,8 @@ import Testing
     func setHeld(_ held: Bool) { isHeld = held }
     func clearAgentPrompt() { agentPrompt = nil }
     func send(_ event: VoiceEvent) { sent.append(event) }
+    func pause() { pauseCount += 1; state = .paused }
+    func resume() async { resumeCount += 1; state = .listening }
 }
 
 @MainActor final class RecordingSounds: SoundPlaying {
@@ -87,7 +92,7 @@ import Testing
     await t.backend.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")
     await t.model.respond(to: try #require(t.model.visibleCard), with: .yes)
     #expect(t.backend.cart.plan.contains { $0.productId == "kirkland-parmesan" && $0.reason == "deal" })
-    #expect(t.model.visibleCard?.title == "Garlic Bread is $1 off in Aisle 2. Want it?")   // the Yes consumed it; the next pairing pops
+    #expect(t.model.visibleCard?.title == (try Fixtures.dealLine("d-baguette-1off")))   // the Yes consumed it; the next pairing pops
 
     await t.model.startTrip()                                // "No thanks" on a fresh trip
     await t.backend.simulateVision(.added, productId: "tostitos-salsa", confidence: 0.9, label: "salsa")   // suggests chips
@@ -315,4 +320,34 @@ import Testing
     #expect(card.actions == [.goGetThem, .skip])
     await t.model.respond(to: card, with: .skip)
     #expect(t.backend.cart.nudge == nil && t.backend.cart.status == .checkout)
+}
+
+
+@MainActor @Test func aQuietCartPausesKartsVoiceAfterThreeMinutes() async throws {
+    let t = try make(); await t.model.startTrip()
+    t.clock.now += 179; t.model.pauseVoiceIfQuiet(now: t.clock.now)
+    #expect(t.voice.pauseCount == 0)
+    t.clock.now += 2; t.model.pauseVoiceIfQuiet(now: t.clock.now)
+    #expect(t.voice.pauseCount == 1)                          // no call minutes while nobody's shopping
+}
+@MainActor @Test func aRecentConversationKeepsTheCallOpen() async throws {
+    let t = try make(); await t.model.startTrip()
+    t.clock.now += 181; t.voice.lastActiveAt = t.clock.now - 30   // Kart and the shopper talked half a minute ago
+    t.model.pauseVoiceIfQuiet(now: t.clock.now)
+    #expect(t.voice.pauseCount == 0)
+}
+@MainActor @Test func aTapWakesAPausedKart() async throws {
+    let t = try make(); await t.model.startTrip()
+    t.voice.state = .paused
+    t.model.noteActivity(); await settle()
+    #expect(t.voice.resumeCount == 1)
+}
+@MainActor @Test func voiceComesBackOnItsOwnWhenTheNetworkDoes() async throws {
+    let t = try make(); await t.model.startTrip()
+    t.voice.state = .offline
+    await t.model.networkRestored()
+    #expect(t.voice.startCount == 2)
+    t.voice.state = .listening
+    await t.model.networkRestored()                            // already talking: nothing to do
+    #expect(t.voice.startCount == 2)
 }

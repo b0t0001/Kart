@@ -217,6 +217,8 @@ public final class AppModel {
         lastActivity = clock()
         react(.wave)
         guard let tripId = backend.cart.tripId else { return }
+        // Also before the call starts: Kart's first words wait for it, and a member must be named in them.
+        voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId, memberId: backend.cart.memberId))
         await voice.start(cartId: backend.cart.cartId, tripId: tripId)
         voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId, memberId: backend.cart.memberId))
     }
@@ -333,6 +335,7 @@ public final class AppModel {
 
     public func retryVoice() async {
         guard let tripId = backend.cart.tripId else { return }
+        voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId, memberId: backend.cart.memberId))
         await voice.start(cartId: backend.cart.cartId, tripId: tripId)
         voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId, memberId: backend.cart.memberId))
     }
@@ -348,6 +351,23 @@ public final class AppModel {
     public func noteActivity() {
         lastActivity = clock()
         stillThereAsked = false
+        if voice.state == .paused { Task { await voice.resume() } }   // a tap wakes Kart
+    }
+
+    /// Kart's call closes after this long with no taps, cart changes or talk (it wakes on any of them).
+    public static let voicePauseAfter: TimeInterval = 180
+
+    /// Called every few seconds while shopping: closes a quiet call so it stops costing call minutes.
+    public func pauseVoiceIfQuiet(now: Date) {
+        guard backend.cart.status == .shopping, voice.state == .listening else { return }
+        let last = max(lastActivity, voice.lastActiveAt ?? .distantPast)
+        if now.timeIntervalSince(last) >= Self.voicePauseAfter { voice.pause() }
+    }
+
+    /// The network came back: a voice that gave up while it was gone tries again on its own.
+    public func networkRestored() async {
+        guard voice.state == .offline, backend.cart.status == .shopping || backend.cart.status == .checkout else { return }
+        await retryVoice()
     }
 
     // MARK: Member memory (v0.14 beta)

@@ -4,21 +4,27 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
+from collections import Counter
 from typing import Any, AsyncIterator
 
 from line.events import AgentSendCustom, AgentSendText, CallEnded, CallStarted, UserCustomSent, UserTurnEnded, UserTurnStarted
 
 from .brain import Brain
-from .lines import (DECLINED_LINE, KEEP_LINE, LIST_KEPT, LIST_TOO, NUDGE_OK_LINE, accepted_line, nudge_answer, only_ack,
-                    only_filler, proactive_line, yes_or_no)
+from .lines import (DECLINED_LINE, KEEP_LINE, LIST_KEPT, LIST_TOO, NUDGE_OK_LINE, QUIET_OFF_LINE, QUIET_ON_LINE,
+                    WELCOME_LINE, accepted_line, nudge_answer, only_ack, only_filler, only_thanks, proactive_line,
+                    quiet_request, yes_or_no)
 from .memory import (FORGOTTEN_LINE, GREETING_TURN, PROFILE_FAILED_LINE, member_section, only_greeting, question,
                      still_there_line, welcome_line)
 from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
+_ABOUT_DEALS = re.compile(r"\b(deal|deals|sale|on sale|discount|offer|coupon)\b", re.IGNORECASE)
+QUIETED = {"suggestion", "nudge", "deal_changed", "cart_changed", "ui_action"}   # unspoken in quiet mode (cards show)
+_POINTING = re.compile(r"\b(this|that|these|those)\b|\bis it\b", re.IGNORECASE)   # "how much is this?"
 ADD_THEN_DEAL_SECONDS = 3.0                         # a deal this soon after an add says "Got the X." first
-SPEAKING_EVENTS = {"suggestion", "nudge", "deal_changed", "cart_changed", "ui_action"}
+SPEAKING_EVENTS = {"suggestion", "nudge", "deal_changed", "cart_changed", "ui_action", "reconnected"}
 
 
 def _count_word(n: int) -> str:
@@ -57,7 +63,8 @@ class KartAgent:
         self.barge_in = barge_in                    # off (KART_BARGE_IN=off) for a loud floor: nothing cuts Kart off
         self.digest_delay_seconds = digest_delay_seconds   # the pause after reading the list before asking about deals
         self._digest: dict[str, Any] | None = None  # "N deals go with your list": asked, then walked one at a time
-        self._digest_offered = False
+        self._digest_asked: set[str] = set()       # deals already asked about in a walk-through this trip
+        self._digest_due = False                   # a new list's deals question, held while Kart asked its own
         self._context = asyncio.Event()
         self._plan: list[dict[str, Any]] = []
         self._items: list[dict[str, Any]] = []
@@ -67,6 +74,14 @@ class KartAgent:
         self._last_add: tuple[dict[str, Any], float] | None = None   # the latest "added" event, until it's said
         self._undo: list[dict[str, Any]] = []      # earlier lists, newest last: "undo" puts the last one back
         self._list_too: str | None = None         # the product Kart asked "Take it off the list too?" about
+        self._latest_added: str | None = None     # the last product into the cart: what "this" means
+        self._unknown_open = False                # an "Is this...?" card is on screen
+        self._quiet = False                       # "be quiet": Kart only answers; cards still show
+        self._offered: list[str] = []             # deals Kart has offered this trip, for "what was that deal?"
+        self._budget: float | None = None         # "keep it under $30" (carts.budget), and the bill so far
+        self._diet: dict[str, Any] = {}           # "no dairy": the kinds and products the cart offers no deals on
+        self._skipped: set[str] = set()           # taken off the list ("we have some at home"): no deals on them
+        self._total = 0.0
         self._offer: dict[str, Any] | None = None   # the deal Kart just asked about, until it's answered
         self._nudge: dict[str, Any] | None = None   # the quantity nudge Kart just said (v0.12 beta)
         self._last_asked: str | None = None         # "offer" or "nudge": a plain answer goes to the latest question
@@ -93,8 +108,9 @@ class KartAgent:
                 self.cart_id = str(meta.get("cart_id") or self.cart_id)
                 if meta.get("trip_id") and meta.get("trip_id") != self.trip_id:   # a new trip starts fresh
                     self._said, self._meal, self._offer, self._nudge = set(), None, None, None
-                    self._undo = []
-                    self._digest, self._digest_offered = None, False
+                    self._undo, self._latest_added, self._unknown_open = [], None, False
+                    self._quiet, self._offered, self._diet, self._skipped = False, [], {}, set()
+                    self._digest, self._digest_asked, self._digest_due = None, set(), False
                     self._profile, self._profile_tried, self._asked, self._question = None, False, False, None
                 member = meta.get("member_id") or None
                 if member != self.member_id:             # signed in, out ("not me", idle) or switched: drop it all
@@ -108,19 +124,26 @@ class KartAgent:
             if meta.get("type") == "member_forgotten":  # "Forget me" on the screen: Kart lets go at once
                 return bool(self.member_id)
             if meta.get("type") == "member_idle":       # 3 quiet minutes while signed in
-                return bool(self.member_id and not self._speaking)
+                return bool(self.member_id and not self._speaking and not self._quiet)
             if meta.get("type") == "lull":              # the iPad saw a quiet minute: Kart's one question
-                return bool(self.member_id and not self._asked and not self._speaking and not self._offer
-                            and not self._nudge and not self._digest)
+                return bool(self.member_id and not self._asked and not self._speaking and not self._quiet
+                            and not self._offer and not self._nudge and not self._digest and not self._list_too)
             key = _said_key(meta)
             if key in self._said:                        # the same deal or nudge again (a burst, a second screen)
                 return False
             if key:
                 self._said.add(key)
+            if meta.get("type") == "suggestion" and self._avoided(meta.get("product_id")):
+                return True                              # off-diet: process dismisses it, nothing read out or offered
             if meta.get("type") == "suggestion" and self._digest:   # mid walk-through: Kart is reading them out
                 return False
             if meta.get("type") == "cart_changed" and meta.get("change") == "added":
                 self._last_add = (meta, time.monotonic())   # a paired deal right behind it says "Got the X" first
+                self._latest_added = meta.get("product_id")
+            if meta.get("type") == "ui_action" and meta.get("action") == "unknown_item":
+                self._unknown_open = True
+            if meta.get("type") == "card_response" and str(meta.get("card_id", "")).startswith("confirm"):
+                self._unknown_open = False
             if meta.get("type") == "suggestion":
                 self._offer = meta                       # "Want it?" can now be answered with a plain yes or no
                 self._last_asked = "offer"
@@ -134,7 +157,9 @@ class KartAgent:
                     self._nudge = None
                 else:
                     self._offer = None
-            if meta.get("type") not in SPEAKING_EVENTS:
+            if meta.get("type") == "suggestion" and meta.get("text"):
+                self._remember_offer(meta["text"])
+            if meta.get("type") not in SPEAKING_EVENTS or (self._quiet and meta.get("type") in QUIETED):
                 return False
             line = proactive_line(meta, self._catalog, self._plan, self._items, self._meal, self._nudges)
             if not line:
@@ -158,6 +183,7 @@ class KartAgent:
                 pass
             await self._refresh()
             if self._plan or self._items:                # rejoining a trip in progress (app relaunch, reconnect)
+                await self._rejoin()
                 return
             if self.member_id:                           # a signed-in member: welcome back, then what Kart remembers
                 await self._load_profile()
@@ -176,7 +202,8 @@ class KartAgent:
                 yield out
         elif isinstance(event, UserTurnEnded):
             text = " ".join(part.content for part in event.content if hasattr(part, "content") and part.content).strip()
-            if text and self.member_id and not self._asked and not (self._offer or self._nudge or self._digest) \
+            if text and self.member_id and not self._asked \
+                    and not (self._offer or self._nudge or self._digest or self._list_too) \
                     and only_greeting(text):             # a bare "Hey Kart" (filler for a guest): the trip's one question
                 await self._ensure_profile()
                 await self._caption("user", text)
@@ -187,7 +214,18 @@ class KartAgent:
                 return
             if not text or only_filler(text):            # "Um." gets no answer and no caption
                 return
-            if not self._offer and not self._nudge and not self._digest and not self._list_too and only_ack(text):
+            quiet = quiet_request(text)
+            nothing_asked = not self._offer and not self._nudge and not self._digest and not self._list_too
+            if quiet or (nothing_asked and only_thanks(text)):   # "Be quiet." / "Thanks!": no Claude round
+                await self._caption("user", text)
+                if quiet:
+                    self._quiet = quiet == "on"
+                line = (QUIET_ON_LINE if self._quiet else QUIET_OFF_LINE) if quiet else WELCOME_LINE
+                self.brain.remember(text, line)
+                async for out in self._say([line], interruptible=False):
+                    yield out
+                return
+            if nothing_asked and only_ack(text):
                 return
             await self._refresh()
             await self._ensure_profile()
@@ -257,8 +295,14 @@ class KartAgent:
                 self._offer = None
             elif self._question:                         # the answer to Kart's lull question
                 heard = f'(Kart just asked: "{self._question}") {text}'
+            elif _POINTING.search(text) and (seen := await self._what_this_is()):
+                heard = f"({seen}) {text}"
+            elif _ABOUT_DEALS.search(text) and self._offered:
+                heard = f"(Deals Kart offered this trip: {' '.join(self._offered)}) {text}"
             self._question = None
+            said = []
             async for out in self._say(self._caption_first(text, self.brain.respond(heard, ctx)), interruptible=self.barge_in):
+                said.append(out.text)
                 yield out
             self._meal = ctx.get("meal") or self._meal
             if ctx.get("signed_out"):                    # "that's not me": a guest from here on
@@ -269,7 +313,9 @@ class KartAgent:
             if ctx.get("show_memories"):                 # "what do you know about me?": the memory screen opens
                 yield AgentSendCustom(metadata={"type": "show_memories"})
             await self._refresh()                        # Claude's tools may have changed the list
-            if ctx.get("planned") and not self._digest_offered:     # a new list: ask about the deals, after a beat
+            self._digest_due = self._digest_due or bool(ctx.get("planned"))   # a new list: ask about its deals
+            if self._digest_due and not "".join(said).rstrip().endswith("?"):  # ...once Kart's own question is answered
+                self._digest_due = False
                 async for out in self._offer_digest():
                     yield out
         elif isinstance(event, UserCustomSent):
@@ -301,9 +347,20 @@ class KartAgent:
             if meta.get("type") == "cart_changed" and meta.get("change") == "added":
                 await asyncio.sleep(self.coalesce_seconds)   # a paired deal suggestion arriving now replaces this line
             await self._refresh()
+            if meta.get("type") == "suggestion" and self._avoided(meta.get("product_id")):
+                await run_tool("dismiss_suggestion", {}, self._ctx())   # its card goes away; never offered again
+                add, self._last_add = self._last_add, None
+                got = proactive_line(add[0], self._catalog, self._plan, self._items, self._meal, self._nudges) \
+                    if add and time.monotonic() - add[1] < ADD_THEN_DEAL_SECONDS else None
+                if got:                                  # the deal cancelled the add's own line
+                    async for out in self._say([got], interruptible=False):
+                        yield out
+                return
             line = proactive_line(meta, self._catalog, self._plan, self._items, self._meal, self._nudges)
             if meta.get("type") == "cart_changed" and meta.get("change") == "added":
                 self._last_add = None                    # said (or nothing to say): a later deal stands alone
+                if line and (money := self._budget_line()):
+                    line = f"{line} {money}"
             if line and line.endswith(LIST_TOO):
                 self._list_too, self._last_asked = meta.get("product_id"), "list_too"
             elif line and meta.get("type") == "suggestion" and self._last_add:
@@ -331,17 +388,24 @@ class KartAgent:
         for deal in deals:
             product = catalog.get(deal.get("product_id"))
             pairs = [plan.index(p) for p in deal.get("pairs_with") or [] if p in plan]
-            if product is None or product.get("in_stock") is False or deal["product_id"] in taken or not pairs:
+            if self._avoided(deal.get("product_id")):
+                continue
+            asked = deal.get("id") in self._digest_asked or f"suggestion|{deal.get('id')}" in self._said
+            if product is None or product.get("in_stock") is False or deal["product_id"] in taken or not pairs or asked:
                 continue
             found.append((min(pairs), deal, product))
         return [{"deal": d, "product": p} for _, d, p in sorted(found, key=lambda x: x[0])][:3]
 
     async def _offer_digest(self) -> AsyncIterator[Any]:
+        if self._quiet:                                  # "be quiet": the cards will still show at the shelf
+            return
         await self._refresh()
         deals = await self._relevant_deals()
         if not deals:
             return
-        self._digest_offered = True
+        for entry in deals:
+            self._remember_offer(self._deal_line(entry))
+        self._digest_asked |= {d["deal"]["id"] for d in deals}
         await asyncio.sleep(self.digest_delay_seconds)
         self._digest, self._last_asked = {"deals": deals, "i": -1}, "digest"
         n = len(deals)
@@ -436,11 +500,6 @@ class KartAgent:
 
     # Member memory -------------------------------------------------------------------------------
 
-    def _ctx(self) -> dict[str, Any]:
-        """What the tools get: the backend, this cart and trip, the trip's undo history, and the signed-in member."""
-        return {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id, "undo": self._undo,
-                "member_id": self.member_id, "profile": self._profile}
-
     def _drop_member(self) -> None:
         self._profile, self._profile_tried, self._question = None, False, None
         self.brain.set_member(None)
@@ -467,6 +526,67 @@ class KartAgent:
             self._profile = None
         self.brain.set_member(member_section(self._profile))
 
+    async def _what_this_is(self) -> str:
+        """What "this" or "that" can mean right now: the card on screen, and the last item into the cart."""
+        if self._unknown_open:                           # still open? the item may have come out by itself
+            try:
+                self._unknown_open = bool(await self.backend.unresolved_events(self.cart_id, self.trip_id))
+            except Exception:
+                pass
+        seen = []
+        if self._unknown_open:
+            seen.append('On screen: an "Is this...?" card for an item the cameras couldn\'t identify.')
+        elif self._nudge and self._nudge.get("text"):
+            seen.append(f'On screen: "{self._nudge["text"]}"')
+        product = next((p for p in self._catalog if p["id"] == self._latest_added), None)
+        if product:
+            seen.append(f"The last item into the cart: {product.get('short_name') or product['name']}.")
+        return " ".join(seen)
+
+    async def _rejoin(self) -> None:
+        """A new call on a trip in progress (a dropped call, a paused one, an app relaunch): pick up the meal, the
+        conversation so far and the deals already asked about, so Kart carries on instead of starting over."""
+        reasons = [line.get("meal") or line.get("reason") for line in self._plan
+                   if (line.get("meal") or line.get("reason")) not in (None, "", "deal")]
+        if reasons and not self._meal:
+            self._meal = Counter(reasons).most_common(1)[0][0]
+        try:
+            lines = await self.backend.get_transcript(self.cart_id, self.trip_id)
+        except Exception:
+            lines = []
+        self.brain.seed([(line.get("role", ""), line.get("text", "")) for line in lines])
+        self._digest_asked |= {entry["deal"]["id"] for entry in await self._relevant_deals()}
+
+    def _budget_line(self) -> str:
+        """Once near the budget ("You're at $27.40 of $30.") and once over it, said with the "Got the X" line."""
+        if self._budget is None:
+            return ""
+        budget = float(self._budget)
+        cap = f"${budget:g}" if budget.is_integer() else f"${budget:.2f}"
+        if self._total > budget and "budget|over" not in self._said:
+            self._said |= {"budget|over", "budget|near"}
+            return f"That's ${self._total:.2f}, over your {cap}."
+        if self._total >= 0.9 * budget and "budget|near" not in self._said:
+            self._said.add("budget|near")
+            return f"You're at ${self._total:.2f} of {cap}."
+        return ""
+
+    def _remember_offer(self, text: str) -> None:
+        said = re.sub(r"\s*Want (it|them)\?$", "", text).strip()
+        if said and said not in self._offered:
+            self._offered.append(said)
+
+    def _ctx(self) -> dict[str, Any]:
+        """What the tools get: the backend, this cart and trip, the trip's undo history, and the signed-in member."""
+        return {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id, "undo": self._undo,
+                "diet": self._diet, "skipped": self._skipped, "member_id": self.member_id, "profile": self._profile}
+
+    def _avoided(self, product_id: Any) -> bool:
+        """Off-diet for this trip ("no dairy" -> cheese and dairy), or taken off the list: no deal on it is offered."""
+        product = next((p for p in self._catalog if p["id"] == product_id), None)
+        return product_id in self._skipped or product_id in (self._diet.get("products") or set()) or \
+            (product is not None and (product.get("category") or "").lower() in (self._diet.get("kinds") or set()))
+
     async def _refresh(self) -> None:
         try:
             cart = await self.backend.get_cart(self.cart_id)
@@ -474,6 +594,7 @@ class KartAgent:
             self._plan = cart.get("plan", [])
             self._items = cart.get("items", [])
             self._nudges = bool((cart.get("features") or {}).get("quantity_nudges"))
+            self._budget, self._total = cart.get("budget"), float(cart.get("total") or 0)
             live = cart.get("nudge") if "nudge" in cart else self._nudge
             if self._nudge and not (live and (live.get("product_id"), live.get("kind")) ==
                                     (self._nudge.get("product_id"), self._nudge.get("kind"))):

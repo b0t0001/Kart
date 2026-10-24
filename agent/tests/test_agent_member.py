@@ -214,3 +214,10 @@ async def test_dont_remember_that_forgets_saved_id():
     await run(agent, said_by_user("we're out of milk at home"))
     await run(agent, said_by_user("actually don't remember that"))
     assert ("member_forget", {"p_member_id": "1029", "p_memory_id": 41}) in backend.calls
+
+
+async def test_quiet_mode_silences_the_lull_and_idle_lines():
+    agent, backend, llm = make()
+    agent._quiet = True                                    # "be quiet": Kart only answers
+    assert agent.run_filter(UserCustomSent(metadata={"type": "lull"})) is False
+    assert agent.run_filter(UserCustomSent(metadata={"type": "member_idle"})) is False

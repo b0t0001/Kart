@@ -14,7 +14,7 @@ import Testing
         await b.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")
         let s = try #require(b.cart.suggestion)
         #expect(s.dealId == "d-parm-3off" && s.productId == "kirkland-parmesan")
-        #expect(s.text == "Parmesan is $1 off in Aisle 4. Want it?")
+        #expect(s.text == (try Fixtures.dealLine("d-parm-3off")))
         #expect(s.salePrice == Decimal(string: "3.99") && s.aisle == "Aisle 4")
         #expect(b.cart.suggestedDeals == ["d-parm-3off"])
     }
@@ -32,7 +32,7 @@ import Testing
         #expect(b.cart.suggestion == nil)
         await b.simulateVision(.added, productId: "rao-marinara", confidence: 0.9, label: "r")
         #expect(b.cart.suggestion?.dealId == "d-baguette-1off")
-        #expect(b.cart.suggestion?.text == "Garlic Bread is $1 off in Aisle 2. Want it?")
+        #expect(b.cart.suggestion?.text == (try Fixtures.dealLine("d-baguette-1off")))
     }
     @Test func planningTheSuggestedProductConsumesItAndOffersTheNextPairing() async throws {
         let b = try await started()

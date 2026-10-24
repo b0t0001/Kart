@@ -29,6 +29,10 @@ CATALOG = [
      "tags": ["tacos", "nachos", "mexican"]},
 ]
 
+CATALOG.append({"id": "avocados", "name": "Hass Avocados, 5 ct bag", "short_name": "Avocados", "price": 5.99,
+                "sale_price": 5.99, "deal_label": None, "aisle": "Aisle 1", "section": "A1", "in_stock": True, "stock": 28,
+                "category": "produce", "tags": ["tacos", "mexican"]})
+
 NEARBY = [{"name": "Berkeley Bowl", "distance": 1.5, "kind": "grocery", "good_for": ["produce", "fresh herbs"]},
           {"name": "Walgreens", "distance": 0.4, "kind": "pharmacy", "good_for": ["household", "snacks"]}]
 
@@ -55,6 +59,9 @@ class FakeBackend:
     async def get_catalog(self) -> list[dict[str, Any]]:
         return copy.deepcopy(self.catalog)
 
+    async def get_transcript(self, cart_id: str, trip_id: str | None) -> list[dict[str, Any]]:
+        return [{"role": role, "text": text} for role, text in self.transcript]
+
     async def get_nearby_stores(self) -> list[dict[str, Any]]:
         if self.nearby is None:
             raise RuntimeError("store_info.nearby is not there yet")
@@ -69,9 +76,29 @@ class FakeBackend:
     async def rpc(self, name: str, **params: Any) -> Any:
         self.calls.append((name, params))
         if name == "set_plan":
-            self.cart["plan"] = [{"product_id": p["product_id"], "reason": p["reason"], "qty": p.get("qty", 1),
-                                  "done": False, **({"basis": p["basis"]} if p.get("basis") else {})} for p in params["p_plan"]]
+            self.cart["plan"] = [{"product_id": p["product_id"], "reason": p.get("reason", ""), "qty": p.get("qty", 1),
+                                  "done": False, **({"basis": p["basis"]} if p.get("basis") else {}),
+                                  **({"meal": p["meal"]} if p.get("meal") else {})} for p in params["p_plan"]]
             self.cart["next_step"] = "Aisle 6 → Spaghetti"
+        if name == "add_to_plan":                     # the backend's atomic edit: p_qty adds to the line
+            line = next((p for p in self.cart["plan"] if p["product_id"] == params["p_product_id"]), None)
+            if line is None:
+                self.cart["plan"].append({"product_id": params["p_product_id"], "reason": "", "qty": params.get("p_qty", 1),
+                                          "done": False, **({"basis": params["p_basis"]} if params.get("p_basis") else {})})
+            else:
+                line["qty"] = line.get("qty", 1) + params.get("p_qty", 1)
+            self.cart["plan"] = [p for p in self.cart["plan"] if p.get("qty", 1) > 0]
+        if name == "remove_from_plan":
+            self.cart["plan"] = [p for p in self.cart["plan"] if p["product_id"] != params["p_product_id"]]
+        if name == "set_budget":
+            self.cart["budget"] = params["p_amount"]
+        if name in ("set_plan", "add_to_plan", "remove_from_plan", "set_budget"):
+            prices = {p["id"]: p["sale_price"] for p in self.catalog}
+            have = {i["product_id"]: i.get("qty", 1) for i in self.cart["items"]}
+            self.cart["plan_estimate"] = round(sum(max(p.get("qty", 1) - have.get(p["product_id"], 0), 0)
+                                                   * prices.get(p["product_id"], 0) for p in self.cart["plan"]), 2)
+            if self.cart.get("budget") is not None:
+                self.cart["budget_left"] = round(self.cart["budget"] - self.cart.get("total", 0), 2)
         if name == "set_cart_status":
             self.cart["status"] = params["p_status"]
         if name == "dismiss_suggestion":

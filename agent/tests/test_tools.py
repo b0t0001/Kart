@@ -19,7 +19,8 @@ def ctx(backend):
 def test_every_tool_streams_eagerly_and_has_a_schema():
     names = {t["name"] for t in TOOLS}
     assert names == {"search_catalog", "get_cart", "set_plan", "add_to_plan", "remove_from_plan", "dismiss_nudge", "get_deals", "set_location",
-                     "dismiss_suggestion", "confirm_item", "start_checkout", "not_sold_here", "undo_last_edit"}
+                     "dismiss_suggestion", "confirm_item", "start_checkout", "not_sold_here", "undo_last_edit",
+                     "set_budget", "note_diet"}
     assert all(t["eager_input_streaming"] and t["input_schema"]["type"] == "object" for t in TOOLS)
 
 
@@ -43,7 +44,7 @@ async def test_set_plan_rejects_unknown_and_sold_out_products(backend):
 async def test_add_to_plan_keeps_existing_lines(backend):
     backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta dinner", "qty": 1, "done": False}]
     await run_tool("add_to_plan", {"product_id": "kirkland-parmesan", "reason": "deal"}, ctx(backend))
-    assert [p["product_id"] for p in backend.calls[-1][1]["p_plan"]] == ["barilla-spaghetti", "kirkland-parmesan"]
+    assert [p["product_id"] for p in backend.cart["plan"]] == ["barilla-spaghetti", "kirkland-parmesan"]
 
 
 async def test_confirm_item_resolves_the_oldest_unknown(backend):
@@ -186,7 +187,7 @@ async def test_swap_replaces_one_product_with_another_in_one_update(backend):
                                     ctx(backend)))
     assert out["readback"] == "Swapped salsa for queso, Aisle 5."
     assert planned(backend) == {"barilla-spaghetti": 1, "queso": 1}
-    assert [name for name, _ in backend.calls].count("set_plan") == 1
+    assert [name for name, _ in backend.calls] == ["remove_from_plan", "add_to_plan"]   # the backend's atomic edits
 
 
 async def test_removing_reads_back_and_says_when_it_is_still_in_the_cart(backend):
@@ -279,3 +280,57 @@ async def test_undo_reverts_a_swap(backend):
 async def test_undo_with_nothing_to_undo_changes_nothing(backend):
     out = json.loads(await run_tool("undo_last_edit", {}, trip_ctx(backend)))
     assert out["readback"] == "There's nothing to undo." and backend.calls == []
+
+
+async def test_a_new_list_names_what_is_already_in_the_cart_but_off_the_list(backend):
+    backend.cart["items"] = [{"product_id": "barilla-spaghetti", "name": "Spaghetti", "qty": 1, "price": 1.99},
+                             {"product_id": "tostitos-salsa", "name": "Salsa", "qty": 1, "price": 3.49}]
+    out = json.loads(await run_tool("set_plan", {"meal": "nachos", "items": [
+        {"product_id": "tostitos-salsa", "reason": "nachos"}, {"product_id": "queso", "reason": "nachos"}]}, ctx(backend)))
+    assert out["in_cart_not_on_list"] == [{"product_id": "barilla-spaghetti", "short_name": "Spaghetti", "qty": 1}]
+
+
+async def test_a_meal_list_remembers_the_meal_on_every_line(backend):
+    await run_tool("set_plan", {"meal": "pasta night for 4", "items": [
+        {"product_id": "barilla-spaghetti", "reason": "pasta"}, {"product_id": "rao-marinara", "reason": "sauce"}]}, ctx(backend))
+    assert [p["meal"] for p in backend.cart["plan"]] == ["pasta night for 4", "pasta night for 4"]   # plan[].meal
+
+
+async def test_a_package_read_back_says_whats_in_it(backend):
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "avocados", "reason": "tacos"}, ctx(backend)))
+    assert out["readback"] == "Added one bag of five avocados, Aisle 1."
+
+
+async def test_voice_edits_use_the_backends_atomic_rpcs(backend):
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1}]
+    await run_tool("add_to_plan", {"product_id": "daisy-sour-cream", "reason": "tacos"}, ctx(backend))
+    await run_tool("add_to_plan", {"product_id": "barilla-spaghetti", "reason": "pasta", "change_by": 1}, ctx(backend))
+    await run_tool("add_to_plan", {"product_id": "barilla-spaghetti", "reason": "pasta"}, ctx(backend))   # already on
+    await run_tool("remove_from_plan", {"product_id": "daisy-sour-cream"}, ctx(backend))
+    assert [(name, p.get("p_product_id"), p.get("p_qty")) for name, p in backend.calls] == [
+        ("add_to_plan", "daisy-sour-cream", 1), ("add_to_plan", "barilla-spaghetti", 1), ("remove_from_plan", "daisy-sour-cream", None)]
+    assert planned(backend) == {"barilla-spaghetti": 2}
+
+
+async def test_a_budget_says_whether_the_list_fits(backend):
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1},
+                            {"product_id": "rao-marinara", "reason": "pasta", "qty": 1}]
+    out = json.loads(await run_tool("set_budget", {"amount": 10}, ctx(backend)))
+    assert out == {"budget": 10, "estimate": 10.48, "fits": False, "over_by": 0.48}
+
+
+async def test_an_edit_that_crosses_the_budget_says_so(backend):
+    backend.cart.update({"budget": 10, "total": 0})
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1}]
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "rao-marinara", "reason": "pasta"}, ctx(backend)))
+    assert out["readback"] == "Added rao's sauce, Aisle 6. That puts you at $10.48, over your $10."
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "daisy-sour-cream", "reason": "tacos"}, ctx(backend)))
+    assert out["readback"] == "Added sour cream, Aisle 8."            # already over: said once, not on every edit
+
+
+async def test_a_diet_is_kept_for_the_trip(backend):
+    c = {**ctx(backend), "diet": {}}
+    out = json.loads(await run_tool("note_diet", {"diet": "no dairy", "avoid_kinds": ["cheese", "dairy"],
+                                                  "avoid_products": ["queso"]}, c))
+    assert out == {"diet": "no dairy", "avoiding_kinds": ["cheese", "dairy"], "avoiding_products": ["queso"]}
+    assert c["diet"] == {"diet": "no dairy", "kinds": {"cheese", "dairy"}, "products": {"queso"}}

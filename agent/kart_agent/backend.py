@@ -24,6 +24,13 @@ class SupabaseBackend:
         """Active deals with what they pair with (for "deals that go with your list")."""
         return await self._get("deals", {"select": "id,product_id,label,pairs_with,ends_at", "active": "eq.true"})
 
+    async def get_transcript(self, cart_id: str, trip_id: str | None) -> list[dict[str, Any]]:
+        """The trip's captions, oldest first (the last 16), for a call that rejoins a trip."""
+        params = {"cart_id": f"eq.{cart_id}", "select": "role,text", "order": "id.desc", "limit": "16"}
+        if trip_id:
+            params["trip_id"] = f"eq.{trip_id}"
+        return list(reversed(await self._get("transcript", params)))
+
     async def get_nearby_stores(self) -> list[dict[str, Any]]:
         """Other stores nearby (store_info.nearby: name, distance, kind, good_for), for things this store doesn't sell."""
         rows = await self._get("store_info", {"select": "nearby", "limit": "1"})
