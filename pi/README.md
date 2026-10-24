@@ -34,6 +34,25 @@ cp pi/config.example.json pi/config.json        # camera paths are already the m
 - If the USB cables moved: `~/venv/bin/python tools/snap.py --list` and fix `cameras` in
   `pi/config.json` (use the `-video-index0` paths).
 
+### Tell each camera where the basket floor is (ROI)
+
+The cameras see the mesh walls and the room beyond the cart; when the cart rolls, that moves.
+Give each camera a polygon of the basket **floor** so everything outside it is ignored. This is
+required on a real cart with open mesh walls.
+
+```bash
+~/venv/bin/python tools/snap.py                                   # tools/out/cam0.jpg, cam1.jpg
+~/venv/bin/python tools/roi.py tools/out/cam0.jpg --grid          # cam0_grid.jpg: read x,y off the grid
+~/venv/bin/python tools/roi.py tools/out/cam0.jpg --cam 0 --points "0.10,0.40 0.90,0.38 0.97,0.98 0.03,0.98" --write
+~/venv/bin/python tools/roi.py tools/out/cam1.jpg --cam 1 --points "…" --write
+sudo systemctl restart kart-cv
+```
+
+Trace the floor just inside the walls (corners in order, any direction). Check `cam0_roi.jpg`: only
+the floor should be bright. The debug page outlines each camera's ROI in yellow. Redo it whenever a
+camera mount moves. In `pi/config.json` it looks like
+`"roi": {"0": [[0.10, 0.40], …], "1": […]}` (normalized 0..1, x right, y down).
+
 ### The Pi's `.env`
 
 The Pi needs exactly these four lines in `~/kart/.env` (Dylan has the values; never commit the file):
