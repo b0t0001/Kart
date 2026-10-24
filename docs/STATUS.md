@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 night · enrollment under way, deals quiet
+- One "No thanks" quiets deals for the trip; the route is 6 → 4 → 9 (confirmed on hosted); scissors are the 2 ct pack. Enrollment runs from James's PC: the cams were re-aimed, and the liner shift caused false captures (taping it down; CV is fixing enroll.py). iPad mount CAD pushed.
+
 ### 2026-10-24 night · member memory merged, nudges on
 - Member memory merged to main (flag off; tag `stable-pre-memory`). Quantity nudges ON by default (the 2nd spaghetti box → "Keep the extra?"). Script route 6 → 4 → 9. Guests' bare "yeah" fixed. Voice agent redeploy pending.
 
