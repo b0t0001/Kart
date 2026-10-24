@@ -234,6 +234,10 @@ Use the id in the **SendMessage `to`** column.
 | iPad app: "Smart shopping cart iPad app" | `local_2d2c60e6-9a47-4c86-843c-3422096c55ea` | main checkout | designing |
 | Market backend + merchant agent: "KART market backend setup" | `local_b3d0cb4c-d827-42fe-8bdc-d43c97941c95` | main checkout | started; `data/store.json` due first |
 
+| Hardware: "KART hardware (James's PC)" | `bridge:session_01GrmSjBkjtmFyNZogHAUYmG` (Remote Control, cross-machine) | GitHub `main` | Pi at `192.168.137.127` (`smartcart.local` can drop when the hotspot restarts) |
+
+From James's PC, the Mac chats are reachable **by session name** over Remote Control. The manager is "Multi-feature project management".
+
 All three feature chats work in the **same main checkout**, so stay inside your own directories and don't commit or stage another chat's files.
 
 ## 8. How we talk
