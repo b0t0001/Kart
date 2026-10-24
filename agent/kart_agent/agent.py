@@ -15,6 +15,15 @@ GREETING = "Hi, I'm Kart. What are we shopping for today?"
 SPEAKING_EVENTS = {"suggestion", "nudge", "deal_changed", "cart_changed"}
 
 
+def _said_key(meta: dict[str, Any]) -> str | None:
+    """Deals are offered once per trip and nudges once per product and direction per trip, so these keys are stable."""
+    if meta.get("type") == "suggestion" and meta.get("deal_id"):
+        return f"suggestion|{meta['deal_id']}"
+    if meta.get("type") == "nudge" and meta.get("product_id"):
+        return f"nudge|{meta['product_id']}|{meta.get('kind')}"
+    return None
+
+
 class KartAgent:
     """One per call. `run_filter` decides which events start a turn (a new turn cuts off the current one)."""
 
@@ -36,6 +45,8 @@ class KartAgent:
         self._offer: dict[str, Any] | None = None   # the deal Kart just asked about, until it's answered
         self._nudge: dict[str, Any] | None = None   # the quantity nudge Kart just said (v0.12 beta)
         self._last_asked: str | None = None         # "offer" or "nudge": a plain answer goes to the latest question
+        self._said: set[str] = set()                # deals and nudges already said this trip (repeats are dropped)
+        self._meal: str | None = None               # "taco night for 4", from Claude's set_plan
 
     # Line filters --------------------------------------------------------------------------------
 
@@ -46,9 +57,16 @@ class KartAgent:
             meta = event.metadata or {}
             if meta.get("type") == "trip_context":       # state only: never interrupt Kart for it
                 self.cart_id = str(meta.get("cart_id") or self.cart_id)
+                if meta.get("trip_id") and meta.get("trip_id") != self.trip_id:   # a new trip starts fresh
+                    self._said, self._meal, self._offer, self._nudge = set(), None, None, None
                 self.trip_id = meta.get("trip_id") or self.trip_id
                 self._context.set()
                 return False
+            key = _said_key(meta)
+            if key in self._said:                        # the same deal or nudge again (a burst, a second screen)
+                return False
+            if key:
+                self._said.add(key)
             if meta.get("type") == "suggestion":
                 self._offer = meta                       # "Want it?" can now be answered with a plain yes or no
                 self._last_asked = "offer"
@@ -62,7 +80,7 @@ class KartAgent:
                     self._offer = None
             if meta.get("type") not in SPEAKING_EVENTS:
                 return False
-            line = proactive_line(meta, self._catalog, self._plan, self._items)
+            line = proactive_line(meta, self._catalog, self._plan, self._items, self._meal)
             if not line:
                 return False
             if self._speaking:                           # never cut Kart off: say it when this turn ends
@@ -123,12 +141,13 @@ class KartAgent:
                 self._offer = None
             async for out in self._say(self._caption_first(text, self.brain.respond(heard, ctx)), interruptible=self.barge_in):
                 yield out
+            self._meal = ctx.get("meal") or self._meal
         elif isinstance(event, UserCustomSent):
             meta = event.metadata or {}
             if meta.get("type") == "cart_changed" and meta.get("change") == "added":
                 await asyncio.sleep(self.coalesce_seconds)   # a paired deal suggestion arriving now replaces this line
             await self._refresh()
-            line = proactive_line(meta, self._catalog, self._plan, self._items)
+            line = proactive_line(meta, self._catalog, self._plan, self._items, self._meal)
             if line:
                 async for out in self._say([line], interruptible=False):
                     yield out

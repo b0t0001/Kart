@@ -108,3 +108,10 @@ async def test_dismiss_nudge_passes_keep_or_ok(backend):
     await run_tool("dismiss_nudge", {"action": "keep"}, ctx(backend))
     out = json.loads(await run_tool("dismiss_nudge", {"action": "maybe"}, ctx(backend)))
     assert ("dismiss_nudge", {"p_cart_id": "7", "p_action": "keep"}) in backend.calls and "error" in out
+
+
+
+async def test_set_plan_remembers_what_the_trip_is_for(backend):
+    c = ctx(backend)
+    await run_tool("set_plan", {"meal": "taco night for 4", "items": [{"product_id": "barilla-spaghetti", "reason": "x"}]}, c)
+    assert c["meal"] == "taco night for 4"

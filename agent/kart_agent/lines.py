@@ -21,14 +21,14 @@ def _short(catalog: list[dict[str, Any]], product_id: str | None) -> str:
 
 
 def proactive_line(event: dict[str, Any], catalog: list[dict[str, Any]], plan: list[dict[str, Any]],
-                   items: list[dict[str, Any]] | None = None) -> str | None:
+                   items: list[dict[str, Any]] | None = None, meal: str | None = None) -> str | None:
     """What to say for an iPad custom event, or None to stay quiet."""
     kind = event.get("type")
     product_id = event.get("product_id")
     if kind == "suggestion":
         return event.get("text") or None
     if kind == "nudge":
-        return _nudge_line(event, catalog, plan)
+        return _nudge_line(event, catalog, meal)
     if kind == "deal_changed":
         return f"Heads up, {_short(catalog, product_id)} just went {event.get('label', 'on sale')}."
     if kind != "cart_changed":
@@ -58,21 +58,41 @@ def _words(n: int) -> str:
     return _NUMBER_WORDS[n] if 0 <= n < len(_NUMBER_WORDS) else str(n)
 
 
-def _nudge_line(event: dict[str, Any], catalog: list[dict[str, Any]], plan: list[dict[str, Any]]) -> str | None:
-    """The backend's nudge text uses digits and short names ("1 Tortillas"); for speech, say the counts in words and
-    tie them to the meal on the list. Falls back to the text when the product or counts aren't known."""
+def _unit(product_name: str) -> str | None:
+    """The package a count means, from the name as sold: "5 ct bag" -> bag, "20 ct" -> pack, "1 lb" -> pound."""
+    name = product_name.lower()
+    for word in ("bag", "wedge", "jar", "box", "bunch", "kit"):
+        if re.search(rf"\b{word}\b", name):
+            return word
+    if re.search(r"\b\d+\s*ct\b", name):
+        return "pack"
+    if re.search(r"\b1 lb\b", name):
+        return "pound"
+    return None
+
+
+def _amount(n: int, product: dict[str, Any]) -> str:
+    name = (product.get("short_name") or product["name"]).lower()
+    unit = _unit(product["name"])
+    if unit is None:
+        return f"{_words(n)} {name}"
+    plural = unit + ("es" if unit.endswith(("x", "ch")) else "s")
+    return f"{_words(n)} {unit if n == 1 else plural} of {name}"
+
+
+def _nudge_line(event: dict[str, Any], catalog: list[dict[str, Any]], meal: str | None) -> str | None:
+    """The backend's nudge text uses digits and short names ("1 Tortillas"). For speech: counts in words, in the
+    package as sold ("one pack of tortillas"), tied to the trip's meal when Kart knows it. Falls back to the text when
+    the product or counts aren't known."""
     product = next((p for p in catalog if p["id"] == event.get("product_id")), None)
     have, need = event.get("have"), event.get("need")
     if product is None or not isinstance(have, int) or not isinstance(need, int):
         return event.get("text") or None
-    name = (product.get("short_name") or product["name"]).lower()
-    reason = next((line.get("reason") for line in plan if line.get("product_id") == product["id"]), None) or ""
     if event.get("kind") == "over":
-        return f"That's {_words(have)} {name} in the cart, and {reason or 'your list'} needs {_words(need)}. Keep the extra?"
+        return f"That's {_amount(have, product)} in the cart, and {meal or 'your list'} needs {_words(need)}. Keep the extra?"
     short = need - have
-    where = f" {'They are' if short > 1 else 'It is'} in {product['aisle']}." if product.get("aisle") else ""
-    where = where.replace("They are", "They're").replace("It is", "It's")
-    return f"Before you go: you're {_words(short)} {name} short{f' for {reason}' if reason else ''}.{where}"
+    where = (f" They're in {product['aisle']}." if short > 1 else f" It's in {product['aisle']}.") if product.get("aisle") else ""
+    return f"Before you go: you're {_amount(short, product)} short{f' for {meal}' if meal else ''}.{where}"
 
 
 def only_filler(text: str) -> bool:

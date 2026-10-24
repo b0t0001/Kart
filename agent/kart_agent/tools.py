@@ -32,7 +32,9 @@ TOOLS: list[dict[str, Any]] = [
           {"query": {"type": "string"}}, ["query"]),
     _tool("get_cart", "The shopper's cart right now: items, total, savings, list progress, next stop, open deal suggestion."),
     _tool("set_plan", "Replace the shopping list with these products. The store orders it by walking route.",
-          {"items": {"type": "array", "items": _PLAN_ITEM}}, ["items"]),
+          {"items": {"type": "array", "items": _PLAN_ITEM},
+           "meal": {"type": "string", "description": "what the trip is for, in a few words, e.g. 'taco night for 4'"}},
+          ["items"]),
     _tool("add_to_plan", "Add one product to the shopping list, keeping the rest; with qty, sets how many (also for a "
           "product already on the list: 'make it three').",
           {"product_id": {"type": "string"}, "reason": {"type": "string"}, "qty": {"type": "integer", "minimum": 1},
@@ -117,6 +119,8 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
             items = args.get("items")
             if not isinstance(items, list):
                 raise ValueError("'items' must be a list")
+            if isinstance(args.get("meal"), str) and args["meal"].strip():
+                ctx["meal"] = args["meal"].strip()           # Kart names the trip's meal in nudges
         planned, missing, sold_out, lines, notes = [], [], [], [], []
         for item in items:
             if not isinstance(item, dict) or not isinstance(item.get("product_id"), str):

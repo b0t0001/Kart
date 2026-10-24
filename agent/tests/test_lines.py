@@ -63,11 +63,12 @@ def test_an_added_item_counts_toward_its_amount():
 def test_kart_says_a_nudge_in_words_not_digits():
     from kart_agent.lines import proactive_line
     from fakes import CATALOG
-    plan = [{"product_id": "barilla-spaghetti", "qty": 1, "reason": "pasta night"}]
+    plan = [{"product_id": "barilla-spaghetti", "qty": 1, "reason": "noodles"}]     # a line's reason isn't the meal
     over = {"type": "nudge", "product_id": "barilla-spaghetti", "kind": "over", "have": 3, "need": 1,
             "text": "That's 3 Spaghetti in the cart, and your list needs 1. Keep the extra 2?"}
-    under = {"type": "nudge", "product_id": "barilla-spaghetti", "kind": "under", "have": 0, "need": 2,
-             "text": "Before you go: 2 Spaghetti short."}
-    assert proactive_line(over, CATALOG, plan) == "That's three spaghetti in the cart, and pasta night needs one. Keep the extra?"
-    assert proactive_line(under, CATALOG, plan) == "Before you go: you're two spaghetti short for pasta night. They're in Aisle 6."
-    assert proactive_line({**under, "product_id": "unknown"}, CATALOG, plan) == "Before you go: 2 Spaghetti short."
+    under = {"type": "nudge", "product_id": "kirkland-parmesan", "kind": "under", "have": 0, "need": 2,
+             "text": "Before you go: 2 Parmesan short."}
+    assert proactive_line(over, CATALOG, plan) == "That's three pounds of spaghetti in the cart, and your list needs one. Keep the extra?"
+    assert proactive_line(under, CATALOG, plan, meal="pasta night for 4") == (
+        "Before you go: you're two wedges of parmesan short for pasta night for 4. They're in Aisle 4.")
+    assert proactive_line({**under, "product_id": "unknown"}, CATALOG, plan) == "Before you go: 2 Parmesan short."

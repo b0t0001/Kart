@@ -5,7 +5,7 @@ from line.events import AgentSendText, CallStarted, UserCustomSent, UserTextSent
 from kart_agent.agent import GREETING, KartAgent
 from kart_agent.brain import Brain
 
-from fakes import FakeBackend, FakeLLM, Turn
+from fakes import FakeBackend, FakeLLM, ToolUse, Turn
 
 
 async def run(agent, event):
@@ -205,7 +205,7 @@ async def test_keep_it_and_got_it_answer_the_nudge_without_claude():
     agent, backend = make()                                  # no scripted Claude turns: calling Claude would fail
     agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Uh, keep it.")])) == ["Okay, keeping it."]
-    agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
+    agent.run_filter(UserCustomSent(metadata={**BEEF_NUDGE, "product_id": "kirkland-parmesan"}))   # a different nudge
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Oh, I'll put it back.")])) == ["Got it."]
     assert [p["p_action"] for name, p in backend.calls if name == "dismiss_nudge"] == ["keep", "ok"]
 
@@ -223,3 +223,24 @@ async def test_a_tap_on_the_nudge_card_ends_the_spoken_question():
     agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
     agent.run_filter(UserCustomSent(metadata={"type": "card_response", "card_id": "nudge-over:ground-beef", "action": "got_it"}))
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Keep it.")])) == ["Keep what?"]
+
+
+
+async def test_a_repeated_deal_or_nudge_event_is_said_once_per_trip():
+    agent, backend = make()
+    assert agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
+    assert not agent.run_filter(UserCustomSent(metadata=PARM_OFFER))      # the same deal again: already said
+    assert agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
+    assert not agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
+    agent.run_filter(UserCustomSent(metadata={"type": "trip_context", "cart_id": "7", "trip_id": "a-new-trip"}))
+    assert agent.run_filter(UserCustomSent(metadata=PARM_OFFER))          # a new trip starts fresh
+
+
+async def test_the_nudge_names_the_trips_meal():
+    plan_call = ToolUse("t1", "set_plan", {"meal": "pasta night for 4",
+                                           "items": [{"product_id": "barilla-spaghetti", "reason": "noodles"}]})
+    agent, backend = make([Turn(chunks=["On it."], tools=[plan_call]), Turn(chunks=["Done."])])
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    nudge = {"type": "nudge", "product_id": "barilla-spaghetti", "kind": "over", "have": 2, "need": 1, "text": "x"}
+    assert await run(agent, UserCustomSent(metadata=nudge)) == [
+        "That's two pounds of spaghetti in the cart, and pasta night for 4 needs one. Keep the extra?"]
