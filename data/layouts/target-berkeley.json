@@ -47,6 +47,11 @@
       "aisle": "A12",
       "price": 0.99,
       "target_product": "Old El Paso Taco Seasoning Original, 1 oz"
+    },
+    "hershey-xl": {
+      "aisle": "A3",
+      "price": 3.89,
+      "target_product": "Hershey's Milk Chocolate Candy Bar XL, 4.4 oz"
     }
   },
   "store": {
@@ -63,6 +68,14 @@
       "id": "PRODUCE",
       "name": "Produce · aisle not confirmed",
       "x": 2,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A3",
+      "name": "Aisle A3 · Candy",
+      "x": 4,
       "y": 1,
       "w": 1,
       "h": 8
@@ -133,6 +146,7 @@
     "daisy-sour-cream": "DAIRY",
     "french-baguette": "BAKERY",
     "ground-beef": "MEAT",
+    "hershey-xl": "A3",
     "jalapenos": "A12",
     "kirkland-batteries": "HOME",
     "kirkland-paper-towels": "HOME",
@@ -156,6 +170,7 @@
     "queso": 5.19,
     "black-beans": 0.99,
     "jalapenos": 2.29,
-    "taco-seasoning": 0.99
+    "taco-seasoning": 0.99,
+    "hershey-xl": 3.89
   }
 }
