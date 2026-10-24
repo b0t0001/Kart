@@ -149,8 +149,7 @@ async def test_a_spoken_yes_takes_the_offered_deal_without_claude():
     agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
     said = await run(agent, UserTurnEnded(content=[UserTextSent(content="Yeah, sure.")]))
     assert said == ["Added Parmesan to your list."]
-    plans = [p["p_plan"] for name, p in backend.calls if name == "set_plan"]
-    assert plans and any(line["product_id"] == "kirkland-parmesan" for line in plans[-1])
+    assert any(line["product_id"] == "kirkland-parmesan" for line in backend.cart["plan"])
 
 
 async def test_a_spoken_no_dismisses_the_offered_deal():
@@ -395,8 +394,7 @@ async def test_yes_walks_the_deals_one_at_a_time():
     outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="Yes.")]))
     assert spoken(outs) == ["Added Parmesan to your list. That's all the deals."]
     assert cards(outs) == [{"type": "digest_done"}]
-    assert any(name == "set_plan" and any(l["product_id"] == "kirkland-parmesan" for l in p["p_plan"])
-               for name, p in backend.calls)
+    assert any(line["product_id"] == "kirkland-parmesan" for line in backend.cart["plan"])
     assert not agent.run_filter(UserCustomSent(metadata=PARM_OFFER))   # walked already: never read out again
 
 
@@ -577,3 +575,17 @@ async def test_kart_remembers_which_deals_it_offered():
     await run(agent, UserTurnEnded(content=[UserTextSent(content="What was that deal again?")]))
     heard = agent.brain.llm.requests[-1]["messages"][-1]["content"]
     assert heard == "(Deals Kart offered this trip: Parmesan is $3 off in Aisle 4.) What was that deal again?"
+
+
+async def test_kart_says_once_when_the_bill_gets_close_to_the_budget():
+    agent, backend = make()
+    backend.cart.update({"budget": 30, "total": 27.4})
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1, "done": True}]
+    backend.cart["items"] = [{"product_id": "barilla-spaghetti", "qty": 1}]
+    agent.coalesce_seconds = 0
+    added = UserCustomSent(metadata={"type": "cart_changed", "change": "added", "product_id": "barilla-spaghetti"})
+    await agent._refresh()
+    assert await run(agent, added) == ["Got the Spaghetti. You're at $27.40 of $30."]
+    assert await run(agent, added) == ["Got the Spaghetti."]
+    backend.cart["total"] = 31.2
+    assert await run(agent, added) == ["Got the Spaghetti. That's $31.20, over your $30."]

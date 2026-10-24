@@ -49,6 +49,9 @@ TOOLS: list[dict[str, Any]] = [
           {"product_id": {"type": "string"}}, ["product_id"]),
     _tool("undo_last_edit", "Take back the last change to the shopping list: 'undo', 'never mind', or 'no, I said "
           "salsa' (then add the right one). Returns `readback`."),
+    _tool("set_budget", "The shopper gave a budget for the trip ('keep it under $30'). Returns the budget, what the "
+          "trip will cost (the bill so far plus the rest of the list), and whether it fits.",
+          {"amount": {"type": "number", "description": "dollars, e.g. 30"}}, ["amount"]),
     _tool("not_sold_here", "The shopper wants something that isn't in the store's product list. Returns in-stock "
           "products that could stand in (matching `like`) and nearby stores that might have it. Changes nothing.",
           {"item": {"type": "string", "description": "what they asked for, e.g. 'cilantro'"},
@@ -167,6 +170,95 @@ def _readback(kind: str, product: dict[str, Any], qty: int, old: dict[str, Any] 
     return f"{_cap(_name(product))} wasn't on your list."
 
 
+def _capped(qty: Any, product: dict[str, Any]) -> tuple[int, str | None]:
+    """Never plan more than the shelf has, and say so."""
+    qty = qty if isinstance(qty, int) and not isinstance(qty, bool) and qty > 0 else 1
+    stock = product.get("stock")
+    if isinstance(stock, int) and 0 < stock < qty:
+        return stock, f"Only {stock} {product.get('short_name') or product['name']} in stock: planned {stock}, not {qty}."
+    return qty, None
+
+
+def _dollars(amount: float) -> str:
+    return f"${amount:g}" if float(amount).is_integer() else f"${amount:.2f}"
+
+
+def _projected(cart: dict[str, Any]) -> float:
+    """What the trip will cost: the bill so far plus the rest of the list at today's prices."""
+    return round(float(cart.get("total") or 0) + float(cart.get("plan_estimate") or 0), 2)
+
+
+def _budget_view(cart: dict[str, Any]) -> dict[str, Any]:
+    budget, estimate = float(cart["budget"]), _projected(cart)
+    view: dict[str, Any] = {"budget": cart["budget"], "estimate": estimate, "fits": estimate <= budget}
+    view.update({"left": round(budget - estimate, 2)} if estimate <= budget else {"over_by": round(estimate - budget, 2)})
+    return view
+
+
+def _budget_note(before: dict[str, Any], after: dict[str, Any]) -> str:
+    """ " That puts you at $15.95, over your $10." when this edit is the one that goes over."""
+    budget = after.get("budget")
+    if budget is None or _projected(after) <= float(budget) or _projected(before) > float(budget):
+        return ""
+    return f" That puts you at ${_projected(after):.2f}, over your {_dollars(float(budget))}."
+
+
+async def _edit_plan(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    """One voice edit through the backend's atomic add_to_plan / remove_from_plan, read back from the live catalog."""
+    backend, cart_id = ctx["backend"], ctx["cart_id"]
+    products = await backend.get_catalog()
+    catalog = {p["id"]: p for p in products}
+    cart = await backend.get_cart(cart_id)
+    plan = cart.get("plan", [])
+    before = _plan_lines(plan)                               # for undo
+    product_id = _str(args, "product_id")
+    product = catalog.get(product_id)
+    current = next((line for line in plan if line.get("product_id") == product_id), None)
+    had = (current.get("qty") or 1) if current else 0
+    in_cart = sum(i.get("qty", 1) for i in cart.get("items", []) if i.get("product_id") == product_id)
+    if product is None:
+        return {"planned": [], "not_in_store": [product_id], "out_of_stock": [], "next_step": cart.get("next_step")}
+    if name == "add_to_plan" and _sold_out(product):         # say so, offer what's in stock
+        return {"planned": [], "not_in_store": [], "out_of_stock": [product_id], "next_step": cart.get("next_step"),
+                "readback": f"Sorry, {_name(product)} is sold out today.",
+                "substitutes": _substitutes(product, products, {line.get("product_id") for line in plan})}
+    qty, change = args.get("qty"), args.get("change_by")
+    qty = qty if isinstance(qty, int) and not isinstance(qty, bool) and qty > 0 else None
+    change = change if isinstance(change, int) and not isinstance(change, bool) and change else None
+    old = catalog.get(args["replaces"]) if name == "add_to_plan" and isinstance(args.get("replaces"), str) else None
+    if old is not None and not any(line.get("product_id") == old["id"] for line in plan):
+        old = None
+    note, target, after = None, had, cart
+    if name == "remove_from_plan":
+        kind = "removed" if current else "absent"
+    elif current is None:
+        kind = "swapped" if old else "added"
+        target, note = _capped(qty or (change if change and change > 0 else 1), product)
+    elif change and had + change <= 0:                       # "one less" of the last one
+        kind = "removed"
+    elif change or qty:
+        kind = "amount"
+        target, note = _capped(had + change if change else qty, product)
+    else:
+        kind = "already"
+    if old is not None:
+        after = await backend.rpc("remove_from_plan", p_cart_id=cart_id, p_product_id=old["id"])
+    if kind == "removed":
+        after = await backend.rpc("remove_from_plan", p_cart_id=cart_id, p_product_id=product_id)
+    elif kind in ("added", "swapped", "amount") and target != had:
+        basis = args.get("basis") if kind != "amount" and isinstance(args.get("basis"), str) else None
+        after = await backend.rpc("add_to_plan", p_cart_id=cart_id, p_product_id=product_id, p_qty=target - had,
+                                  p_basis=basis, p_meal=None)
+    result: dict[str, Any] = {"planned": [product_id] if kind not in ("removed", "absent") else [], "not_in_store": [],
+                              "out_of_stock": [], "next_step": after.get("next_step"),
+                              "readback": _readback(kind, product, target, old, in_cart) + _budget_note(cart, after)}
+    if kind == "added":                                      # several adds at once are read back as one line
+        result["edit"] = {"kind": "added", "what": _added(target, product), "aisle": product.get("aisle")}
+    if kind in ("added", "removed", "swapped", "amount") and isinstance(ctx.get("undo"), list):
+        ctx["undo"].append({"plan": before, "readback": _undo_line(kind, product, had or 1, old)})
+    return {**result, "notes": [note]} if note else result
+
+
 async def run_tool(name: str, args: Any, ctx: dict[str, Any]) -> str:
     """Runs one tool and returns its JSON result. Bad input or a failed call becomes {"error": …}, never an exception."""
     try:
@@ -222,98 +314,57 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
                 scored.append((-hits, index, p))
         return {"not_sold_here": item, "in_store": [_product_view(p) for *_, p in sorted(scored, key=lambda s: s[:2])[:3]],
                 "nearby_stores": await _nearby_stores(backend)}
-    if name in ("set_plan", "add_to_plan", "remove_from_plan"):
+    if name in ("add_to_plan", "remove_from_plan"):
+        return await _edit_plan(name, args, ctx)
+    if name == "set_plan":
         products = await backend.get_catalog()
         catalog = {p["id"]: p for p in products}
-        edit: tuple[str, str, dict[str, Any] | None, int] | None = None   # (kind, product_id, swapped-out product, in cart)
-        if name in ("add_to_plan", "remove_from_plan"):
-            cart = await backend.get_cart(cart_id)
-            items = [{"product_id": p["product_id"], "reason": p.get("reason", ""), "qty": p.get("qty", 1),
-                      "basis": p.get("basis")} for p in cart.get("plan", [])]
-            before = _plan_lines(items)                     # for undo
-            product_id = _str(args, "product_id")
-            product = catalog.get(product_id)
-            current = next((i for i in items if i["product_id"] == product_id), None)
-            in_cart = sum(i.get("qty", 1) for i in cart.get("items", []) if i.get("product_id") == product_id)
-            qty, change = args.get("qty"), args.get("change_by")
-            qty = qty if isinstance(qty, int) and qty > 0 else None
-            change = change if isinstance(change, int) and not isinstance(change, bool) and change else None
-            if name == "add_to_plan" and product is not None and _sold_out(product):   # say so, offer what's in stock
-                return {"planned": [], "not_in_store": [], "out_of_stock": [product_id], "next_step": cart.get("next_step"),
-                        "readback": f"Sorry, {_name(product)} is sold out today.",
-                        "substitutes": _substitutes(product, products, {i["product_id"] for i in items})}
-            if name == "remove_from_plan":
-                items = [i for i in items if i["product_id"] != product_id]
-                edit = ("removed" if current else "absent", product_id, None, in_cart)
-            elif current is None:
-                old = catalog.get(args["replaces"]) if isinstance(args.get("replaces"), str) else None
-                items = [i for i in items if old is None or i["product_id"] != old["id"]]
-                items.append({"product_id": product_id, "reason": _str(args, "reason"),
-                              "qty": qty or (change if change and change > 0 else 1), "basis": args.get("basis")})
-                edit = ("swapped" if old else "added", product_id, old, in_cart)
-            elif change and current["qty"] + change <= 0:   # "one less" of the last one
-                items = [i for i in items if i["product_id"] != product_id]
-                edit = ("removed", product_id, None, in_cart)
-            elif change or qty:
-                new = current["qty"] + change if change else qty
-                items = [{**i, "qty": new, "basis": args.get("basis") or i.get("basis")}
-                         if i["product_id"] == product_id else i for i in items]
-                edit = ("amount", product_id, None, in_cart)
-            else:
-                edit = ("already", product_id, None, in_cart)
-        else:
-            prior = await backend.get_cart(cart_id)
-            before = _plan_lines(prior.get("plan", []))
-            items = args.get("items")
-            if not isinstance(items, list):
-                raise ValueError("'items' must be a list")
-            ctx["planned"] = True                            # the agent offers the deals that go with a new list
-            if isinstance(args.get("meal"), str) and args["meal"].strip():
-                ctx["meal"] = args["meal"].strip()           # Kart names the trip's meal in nudges
+        prior = await backend.get_cart(cart_id)
+        before = _plan_lines(prior.get("plan", []))
+        items = args.get("items")
+        if not isinstance(items, list):
+            raise ValueError("'items' must be a list")
+        ctx["planned"] = True                                # the agent offers the deals that go with a new list
+        if isinstance(args.get("meal"), str) and args["meal"].strip():
+            ctx["meal"] = args["meal"].strip()               # Kart names the trip's meal in nudges
+        meal = ctx.get("meal")
         planned, missing, sold_out, lines, notes = [], [], [], [], []
-        meal = ctx.get("meal") if name == "set_plan" else None   # each meal line remembers the meal (for a rejoin)
         for item in items:
             if not isinstance(item, dict) or not isinstance(item.get("product_id"), str):
                 raise ValueError("each item needs a product_id")
             product = catalog.get(item["product_id"])
             if product is None:
                 missing.append(item["product_id"])
-            elif product.get("in_stock") is False:
+            elif _sold_out(product):
                 sold_out.append(item["product_id"])
             else:
                 planned.append(item["product_id"])
-                qty = item.get("qty", 1)
-                qty = qty if isinstance(qty, int) and qty > 0 else 1
-                stock = product.get("stock")
-                if isinstance(stock, int) and 0 < stock < qty:       # never plan more than the shelf has, and say so
-                    notes.append(f"Only {stock} {product.get('short_name') or product['name']} in stock: planned {stock}, not {qty}.")
-                    qty = stock
+                qty, note = _capped(item.get("qty", 1), product)
+                notes += [note] if note else []
                 basis = item.get("basis")
-                lines.append({"product_id": item["product_id"], "reason": meal or str(item.get("reason", "")), "qty": qty,
-                              **({"basis": basis} if isinstance(basis, str) and basis else {})})
+                lines.append({"product_id": item["product_id"], "reason": str(item.get("reason", "")), "qty": qty,
+                              **({"basis": basis} if isinstance(basis, str) and basis else {}),
+                              **({"meal": meal} if meal else {})})     # each line remembers the meal (for a rejoin)
         cart = await backend.rpc("set_plan", p_cart_id=cart_id, p_plan=lines)
         result: dict[str, Any] = {"planned": planned, "not_in_store": missing, "out_of_stock": sold_out,
                                   "next_step": cart.get("next_step")}
         if sold_out:
             result["substitutes"] = {pid: _substitutes(catalog[pid], products, set(planned)) for pid in sold_out}
-        if edit and edit[1] in catalog:
-            kind, pid, old, in_cart = edit
-            final = next((line["qty"] for line in lines if line["product_id"] == pid), 1)
-            result["readback"] = _readback(kind, catalog[pid], final, old, in_cart)
-            if kind == "added":                              # several adds at once are read back as one line
-                result["edit"] = {"kind": "added", "what": _added(final, catalog[pid]), "aisle": catalog[pid].get("aisle")}
-            if kind in ("added", "removed", "swapped", "amount") and isinstance(ctx.get("undo"), list):
-                was = next((line["qty"] for line in before if line["product_id"] == pid), 1)
-                ctx["undo"].append({"plan": before, "readback": _undo_line(kind, catalog[pid], was, old)})
-        elif name == "set_plan":
-            if isinstance(ctx.get("undo"), list):
-                ctx["undo"].append({"plan": before, "readback": "Back to your last list."})
-            off = [{"product_id": i["product_id"], "short_name": (catalog.get(i["product_id"]) or {}).get("short_name")
-                    or i.get("name"), "qty": i.get("qty", 1)}
-                   for i in prior.get("items", []) if i.get("product_id") not in planned]
-            if off:                                          # a new list: Kart asks about these ("Keep it?")
-                result["in_cart_not_on_list"] = off
+        if isinstance(ctx.get("undo"), list):
+            ctx["undo"].append({"plan": before, "readback": "Back to your last list."})
+        off = [{"product_id": i["product_id"], "short_name": (catalog.get(i["product_id"]) or {}).get("short_name")
+                or i.get("name"), "qty": i.get("qty", 1)}
+               for i in prior.get("items", []) if i.get("product_id") not in planned]
+        if off:                                              # a new list: Kart asks about these ("Keep it?")
+            result["in_cart_not_on_list"] = off
+        if cart.get("budget") is not None:                   # "keep it under $30": plan within it
+            result["budget"] = _budget_view(cart)
         return {**result, "notes": notes} if notes else result
+    if name == "set_budget":
+        amount = args.get("amount")
+        if not isinstance(amount, (int, float)) or isinstance(amount, bool) or amount <= 0:
+            raise ValueError("'amount' must be a number of dollars above 0")
+        return _budget_view(await backend.rpc("set_budget", p_cart_id=cart_id, p_amount=amount))
     if name == "undo_last_edit":
         stack = ctx.get("undo")
         if not stack:

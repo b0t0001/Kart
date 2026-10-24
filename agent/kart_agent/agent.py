@@ -75,6 +75,8 @@ class KartAgent:
         self._unknown_open = False                # an "Is this...?" card is on screen
         self._quiet = False                       # "be quiet": Kart only answers; cards still show
         self._offered: list[str] = []             # deals Kart has offered this trip, for "what was that deal?"
+        self._budget: float | None = None         # "keep it under $30" (carts.budget), and the bill so far
+        self._total = 0.0
         self._offer: dict[str, Any] | None = None   # the deal Kart just asked about, until it's answered
         self._nudge: dict[str, Any] | None = None   # the quantity nudge Kart just said (v0.12 beta)
         self._last_asked: str | None = None         # "offer" or "nudge": a plain answer goes to the latest question
@@ -267,6 +269,8 @@ class KartAgent:
             line = proactive_line(meta, self._catalog, self._plan, self._items, self._meal, self._nudges)
             if meta.get("type") == "cart_changed" and meta.get("change") == "added":
                 self._last_add = None                    # said (or nothing to say): a later deal stands alone
+                if line and (money := self._budget_line()):
+                    line = f"{line} {money}"
             if line and line.endswith(LIST_TOO):
                 self._list_too, self._last_asked = meta.get("product_id"), "list_too"
             elif line and meta.get("type") == "suggestion" and self._last_add:
@@ -422,7 +426,8 @@ class KartAgent:
     async def _rejoin(self) -> None:
         """A new call on a trip in progress (a dropped call, a paused one, an app relaunch): pick up the meal, the
         conversation so far and the deals already asked about, so Kart carries on instead of starting over."""
-        reasons = [line.get("reason") for line in self._plan if line.get("reason") not in (None, "", "deal")]
+        reasons = [line.get("meal") or line.get("reason") for line in self._plan
+                   if (line.get("meal") or line.get("reason")) not in (None, "", "deal")]
         if reasons and not self._meal:
             self._meal = Counter(reasons).most_common(1)[0][0]
         try:
@@ -431,6 +436,20 @@ class KartAgent:
             lines = []
         self.brain.seed([(line.get("role", ""), line.get("text", "")) for line in lines])
         self._digest_asked |= {entry["deal"]["id"] for entry in await self._relevant_deals()}
+
+    def _budget_line(self) -> str:
+        """Once near the budget ("You're at $27.40 of $30.") and once over it, said with the "Got the X" line."""
+        if self._budget is None:
+            return ""
+        budget = float(self._budget)
+        cap = f"${budget:g}" if budget.is_integer() else f"${budget:.2f}"
+        if self._total > budget and "budget|over" not in self._said:
+            self._said |= {"budget|over", "budget|near"}
+            return f"That's ${self._total:.2f}, over your {cap}."
+        if self._total >= 0.9 * budget and "budget|near" not in self._said:
+            self._said.add("budget|near")
+            return f"You're at ${self._total:.2f} of {cap}."
+        return ""
 
     def _remember_offer(self, text: str) -> None:
         said = re.sub(r"\s*Want (it|them)\?$", "", text).strip()
@@ -448,6 +467,7 @@ class KartAgent:
             self._plan = cart.get("plan", [])
             self._items = cart.get("items", [])
             self._nudges = bool((cart.get("features") or {}).get("quantity_nudges"))
+            self._budget, self._total = cart.get("budget"), float(cart.get("total") or 0)
             live = cart.get("nudge") if "nudge" in cart else self._nudge
             if self._nudge and not (live and (live.get("product_id"), live.get("kind")) ==
                                     (self._nudge.get("product_id"), self._nudge.get("kind"))):
