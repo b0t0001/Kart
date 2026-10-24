@@ -17,6 +17,24 @@ The voice chat is running each scenario against the real model and recording Kar
 | **Cart mismatches** | "that's the wrong salsa" · "I put that back" · "I'm not buying that anymore" | testing |
 | **Member moments** (beta) | "not me" after the greeting · "forget me" · "don't remember that" · "what did I buy last time?" · "what do you know about me?" | building (member chat) |
 
+### Results: 52 scenarios run against the real model (voice chat, 2026-10-24)
+**Good as is (highlights):**
+- **List editing:** add with aisle; remove; "make it two"; "no, I prefer Rao's" (honest that only one marinara is carried); cilantro → "not carried; Berkeley Bowl, about 1.5 miles away, might have it fresh"; sold out; already on the list or in the cart; "undo that"; "I'm not buying the marinara anymore" → "…it's still in your cart".
+- **Changing plans:** "skip the garlic bread, we have some"; "just me tonight". **Constraints:** vegetarian tacos; "what's cheapest?".
+- **Questions:** what's next, how much is the queso, what's on sale, what's in my cart, my total, did you get the chips, a one-sentence recipe.
+- **Conversation control:** say that again, stop talking, an off-topic question (redirected), "can you add the, um" → "add what?", Spanish questions answered in Spanish, "hold on", "check me out", and a kid's "Mom, can we get candy?" ignored.
+
+**Broken → being fixed:**
+| # | Scenario | Problem | Fix (batch) |
+|---|---|---|---|
+| 1 | "Keep it under $30" | Promises to track the budget; nothing does | Budget via the backend's new RPCs; warn when an edit crosses it (2) |
+| 2 | "No dairy" | Then offers the Parmesan deal | Remember diet for the trip; skip conflicting deals (2) |
+| 3 | "Actually make it tacos" with spaghetti in the cart | Spaghetti stays billed, unmentioned | "The spaghetti's still in your cart. Keep it or put it back?" (1) |
+
+**Weak → being fixed (batch 1):** "be quiet" (real quiet mode) · "what was that deal again?" · "and breakfast for tomorrow" (adds, doesn't ask) · "make it two" with no "it" (asks "two of what?") · package read-back ("one bag of avocados") · "it's 6 people now" (rescale) · "thanks" → "You're welcome!" · combined read-backs · diet answers only from product names (no invented claims) · "talk slower" (honest line).
+**Batch 3 (polish):** faster answers (live cart summary each turn; today 3–7 s); "take it off the list too?"; "how much is this?"; reconnect; pause the voice call when it's quiet.
+**Skipped:** Spanish templates for Kart's fixed lines.
+
 ---
 
 # Appendix: robustness (already covered or in progress)
