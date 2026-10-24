@@ -124,6 +124,12 @@ def test_count_is_off_by_default():  # claude_count: false = the stable behavior
     assert "count" not in fc.kwargs["output_config"]["format"]["schema"]["properties"] and a.count == 1
 
 
+def test_a_multipack_counts_as_one_package():  # kids-scissors: one 2 ct pack is ONE item
+    fc = FakeClient(ans_n("rao-marinara", 1))
+    CloudIdentifier(CAT, "m", 6.0, client=fc, count=True).identify([CROP])
+    assert "packages, not what is inside them" in fc.kwargs["system"]
+
+
 def test_count_when_enabled():
     fc = FakeClient(ans_n("rao-marinara", 3))
     a = CloudIdentifier(CAT, "m", 6.0, client=fc, count=True).identify([CROP])

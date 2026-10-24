@@ -111,7 +111,8 @@ sudo systemctl stop kart-cv
 ```
 
 Cart empty → put the item in → wait for `captured 1/5: take it out` → take it out → repeat with
-a different pose (side, upright, label down). If you enable `edge_privacy` (off by default),
+a different pose (side, upright, label down). A multi-pack is one product: enroll it closed, as sold
+(`kids-scissors` is the whole 2-pair card, never one pair). If you enable `edge_privacy` (off by default),
 **enroll tall props too** (upright bottles, boxes that reach the top of a camera's view): it keeps
 anything that enters from the frame edge on-cart, so it is never sent to Claude and is only
 recognized if it's in the gallery. Photos land in `pi/gallery/<product-id>/`. Commit and push

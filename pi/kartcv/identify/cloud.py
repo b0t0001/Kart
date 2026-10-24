@@ -17,7 +17,8 @@ MAX_COUNT = 6
 PERSONAL_HINT = (" If it is clearly the shopper's own belonging rather than store merchandise (a purse, phone, "
                  "keys, wallet, clothing, a reusable or personal bag), answer \"personal\".")
 COUNT_HINT = (" count is how many identical units of that product the photos show together (1 if you are "
-              "unsure or the units differ).")
+              "unsure or the units differ). Count retail packages, not what is inside them: a multi-pack "
+              "(e.g. a 2 ct card of scissors) is 1.")
 MAX_SIDE = 512
 
 SYSTEM = (
