@@ -15,7 +15,7 @@
 > | 5b | Still in Aisle 6: drop a **second spaghetti box**, **beside** the first (not stacked on it) → "No" → put it back | **"That's two boxes of spaghetti in the cart, and pasta night for 4 needs one. Keep the extra?"** → "Took the Spaghetti off your bill." | **Right amount for your meal** (less food waste and overspending) |
 > | 5c | *(member beta)* "Oh, next Saturday is Leo's soccer team party, we'll need pasta for 12." → "Yes." | "Got it, I'll remember Leo's soccer team party on Saturday. Want me to save a list for it?" → "Saved: three boxes of spaghetti and two jars of marinara for Leo's soccer team party." (no "what are we getting today?" mid-trip) | **Memory created by conversation**: one box today, three saved for the party |
 > | 5d | Walk to Aisle 4, drop the **Parmesan** | "Got the Parmesan." → bill shows "saved $1" | Live bill + savings |
-> | 6 | Walk to Aisle 9, drop the **scissors** → "Actually, the school has some" → **take them back out** | "Got the Kids' Scissors." → "Took the Kids' Scissors off your bill. Take them off the list too?" → "Yes." | Changing your mind |
+> | 6 | Walk to Aisle 9, drop the **scissors** → **take them back out** → "Yes, the school has some." | "Got the Kids' Scissors." → "Took the Kids' Scissors off your bill. Take them off the list too?" → "Took kids' scissors off your list." | Changing your mind (take it out first, then answer Kart's question) |
 > | 7 | Tap **Check out** → **Pay** | Receipt with savings and time in store → "Paid. Enjoy pasta night!" | Uniqlo-style checkout |
 >
 > **ACT 2: fast-forward (member beta, ~30 s, no extra props)**
