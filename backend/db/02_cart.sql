@@ -181,8 +181,10 @@ begin
   limit 1;
 
   -- Suggestion: a live deal on something not in the cart whose pairs_with is, product in
-  -- stock, each deal offered once per trip. The current one stays while it is still valid,
-  -- unless the store created a deal after it was offered: fresh deals reach shoppers now.
+  -- stock and not already on the shopper's plan, each deal offered once per trip. The current
+  -- one stays while it is still valid, unless the store created a deal after it was offered
+  -- (fresh deals reach shoppers now). A "Yes" puts the product on the plan, which consumes the
+  -- suggestion, so the next eligible deal can be offered right away.
   v_suggested := c.suggested_deals;
   v_sugg := null;
   v_keep := false;
@@ -191,7 +193,8 @@ begin
     where pc.id = c.suggestion->>'product_id'
       and pc.deal_id = c.suggestion->>'deal_id'
       and pc.in_stock
-      and not exists (select 1 from jsonb_array_elements(v_items) e where e->>'product_id' = pc.id);
+      and not exists (select 1 from jsonb_array_elements(v_items) e where e->>'product_id' = pc.id)
+      and not exists (select 1 from jsonb_array_elements(v_plan) e where e->>'product_id' = pc.id);
     v_keep := found;
   end if;
   select pc.*, d.created_at as deal_created_at into v_cand
@@ -201,6 +204,7 @@ begin
     and pc.in_stock
     and not (pc.deal_id = any(c.suggested_deals))
     and not exists (select 1 from jsonb_array_elements(v_items) e where e->>'product_id' = pc.id)
+    and not exists (select 1 from jsonb_array_elements(v_plan) e where e->>'product_id' = pc.id)
     and exists (select 1 from jsonb_array_elements(v_items) e where e->>'product_id' = any(d.pairs_with))
   order by (select max((e->>'last_added_at')::timestamptz) from jsonb_array_elements(v_items) e
              where e->>'product_id' = any(d.pairs_with)) desc,

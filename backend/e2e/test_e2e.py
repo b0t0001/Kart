@@ -13,11 +13,11 @@ from client import ANON, URL, RpcError
 from psycopg.types.json import Jsonb
 from realtime import Watch
 
+# The voice agent plans the basics; the cart's deal cards upsell the rest (nothing is offered
+# for items already on the plan).
 PASTA = [
     {"product_id": "barilla-spaghetti", "reason": "the pasta"},
     {"product_id": "rao-marinara", "reason": "the sauce"},
-    {"product_id": "kirkland-parmesan", "reason": "to grate on top"},
-    {"product_id": "french-baguette", "reason": "garlic bread"},
 ]
 
 
@@ -60,8 +60,8 @@ def test_full_trip_with_the_merchant_beat(rest, db, cart_id):
         trip = c["trip_id"]
         assert c["status"] == "shopping" and c["items"] == []
         c = rest.rpc("set_plan", p_cart_id=cart_id, p_plan=PASTA)
-        assert [p["product_id"] for p in c["plan"]][0] == "french-baguette"     # route from the entrance
-        assert c["next_step"] == "Aisle 2 → Baguette, $1 off"
+        assert [p["product_id"] for p in c["plan"]] == ["barilla-spaghetti", "rao-marinara"]
+        assert c["next_step"] == "Aisle 6 → Spaghetti"
         line = rest.rpc("append_transcript", p_cart_id=cart_id, p_role="user", p_text="pasta dinner for my family")
         assert line["trip_id"] == trip
 
@@ -86,6 +86,13 @@ def test_full_trip_with_the_merchant_beat(rest, db, cart_id):
                                      "pairs_with": ["barilla-spaghetti", "rao-marinara"]}, "Parmesan $3 off")
         rec = watch.wait_for(lambda r: (r.get("suggestion") or {}).get("deal_id") == "d-e2e-parm")
         assert rec["suggestion"]["text"] == "Parmesan is $3 off in Aisle 4. Want it?"
+
+        # iPad: "Yes" puts it on the plan, which consumes the card (nothing else is eligible now)
+        c = rest.rpc("set_plan", p_cart_id=cart_id,
+                     p_plan=PASTA + [{"product_id": "kirkland-parmesan", "reason": "said yes to the deal"}])
+        assert c["suggestion"] is None and "d-e2e-parm" in c["suggested_deals"]
+        parm_row = next(p for p in c["plan"] if p["product_id"] == "kirkland-parmesan")
+        assert parm_row["deal_label"] == "$3 off" and parm_row["aisle"] == "Aisle 4"
 
         # CV: the shopper takes it (cloud match)
         c = rest.rpc("apply_cart_event", **cv_to_rpc(
@@ -168,3 +175,12 @@ def test_voice_token_function(rest, cart_id):
     else:
         assert body["error"] == "cartesia token failed"
     assert "sk_car" not in r.text
+
+
+def test_yes_moves_on_to_the_next_deal(rest, cart_id):
+    rest.rpc("reset_cart", p_cart_id=cart_id)
+    ev = lambda pid: cv_to_rpc(cv_event(cart_id, "added", pid, pid))  # noqa: E731
+    assert rest.rpc("apply_cart_event", **ev("tostitos-salsa"))["suggestion"]["product_id"] == "tostitos-chips"
+    assert rest.rpc("apply_cart_event", **ev("mission-tortillas"))["suggestion"]["product_id"] == "tostitos-chips"
+    c = rest.rpc("set_plan", p_cart_id=cart_id, p_plan=[{"product_id": "tostitos-chips", "reason": "said yes"}])
+    assert c["suggestion"]["text"] == "Sour Cream is 20% off in Aisle 8. Want it?"

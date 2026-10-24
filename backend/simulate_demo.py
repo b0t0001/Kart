@@ -18,10 +18,11 @@ import httpx
 
 import kartdb
 
+# The agent plans the basics; the cart's deal card upsells the Parmesan (nothing is offered for
+# items already on the plan).
 PASTA_PLAN = [
     {"product_id": "barilla-spaghetti", "reason": "the pasta"},
     {"product_id": "rao-marinara", "reason": "the sauce"},
-    {"product_id": "kirkland-parmesan", "reason": "to grate on top"},
     {"product_id": "french-baguette", "reason": "garlic bread"},
 ]
 

@@ -25,10 +25,11 @@ from psycopg.types.json import Jsonb
 
 import kartdb
 
+# The basics only: deal cards upsell the rest (Parmesan; Chips and Sour Cream for tacos), and
+# nothing is offered for items already on the plan.
 PLANS = {
-    "pasta": ["barilla-spaghetti", "rao-marinara", "kirkland-parmesan", "french-baguette"],
-    "tacos": ["mission-tortillas", "ground-beef", "tillamook-mexican-cheese", "tostitos-salsa",
-              "tostitos-chips", "avocados", "daisy-sour-cream"],
+    "pasta": ["barilla-spaghetti", "rao-marinara", "french-baguette"],
+    "tacos": ["mission-tortillas", "ground-beef", "tillamook-mexican-cheese", "tostitos-salsa", "avocados"],
 }
 
 

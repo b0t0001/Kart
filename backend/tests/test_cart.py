@@ -306,3 +306,35 @@ def test_a_deal_created_after_the_suggestion_takes_its_place(cart, conn):
     assert (s["deal_id"], s["text"]) == ("d-parm-live", "Parmesan is $3 off in Aisle 4. Want it?")
     row = add(cart, "rao-marinara")                   # an older deal doesn't push it out
     assert row["suggestion"]["deal_id"] == "d-parm-live"
+
+
+# ── A "Yes" consumes the suggestion (the product goes on the plan) ──
+
+def test_yes_moves_on_to_the_next_deal(cart):
+    row = add(cart, "tostitos-salsa")
+    assert row["suggestion"]["product_id"] == "tostitos-chips"
+    row = add(cart, "mission-tortillas")              # Sour Cream is now eligible, but Chips holds the slot
+    assert row["suggestion"]["product_id"] == "tostitos-chips"
+    row = cart("set_plan", p_plan=[{"product_id": "tostitos-chips", "reason": "said yes"}])
+    assert row["suggestion"]["product_id"] == "daisy-sour-cream"  # the next eligible deal, right away
+    assert set(row["suggested_deals"]) == {"d-chips-150off", "d-sourcream-20pct"}
+    row = cart("set_plan", p_plan=[])                 # taking it off the list doesn't re-offer Chips
+    assert row["suggestion"]["product_id"] == "daisy-sour-cream"
+
+
+def test_nothing_is_offered_for_items_on_the_plan(cart, conn):
+    cart("set_plan", p_plan=[{"product_id": "kirkland-parmesan", "reason": "topping"}])
+    row = add(cart, "barilla-spaghetti")
+    assert row["suggestion"]["product_id"] == "french-baguette"   # not the planned Parmesan
+    conn.execute("insert into deals (id, product_id, type, value, label, pairs_with) "
+                 "values ('d-parm-new', 'kirkland-parmesan', 'amount_off', 4, '$4 off', '{barilla-spaghetti}')")
+    assert current(conn)["suggestion"]["product_id"] == "french-baguette"   # a newer deal on a planned item doesn't pop
+    assert current(conn)["plan"][0]["deal_label"] == "$4 off"             # it shows on the list row instead
+
+
+def test_planned_suggestion_is_consumed_when_nothing_else_is_eligible(cart):
+    row = add(cart, "barilla-spaghetti")
+    assert row["suggestion"]["product_id"] == "kirkland-parmesan"
+    cart("dismiss_suggestion")                        # Baguette comes next
+    row = cart("set_plan", p_plan=[{"product_id": "french-baguette", "reason": "said yes"}])
+    assert row["suggestion"] is None

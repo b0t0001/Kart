@@ -35,7 +35,7 @@ for you.
 | Demo levers for when a live piece fails | `backend/cart.py` | run against local Supabase |
 | Demo runbook | `backend/docs/DEMO.md` | |
 
-Test counts: backend unit 50, merchant 42, Edge Function 5, end-to-end 4. All pass.
+Test counts: backend unit 53, merchant 42, Edge Function 5, end-to-end 5. All pass.
 
 ## Decisions I made (please review)
 
@@ -63,6 +63,25 @@ Test counts: backend unit 50, merchant 42, Edge Function 5, end-to-end 4. All pa
    the flag is a one-word change.
 8. **`cart.py deal` writes a merchant change directly**, with no Claude preview and no Confirm. It's
    the emergency path, labelled `request = "cart.py fallback"` in the log and undoable in the console.
+
+## Follow-up from the iPad's overnight review (its rulings 24 and 30)
+
+A "Yes" on a deal card puts the product on the shopping list (`set_plan`). Before this change, the
+backend kept that card in its single suggestion slot until the item was physically in the cart. The
+iPad hides cards for listed items, so after a Yes no other deal could pop.
+
+- **Now:** a suggestion is consumed as soon as its product is on the plan, so the next eligible deal
+  is offered right away. New suggestions are never offered for products already on the plan (or in
+  the cart). The other rules are unchanged: each deal at most once per trip, and a deal the store
+  creates later still replaces the current card.
+- **Analytics are unchanged:** an offer still counts as "taken" only when the product goes into the cart.
+- **Demo impact:** a deal on something already on the list shows on that list row ("$3 off"), not
+  as a card. The simulator and `cart.py plan pasta` now plan the basics (spaghetti, sauce, bread), so
+  the Parmesan card still pops after the spaghetti. **For the iPad chat:** if its agent plans
+  Parmesan for "pasta dinner", the merchant beat shows on the list row instead of as a card.
+- **Tests:** 3 new unit tests (53 backend in total), plus a "Yes" step in the end-to-end trip and a
+  REST test that the next deal surfaces (5 end-to-end in total). All pass on local Supabase, which
+  has the new SQL applied.
 
 ## Not done / known gaps
 
