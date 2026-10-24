@@ -143,10 +143,7 @@ public struct Catalog: Sendable, Equatable {
     }
 
     public static func load(from url: URL) throws -> Catalog {
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        decoder.dateDecodingStrategy = .iso8601
-        let file = try decoder.decode(StoreFile.self, from: Data(contentsOf: url))
+        let file = try KartJSON.decoder().decode(StoreFile.self, from: Data(contentsOf: url))
         return Catalog(layout: StoreLayout(store: file.store, entrance: file.entrance, sections: file.sections),
                        products: file.products, deals: file.deals)
     }
