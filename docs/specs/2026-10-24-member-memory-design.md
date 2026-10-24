@@ -117,6 +117,8 @@ The backend computes these deterministically (testable, instant). Claude only ph
 - **Tables.** RLS is on, with **no anon read and no realtime**; access goes only through `security definer` RPCs.
   - `members(member_id text pk, name text null, household int null, created_at)`
   - `member_purchases(id, member_id, product_id, qty, price, bought_at, trip_id null, source 'seed'|'checkout')`
+    - Real trips still come from `receipts`: the receipt trigger below copies each paid bill's lines in.
+    - It's a separate table only so the ten-week demo seed never shows up as store trips or revenue in `store_insights`, which counts `receipts`.
   - `member_memories(id bigserial, member_id, kind 'event'|'preference'|'note', text, event_date date null, items jsonb null [{product_id, qty}], trip_id null, created_at)`. Forgetting deletes the row.
 - **`carts` gains** `member_id text null` and `member_rev int default 0`.
 - **`receipts` gains** `member_id text null`.
