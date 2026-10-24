@@ -21,6 +21,12 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 ~02:20 · check-in
+- **iPad: milestones 1 and 2 committed.** The app runs on Supabase through `KartSupabase` (REST + realtime), with a debug panel, automated rehearsals, and a Line voice session. `agent/` has a README and a test pinning the iPad custom-event contract. Still running (verification).
+- **CV:** finished its final whole-branch review, with all Critical/Important findings fixed. 80 tests pass and its end-to-end test passes 2/2. Contract v0.10 adds `resolves_event_id`. Idle and done.
+- **Backend:** done, idle.
+- Synced: 7 more commits pushed; no secrets.
+
 ### 2026-10-24 ~01:50 · check-in
 - **CV: DONE overnight** (idle). All 13 plan tasks are done, with 62 tests passing on the Mac (synthetic two-camera scenes: hands, lighting, bumps, stacked items, a dead camera). **The end-to-end test against local Supabase passes:** the live catalog loads from `product_catalog`, adds and removes reach `carts`, an outbox retry doesn't double-add, and `reset_cart` clears the Pi's memory. It has not run on real hardware. Morning steps are in `pi/docs/OVERNIGHT.md` and `pi/README.md`, and CV still needs `ANTHROPIC_API_KEY` (until then it runs local-only).
 - **iPad: building.** Milestone 1 UI is committed (design system, Kart avatar, welcome/greeting, trip panel with the next-stop map, checkout, pay overlay, receipt). It's now verifying the live-deal beat against local Supabase and planning milestone 2.
