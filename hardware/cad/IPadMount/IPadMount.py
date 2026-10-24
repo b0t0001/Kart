@@ -4,13 +4,15 @@ KART iPad mount: parametric Fusion 360 script
 
 What it builds (in a NEW Fusion document, every run):
   * Bracket_L / Bracket_R: mirrored "bookends", one per side of the iPad.
-    Each one clamps the cart handle in a printed C that opens toward the
-    cart, and an arm from the bottom of the bracket reaches the top-basket
-    wire, where a notched pad sits behind it. Both notches open the same
-    way, so a bracket pushes onto the handle and the wire in one move, at
-    any wire angle. Two attachment points on two different parts of the cart
-    make a triangle, so the screen can't rotate around the handle: the
-    printed parts carry the load and the zip ties only hold them seated.
+    Each one hangs on the cart handle by a printed arch, and an arm from
+    the bottom of the bracket reaches the top-basket wire, where a notched
+    pad sits on top of it. Both open downward, so the mount simply hangs:
+    hold it a couple of cm high, slide it toward the cart until the arches
+    are over the handle and the pads over the wire, and set it down. Gravity
+    seats it, the sides of the arch and the notch stop every push and twist,
+    and the only way off is straight up, which the zip ties stop. Two
+    attachment points on two different parts of the cart make a triangle,
+    so the screen can't rotate around the handle.
     The upper part is a channel that holds one short edge of the iPad:
     ledge, side wall, front lips (on the bezel only) and a back plate.
   * Spacer: a bar behind the iPad that slides into a socket on each bracket
@@ -77,14 +79,14 @@ PARAMS = [
 
     # Cart
     ('handle_d',    '29 mm',    'mm', 'MEASURE: handle tube diameter where the brackets sit (~29 by ruler; calipers please)'),
-    ('handle_fit',  '0.5 mm',   'mm', 'C clamp bore clearance per side (the zip tie pulls it snug)'),
+    ('handle_fit',  '0.5 mm',   'mm', 'Arch bore clearance per side (the zip tie pulls it snug)'),
     ('rim_d',       '5.5 mm',   'mm', 'MEASURE: top-basket wire diameter (~5.5 by ruler; calipers please)'),
     ('rim_fit',     '0.3 mm',   'mm', 'Wire notch clearance per side'),
     ('rim_c',       '155 mm',   'mm', 'MEASURE: handle centre to wire centre, straight line (~155 by ruler)'),
-    ('rim_drop',    '110 mm',   'mm', 'MEASURE: wire centre BELOW handle centre = (floor to top of handle) - (floor to top of wire) - (handle_d - rim_d)/2'),
+    ('rim_drop',    'rim_c',    'mm', 'MEASURE: wire centre BELOW handle centre (= rim_c: straight below). Plumb line from the handle centre: rim_drop = drop to the wire centre'),
 
     # Screen placement
-    ('tilt',        '30 deg',   'deg', 'Screen lean-back from vertical (top edge toward the cart)'),
+    ('tilt',        '0 deg',    'deg', 'Screen lean-back from vertical (top edge toward the cart); 15-20 reads better from standing height'),
     ('v_h',         '70 mm',    'mm', 'Handle height behind the screen, measured up from the iPad bottom edge'),
     ('hook_gap',    '3 mm',     'mm', 'Gap between back plate and handle tube (a zip tie runs through it)'),
 
@@ -103,9 +105,9 @@ PARAMS = [
     ('rest_lo',     'bump_zone', 'mm', 'Back rest band start (up from the iPad bottom edge)'),
     ('rest_hi',     'ipad_h - bump_zone', 'mm', 'Back rest band end'),
 
-    # Hanger: C clamp on the handle, arm, pad behind the wire
-    ('sad_t',       '6 mm',     'mm', 'C clamp jaw thickness around the handle tube'),
-    ('arm_w',       '24 mm',    'mm', 'C clamp and wire pad width along the handle'),
+    # Hanger: arch over the handle, arm, pad on top of the wire
+    ('sad_t',       '6 mm',     'mm', 'Arch wall thickness over the handle tube'),
+    ('arm_w',       '24 mm',    'mm', 'Arch and wire pad width along the handle'),
     ('arm_t',       '10 mm',    'mm', 'Arm thickness along the handle'),
     ('arm_h',       '16 mm',    'mm', 'Arm width (in the side view)'),
     ('pad_wall',    '6 mm',     'mm', 'Wire pad wall around the notch'),
@@ -114,7 +116,7 @@ PARAMS = [
     ('tun_floor',   '1.4 mm',   'mm', 'Plastic between the wire tie tunnel and the notch'),
 
     # Spacer (behind the iPad, above the handle)
-    ('sp_v',        '100 mm',   'mm', 'Spacer bottom, measured up the screen from the iPad bottom edge (keep it above the C clamp)'),
+    ('sp_v',        '100 mm',   'mm', 'Spacer bottom, measured up the screen from the iPad bottom edge (keep it above the arch)'),
     ('sp_h',        '16 mm',    'mm', 'Spacer height (along the screen)'),
     ('sp_t',        '8 mm',     'mm', 'Spacer thickness (front to back)'),
     ('sfit',        '0.2 mm',   'mm', 'Slide fit per side, spacer in socket (fits table)'),
@@ -131,20 +133,22 @@ PARAMS = [
     ('n_r',         'ipad_d + clr', 'mm', 'derived: back rest face'),
     ('n_p',         'n_r + bump_relief', 'mm', 'derived: back plate front face'),
     ('n_b',         'n_p + back_t', 'mm', 'derived: back plate rear face'),
-    ('bore_r',      'handle_d/2 + handle_fit', 'mm', 'derived: C clamp bore radius'),
-    ('r_sad',       'bore_r + sad_t', 'mm', 'derived: C clamp half height'),
+    ('bore_r',      'handle_d/2 + handle_fit', 'mm', 'derived: arch bore radius'),
+    ('r_sad',       'bore_r + sad_t', 'mm', 'derived: arch outer radius'),
     ('n_h',         'n_b + bore_r + hook_gap', 'mm', 'derived: handle centre behind the screen face'),
     ('ipad_y0',     '-(v_h*sin(tilt) + n_h*cos(tilt))', 'mm', 'derived: iPad bottom front edge Y'),
     ('ipad_z0',     '-(v_h*cos(tilt) - n_h*sin(tilt))', 'mm', 'derived: iPad bottom front edge Z'),
-    ('v_c0',        '(n_p*sin(tilt) - r_sad - ipad_z0)/cos(tilt)', 'mm', 'derived: back plate height at the C clamp bottom'),
-    ('v_c1',        '(n_p*sin(tilt) + r_sad - ipad_z0)/cos(tilt)', 'mm', 'derived: back plate height at the C clamp top'),
+    ('z_gus',       '-(2*bore_r + 2 mm)', 'mm', 'derived: gusset top (leaves room to slide the arch over the handle)'),
+    ('v_a0',        '(n_p*sin(tilt) - ipad_z0)/cos(tilt)', 'mm', 'derived: back plate height at the arch bottom (handle centre level)'),
+    ('v_c1',        '(n_p*sin(tilt) + r_sad - ipad_z0)/cos(tilt)', 'mm', 'derived: back plate height at the arch top'),
+    ('v_g',         '(n_p*sin(tilt) + z_gus - ipad_z0)/cos(tilt)', 'mm', 'derived: back plate height at the gusset top'),
     ('rim_dy',      'sqrt((rim_c/(1 mm))^2 - (rim_drop/(1 mm))^2) * (1 mm)', 'mm', 'derived: wire centre forward of handle centre'),
     ('r_wb',        'rim_d/2 + rim_fit', 'mm', 'derived: wire notch radius'),
     ('r_pad',       'r_wb + pad_wall', 'mm', 'derived: wire pad half size'),
     ('arm_jy',      'ipad_y0 + v_b*sin(tilt) + n_b*cos(tilt)', 'mm', 'derived: arm start Y (bracket bottom back corner)'),
     ('arm_jz',      'ipad_z0 + v_b*cos(tilt) - n_b*sin(tilt)', 'mm', 'derived: arm start Z'),
-    ('arm_dy',      'rim_dy - r_pad/2 - arm_jy', 'mm', 'derived: arm run, Y'),
-    ('arm_dz',      '-(rim_drop) - arm_jz', 'mm', 'derived: arm run, Z'),
+    ('arm_dy',      'rim_dy - arm_jy', 'mm', 'derived: arm run to the wire pad centre, Y'),
+    ('arm_dz',      '-(rim_drop) + r_pad/2 - arm_jz', 'mm', 'derived: arm run, Z'),
     ('arm_len',     'sqrt((arm_dy/(1 mm))^2 + (arm_dz/(1 mm))^2) * (1 mm)', 'mm', 'derived: arm length'),
     ('tie_x',       '(arm_t + arm_w)/2', 'mm', 'derived: tie tunnel centre, in from the outer face (clear of the arm)'),
     ('sk_v0',       'sp_v - sfit - sk_wall', 'mm', 'derived: socket bottom'),
@@ -607,49 +611,47 @@ def add_channel(p, top, rest_top, wall=True, top_lip=True, thick=None):
 
 
 def add_hanger(p, thick=None):
-    """C clamp on the handle (opens toward the cart), arm from the bracket's
-    bottom back corner to the wire, and a pad behind the wire whose notch
-    also opens toward the cart."""
+    """Arch over the handle and a pad on top of the wire, both open
+    downward, joined by an arm from the bracket's bottom back corner and a
+    gusset."""
     T = lambda t: thick or t
-    p.add('C clamp', ('poly', [('bore_r', '-(r_sad)'), ('bore_r', 'r_sad'),
-                               P('v_c1', 'n_p'), P('v_c0', 'n_p')]), '0 mm', T('arm_w'))
+    p.add('Arch', ('poly', [('r_sad', '0 mm'), ('r_sad', 'r_sad'),
+                            P('v_c1', 'n_p'), P('v_a0', 'n_p')]), '0 mm', T('arm_w'))
     p.add('Arm', ('poly', [AP('0', 'arm_h/2'), AP('1', 'arm_h/2'),
                            AP('1', '-(arm_h/2)'), AP('0', '-(arm_h/2)')]), '0 mm', T('arm_t'))
-    # Gusset: fills the triangle between the back plate, the C clamp and the
-    # arm, so the arm is anchored along its root, not at one corner. It
-    # stays outboard of the tie path (tie_x), so the handle tie still runs
-    # under the bottom jaw.
-    p.add('Gusset', ('poly', [P('v_b', 'n_p'), P('v_c0', 'n_p'), ('bore_r', '-(r_sad)'),
+    # Gusset: fills the triangle between the back plate, the arch and the
+    # arm, so the arm is anchored along its root, not at one corner. Its top
+    # stays a tube's width below the arch (room to slide it over the handle)
+    # and it sits outboard of the tie path (tie_x).
+    p.add('Gusset', ('poly', [P('v_b', 'n_p'), P('v_g', 'n_p'), ('bore_r', 'z_gus'),
                               AP('0.3', 'arm_h/2'), AP('0', 'arm_h/2'),
                               AP('0', '-(arm_h/2)')]), '0 mm', T('arm_t'))
-    p.add('Wire pad', ('rect', 'rim_dy - r_pad', '-(rim_drop) - r_pad', 'r_pad', '2*r_pad'),
+    p.add('Wire pad', ('rect', 'rim_dy - r_pad', '-(rim_drop)', '2*r_pad', 'r_pad'),
           '0 mm', T('arm_w'))
 
 
 def hanger_cuts(p, ties=True):
     p.cut('Handle bore', ('circle', '0 mm', '0 mm', 'handle_d + 2*handle_fit'),
           '-1 mm', 'arm_w + 2 mm')
-    p.cut('C clamp mouth', ('rect', '0 mm', '-(bore_r)', 'bore_r + 1 mm', '2*bore_r'),
-          '-1 mm', 'arm_w + 2 mm')
     p.cut('Wire notch', ('circle', 'rim_dy', '-(rim_drop)', 'rim_d + 2*rim_fit'),
           '-1 mm', 'arm_w + 2 mm')
-    # Straight-walled entry so nothing (e.g. the arm end) blocks the wire;
+    # Straight-walled entry below the notch, so nothing blocks the wire;
     # starts inside the notch so the cut always has material to remove.
-    p.cut('Wire mouth', ('rect', 'rim_dy - r_wb/2', '-(rim_drop) - r_wb',
-                         'r_wb/2 + r_pad + 10 mm', '2*r_wb'),
+    p.cut('Wire mouth', ('rect', 'rim_dy - r_wb', '-(rim_drop) - r_pad - 10 mm',
+                         '2*r_wb', 'r_pad + 10 mm + r_wb/2'),
           '-1 mm', 'arm_w + 2 mm')
     if not ties:
         return
-    # Handle tie: up the gap behind the back plate, over the top jaw, down
-    # across the mouth (holding the tube in), back under the bottom jaw.
+    # Handle tie: up the gap behind the back plate, over the arch, down its
+    # cart side and back under the tube.
     p.cut('Handle tie tunnel',
-          tq('v_c0 - 8 mm', 'v_c1 + 8 mm',
+          tq('v_g', 'v_c1 + 8 mm',
              'n_b + (hook_gap - zt_h)/2', 'n_b + (hook_gap + zt_h)/2'),
           'tie_x - zt_w/2', 'zt_w')
-    # Wire tie: down through the pad behind the notch, round the wire.
+    # Wire tie: through the pad just above the notch, round under the wire.
     p.cut('Wire tie tunnel',
-          ('rect', 'rim_dy - r_wb - tun_floor - zt_h', '-(rim_drop) - r_pad - 1 mm',
-           'zt_h', '2*r_pad + 2 mm'),
+          ('rect', 'rim_dy - r_pad - 1 mm', '-(rim_drop) + r_wb + tun_floor',
+           '2*r_pad + 2 mm', 'zt_h'),
           'tie_x - zt_w/2', 'zt_w')
 
 
@@ -788,6 +790,11 @@ def run(context):
         JOIN = adsk.fusion.FeatureOperations.JoinFeatureOperation
         CUT = adsk.fusion.FeatureOperations.CutFeatureOperation
         del SKIPPED[:]
+        try:  # show mm whatever the user's default units are
+            fum = design.fusionUnitsManager
+            fum.distanceDisplayUnits = adsk.fusion.DistanceUnits.MillimeterDistanceUnits
+        except Exception:
+            pass
 
         step('parameters')
         add_params()
@@ -796,6 +803,12 @@ def run(context):
                           'the handle). Fix PARAMS and re-run.')
             return
         warnings, report, fits = build()
+        off = math.degrees(math.atan2(E('rim_dy'), E('rim_drop')))
+        if off > 25:
+            warnings.append('The wire is %.0f deg forward of straight below the handle. '
+                            'Past ~25 deg the pad can roll off the wire when the screen '
+                            'tips toward the shopper (check/check.py shows it): rely on '
+                            'the wire zip ties, or ask for a forward-facing notch.' % off)
         app.activeViewport.fit()
 
         measure = [n for n, _, _, c in PARAMS if c.startswith('MEASURE')]

@@ -2,15 +2,16 @@
 
     uv run --with manifold3d --with numpy --with matplotlib hardware/cad/check/check.py
     ... check.py rim_drop="150 mm" tilt="35 deg"      # try other parameter values
+    ... check.py --script=path/to/other/IPadMount.py  # check another version
 
 1. Runs the script against a mock of Fusion's API (adsk/): every expression
    must evaluate and every sketch dimension must match the geometry it was
    drawn at, and the auto-fillet / chamfer / STL code paths run.
 2. Rebuilds every extrusion as a real solid (manifold3d) and checks: each
    printable part is one solid; nothing overlaps the iPad, handle, wire or
-   each other; the handle and wire slide in through their mouths (bracket
-   pushed toward the cart); the iPad slides in from above; both zip-tie
-   loops have room.
+   each other; the mount slides over the handle and wire and sits down on
+   them; nudged in any direction it hits the cart except upward (it's
+   captured); the iPad slides in from above; both zip-tie loops have room.
 3. Writes hardware/cad/stl/preview_*.stl (no fillets or chamfers: fine for
    the fit tests; Fusion's own export is the real print file) and
    hardware/cad/stl/preview.png.
@@ -124,14 +125,21 @@ def solid_checks(P, results):
     for n in ['Bracket_L', 'Bracket_R']:
         report('Spacer vs %s' % n, vol(solids['Spacer'], solids[n]))
 
-    # Install: the bracket is pushed toward the cart (+Y), so relative to it
-    # the handle and the wire come in from +Y.
+    # Install: hold the mount a little high, slide it toward the cart (+Y)
+    # until the arch is over the handle and the pad over the wire, then set
+    # it down. Relative to the bracket, the handle and the wire come in from
+    # +Y a tube-radius low, then rise into the arch and the notch.
     bx, hr, wr = P['bx_o'], P['handle_d'] / 2, P['rim_d'] / 2
     wc = (P['rim_dy'], -P['rim_drop'])
-    handle_path = (CrossSection.circle(hr, 96)
-                   + CrossSection.circle(hr, 96).translate((300, 0))).hull()
-    wire_path = (CrossSection.circle(wr, 48).translate(wc)
-                 + CrossSection.circle(wr, 48).translate((wc[0] + 300, wc[1]))).hull()
+    lift = hr + 1.5          # handle top passes just under the arch's jaw
+
+    def dogleg(cy, cz, r, seg):
+        low = CrossSection.circle(r, seg).translate((cy, cz - lift))
+        return ((low + CrossSection.circle(r, seg).translate((cy + 300, cz - lift))).hull()
+                + (low + CrossSection.circle(r, seg).translate((cy, cz))).hull())
+
+    handle_path = dogleg(0, 0, hr, 96)
+    wire_path = dogleg(wc[0], wc[1], wr, 48)
     t = P['tilt']
     s, c = math.sin(t), math.cos(t)
 
@@ -144,24 +152,52 @@ def solid_checks(P, results):
     print('\nassembly paths:')
     for n, xs in [('Bracket_L', (-bx - 1, -bx + 40)), ('Bracket_R', (bx - 40, bx + 1)),
                   ('TEST_Profile', (-bx - 400, -bx))]:
-        report('%s: handle slides into the C clamp' % n, vol(solids[n], prism(handle_path, *xs)))
-        report('%s: wire slides into the pad notch' % n, vol(solids[n], prism(wire_path, *xs)))
+        report('%s: arch slides over and sits on the handle' % n,
+               vol(solids[n], prism(handle_path, *xs)))
+        report('%s: pad slides over and sits on the wire' % n,
+               vol(solids[n], prism(wire_path, *xs)))
     for n in ['Bracket_L', 'Bracket_R', 'Spacer']:
         report('%s: iPad slides in and out from above' % n, vol(solids[n], ipad_path))
 
-    # Zip-tie loops, 2.5 mm bands at the tunnel X: handle tie over the top
-    # jaw, down across the mouth, back under the bottom jaw; wire tie round
-    # the front of the wire.
+    # Captured: nudge each bracket 3 mm every 45 degrees round the side view,
+    # and turn it 3 degrees about the handle and about the wire. Everything
+    # must hit the handle or the wire except moves with an upward component
+    # (gravity holds those; the zip ties back it up).
+    cart = handle + wire
+    print('\ncaptured (only upward moves may be free):')
+    for n in ['Bracket_L', 'Bracket_R']:
+        free = []
+        for deg in range(0, 360, 45):
+            dy, dz = 3 * math.cos(math.radians(deg)), 3 * math.sin(math.radians(deg))
+            if vol(solids[n].translate((0, dy, dz)), cart) <= 1e-3:
+                free.append(deg)
+        for label, (cy, cz) in [('handle', (0, 0)), ('wire', wc)]:
+            for sign in (1, -1):
+                m = solids[n].translate((0, -cy, -cz)).rotate((3 * sign, 0, 0)).translate((0, cy, cz))
+                if vol(m, cart) <= 1e-3:
+                    free.append('turn about the %s %+d deg' % (label, 3 * sign))
+        upward = {45, 90, 135}
+        bad = [f for f in free if f not in upward]
+        ok &= not bad
+        print('  %-50s %s' % ('%s: free moves %s' % (n, free or 'none'),
+                              'ok' if not bad else 'FAIL (would come off)'))
+
+    # Zip-tie loops, 2.5 mm bands at the tunnel X. Handle tie: up the tunnel
+    # behind the back plate, over the arch, down its cart side, under the
+    # tube. Wire tie: out of the pad tunnel at both sides and under the wire.
     rs, br, nm = P['r_sad'], P['bore_r'], P['n_b'] + P['hook_gap'] / 2
 
     def y_on(z, n):
         return pvn((z - P['ipad_z0'] + n * s) / c, n)[0]
 
-    band = (box(y_on(rs, nm) + 2, rs + 0.05, br + 3, rs + 2.5)
-            + box(br + 0.05, -rs - 2.5, br + 3, rs + 2.5)
-            + box(y_on(-rs, nm) + 2, -rs - 2.5, br + 3, -rs - 0.05))
-    wband = box(wc[0] + P['r_wb'] + 0.05, wc[1] - P['r_pad'] - 2.5,
-                wc[0] + P['r_wb'] + 2.5, wc[1] + P['r_pad'] + 2.5)
+    band = (box(y_on(rs, nm) + 2, rs + 0.05, rs + 2.5, rs + 2.5)
+            + box(rs + 0.05, -br - 2.5, rs + 2.5, rs + 2.5)
+            + box(y_on(-br, nm) + 2, -br - 2.5, rs + 2.5, -hr - 0.05))
+    rp, rw = P['r_pad'], P['r_wb']
+    z_top = wc[1] + rw + P['tun_floor']
+    wband = (box(wc[0] - rp - 2.5, wc[1] - rw - 2.5, wc[0] + rp + 2.5, wc[1] - rw - 0.05)
+             + box(wc[0] + rp + 0.05, wc[1] - rw - 2.5, wc[0] + rp + 2.5, z_top)
+             + box(wc[0] - rp - 2.5, wc[1] - rw - 2.5, wc[0] - rp - 0.05, z_top))
     t0, t1 = P['tie_x'] - P['zt_w'] / 2, P['tie_x'] + P['zt_w'] / 2
     print('\nzip-tie loops:')
     for n, xs in [('Bracket_L', (-bx + t0, -bx + t1)), ('Bracket_R', (bx - t1, bx - t0))]:
@@ -227,7 +263,12 @@ def preview_png(solids, path):
 
 
 def main():
-    overrides = dict(a.split('=', 1) for a in sys.argv[1:])
+    global SCRIPT
+    args = [a for a in sys.argv[1:] if not a.startswith('--script=')]
+    for a in sys.argv[1:]:
+        if a.startswith('--script='):
+            SCRIPT = a.split('=', 1)[1]
+    overrides = dict(a.split('=', 1) for a in args)
     os.makedirs(OUT, exist_ok=True)
     ok, P = mock_run(overrides)
     if not ok:
