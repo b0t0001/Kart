@@ -1,4 +1,4 @@
-# KART integration contract — v0.6 (DRAFT)
+# KART integration contract — v0.7 (DRAFT)
 
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
@@ -22,6 +22,12 @@ Product background: `project_context/claude_CLAUDE.md` and `project_context/clau
 | `backend/`, `data/`, `merchant/` | **Market backend** chat (Dylan is starting it) | Catalog, DB schema, RPCs, deal/route logic, and the merchant admin agent; publish `data/store.json` early, since CV needs it |
 | `hardware/` | **Hardware teammate's** chat (on his own computer, synced through GitHub) | Pi setup, autostart, camera/wiring checks; runs `pi/` on the real hardware and reports bugs |
 | `docs/CONTRACT.md`, root `.gitignore` | **Manager** | Propose changes, don't edit |
+
+**Hardware lane handoff from CV (v0.7):** CV ships no systemd unit; `hardware/` owns autostart.
+- Command, run from the repo root with restart-on-exit: `~/venv/bin/python pi/main.py live`.
+- Install steps will be in `pi/README.md`: a venv with `--system-site-packages` plus apt `python3-opencv`; `pip install -r pi/requirements-pi.txt`; `tools/fetch_model.py`; camera paths from `tools/snap.py --list` written into `pi/config.json`.
+- Reset: the Pi polls `carts.trip_id` every 2 s and persists the last value it saw, so a reset made while the Pi was off is caught at boot.
+- CV's plan is `pi/docs/plans/2026-10-24-cv-pipeline.md`.
 
 **Sync:** the teammate's machine syncs through GitHub (`b0t0001/kart`, `main`). Pull before you work, push right after you commit; if a push is rejected, run `git pull --rebase` and push again. On Dylan's Mac, the manager pushes and pulls `main`.
 
@@ -98,6 +104,21 @@ Writers **only** use these; nobody writes `carts.items` directly.
 - `set_plan(p_cart_id text, p_plan jsonb) → carts row` — voice agent writes the trip plan; recomputes `next_step` / `lcd_line1`.
 - `reset_cart(p_cart_id text) → carts row` — clears items/plan/suggestion **and sets a new `carts.trip_id` (uuid)**. For new trips and demo resets.
 
+### 3a. As built (backend `1955f3c`, v0.7): additive fields, nothing renamed
+
+28 pytest cases pass against a local Postgres. **Not deployed yet**: that waits on Dylan's Supabase project plus `SUPABASE_DB_URL` in `.env`, then `backend/.venv/bin/python backend/db.py apply`.
+- **RLS:** anon can read every table, and every direct table write raises an error. All writes go through the RPCs.
+- **Realtime:** on for `carts`, `cart_events`, `products`, `deals` and `sections`.
+- `carts`: `item_count` (Σ qty), `suggested_deals text[]` (deals already offered this trip), `savings`.
+- `items[]`: `short_name`, `list_price`, `deal_id`, `section`, `last_added_at`.
+- `plan[]`: `qty` (the agent may send it; default 1), `name`, `section`, `aisle` (`"Aisle 4"`), `in_stock`, `deal_label`. `done` = cart qty ≥ plan qty. **The backend orders the plan by route**: done items first, then the rest in walking order from the current aisle. The agent can send any order.
+- `next_step` = the first remaining in-stock item (`"Aisle 4 → Parmesan, $3 off"`), or `"All done → Checkout"` when the plan is complete.
+- `suggestion`: also `name`, `deal_label`, `aisle`, `section`, `price`, `sale_price`; `text` = `"Parmesan is $3 off in Aisle 4. Want it?"`.
+- `cart_events`: `trip_id` (filter to the current trip) and `applied` (false for a null or unknown `product_id`).
+- **View `product_catalog`:** each active product with its best live deal (`sale_price`, `deal_label`, `aisle`, `in_stock`). The iPad and agent query it instead of joining. Views don't fire realtime, so subscribe to `products` / `deals` and refetch it.
+- Built early: P5 `dismiss_suggestion`; P8 partially (`savings`, `list_price`); P10 (every write to products, deals or sections recomputes all open carts).
+- Current position for routing = the aisle of the most recently added item. It switches to `carts.location` once P3 is built.
+
 **New trip / reset (v0.3; accepted by the backend in v0.4):** the iPad calls `reset_cart`. The Pi watches `carts.trip_id` (polling every ~2 s or over realtime) and clears its in-cart memory when the value changes. That way the iPad never has to reach the Pi over the network. The Pi's `POST :8080/reset` stays as a local fallback.
 
 ## 4. CV → backend
@@ -133,7 +154,7 @@ Spec: `ios/docs/specs/2026-10-24-ipad-app-design.md`. This replaces the phone we
 
 ### 5a. iPad chat's changes (P1–P10): ACCEPTED in v0.6
 
-All additive; nothing already built breaks. **Accepted at the contract level (v0.6)**, so the backend builds them after the core tables and RPCs that unblock the iPad's milestone 2. P9 stays a v2 nice-to-have. Dylan still approves the iPad spec itself in that chat; if his review changes anything, the iPad chat sends the manager a delta.
+All additive; nothing already built breaks. **Accepted at the contract level (v0.6)**, so the backend builds them after the core tables and RPCs that unblock the iPad's milestone 2. P9 stays a v2 nice-to-have. Dylan has approved the iPad spec (`ios/docs/specs/2026-10-24-ipad-app-design.md`, on `main`), so these are final.
 
 | # | Change | Why |
 |---|---|---|
@@ -199,3 +220,4 @@ All three feature chats work in the **same main checkout**, so stay inside your 
 - v0.4 — `data/store.json` v1 published (`e44879c`). Additive §2 fields: `version`, `short_name`, `stock`, `ends_at`, `percent_off`. Supabase becomes the source of truth for prices and deals (the iPad reads it live). Backend accepted the `trip_id` reset and answered CV's questions. Added `SUPABASE_DB_URL`.
 - v0.5 — §5 rewritten for the native iPad app and the Cartesia Line agent. Catalog rule: names, prices, deals and stock come live from Supabase; the bundled `store.json` covers only the map and offline fallback. LCD deferred. iPad proposals P1–P9 recorded in §5a, pending Dylan's approval of the iPad spec. Added P10 (open carts get recomputed on merchant changes), the iPad read/write summary, and the `hardware/` lane plus GitHub sync rules for the teammate's machine.
 - v0.6 — P1–P10 accepted (P9 stays v2). P10's rule, agreed with the iPad: the price you saw is the price you pay, which covers ended deals too. The manager now pushes and pulls `main` at each check-in.
+- v0.7 — Dylan approved the iPad spec. §3a records the backend as built (`1955f3c`): additive fields, the `product_catalog` view, route-ordered plan, P5/P8-partial/P10 done. Hardware-lane handoff from CV (autostart command, install steps).
