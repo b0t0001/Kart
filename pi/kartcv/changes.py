@@ -19,12 +19,15 @@ def lab_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 def match_gain(img: np.ndarray, target: np.ndarray) -> np.ndarray:
-    """Scale `img` so its grayscale median matches `target`'s (cancels global brightness changes)."""
-    m_img = float(np.median(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)))
-    m_tgt = float(np.median(cv2.cvtColor(target, cv2.COLOR_BGR2GRAY)))
-    if m_img < 1.0:
-        return img
-    return np.clip(img.astype(np.float32) * (m_tgt / m_img), 0, 255).astype(np.uint8)
+    """Scale each BGR channel of `img` so its median matches `target`'s.
+
+    Cancels global brightness and white-balance shifts (the Brio's auto white balance moves when a
+    big colored item enters the frame). Medians are dominated by the mat, so items don't skew it.
+    """
+    m_img = np.median(img.reshape(-1, 3), axis=0).astype(np.float32)
+    m_tgt = np.median(target.reshape(-1, 3), axis=0).astype(np.float32)
+    gain = np.where(m_img >= 1.0, m_tgt / np.maximum(m_img, 1.0), 1.0).astype(np.float32)
+    return np.clip(img.astype(np.float32) * gain, 0, 255).astype(np.uint8)
 
 
 def translate(img: np.ndarray, dx: float, dy: float) -> np.ndarray:

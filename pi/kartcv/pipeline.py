@@ -144,6 +144,12 @@ class Pipeline:
                 log.warning("cam%d: %.0f%% of the view changed (lighting?); ignoring this settle", c, 100 * r.changed_frac)
             self.references[c] = f.image
             results.append(r)
+        if not self.cart.instances:
+            # Nothing in the cart and nothing new: this is a fresh empty-basket picture (tracks light drift).
+            for r in results:
+                if r.status == "none" or (r.status == "disturbed" and math.hypot(*r.shift) <= self.cfg.max_shift_px
+                                          * r.frame.shape[1] / self.cfg.diff_size[0]):
+                    self._set_empty(r.cam, r.frame)
 
         decisions = decide(results, self.empties, self.cart, self.identifier, self.features, self.cfg)
         self.last_decisions = decisions

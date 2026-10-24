@@ -138,3 +138,21 @@ def test_camera_dropout_does_not_rebill(tmp_path):  # review C2
     sc.still(1.0).drop(BLUE)
     assert sorted(run(p, sc)) == [("added", "blue-can"), ("added", "red-box")]
     assert p.cart.count("red-box") == 1
+
+
+def test_white_balance_drift_then_remove(tmp_path):  # review I2: auto white balance shifts color
+    p, _ = make(tmp_path)
+    sc = Script(Scene()).still(1.0).drop(RED).set(tint=(0.85, 1.0, 1.18)).take("red-box")
+    assert run(p, sc)[-1] == ("removed", "red-box") and len(p.cart.instances) == 0
+
+
+def test_empty_picture_refreshes_while_cart_is_empty(tmp_path):  # review I2
+    p, _ = make(tmp_path)
+    sc = Script(Scene()).still(1.0)
+    run(p, sc)
+    before = p.empties[0].astype(float).mean(axis=(0, 1))
+    n = len(sc.ticks)
+    sc.set(tint=(0.9, 1.0, 1.12)).hand_pass()  # drift is too slow to count as motion; the next settle catches it
+    assert run(p, sc, n) == []
+    after = p.empties[0].astype(float).mean(axis=(0, 1))
+    assert abs(after[2] - before[2]) > 5  # the red channel moved with the new light
