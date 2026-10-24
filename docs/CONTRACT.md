@@ -32,7 +32,7 @@ Product background: `project_context/claude_CLAUDE.md` and `project_context/clau
 
 **Final camera layout (v0.13, locked by Dylan; v0.18: cam1 is now on USB port `usb-0:1.3`, and the floor liner is a black T-shirt):**
 - **cam0** = Brio 101 (`usb-0:1.1`), mid-front, looking back down the basket.
-- **cam1** = Aoozi QS-WB-202PRO wide-angle (`usb-0:1.2`), high at the top-basket end, looking down.
+- **cam1** = Aoozi QS-WB-202PRO wide-angle (`usb-0:1.3`; port 1.2 is loose), high at the top-basket end, looking down.
 - 15 fps. Together they pass the 4-corner test.
 - No 3rd cam: three 720p MJPEG streams on the Pi's single USB 2.0 bus corrupt frames.
 
