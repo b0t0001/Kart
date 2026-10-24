@@ -123,9 +123,9 @@ class HttpSink:
                     ok = 200 <= status < 300
                     if not ok:
                         log.warning("http sink: apply_cart_event returned HTTP %s", status)
-                except OSError as err:
+                except Exception as err:  # any failure is a failed attempt: back off, keep the event
                     ok = False
-                    log.warning("http sink: backend unreachable (%s)", err)
+                    log.warning("http sink: backend unreachable (%s: %s)", type(err).__name__, err)
                 with self._lock:
                     if ok:
                         self._pending.pop(0)
@@ -144,7 +144,10 @@ class HttpSink:
             self._wake.wait(timeout=wait)
             self._wake.clear()
             if not self._stop.is_set():
-                self.flush_once(time.monotonic())
+                try:
+                    self.flush_once(time.monotonic())
+                except Exception:  # never let the delivery thread die: the outbox would stop draining
+                    log.exception("http sink: flush failed")
 
     def close(self) -> None:
         self._stop.set()

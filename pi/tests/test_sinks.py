@@ -87,3 +87,13 @@ def test_worker_thread_delivers(tmp_path):
         time.sleep(0.02)
     s.close()
     assert s.pending() == 0 and len(p.calls) == 1
+
+
+def test_non_oserror_network_failures_are_retried(tmp_path):  # review I3
+    import http.client
+    p = Post([http.client.IncompleteRead(b""), ValueError("bad url"), 200])
+    s = HttpSink("https://x", "k", tmp_path / "o.jsonl", post=p, start_thread=False)
+    s.send(ev())
+    assert s.flush_once(0.0) == 0 and s.pending() == 1
+    assert s.flush_once(1.0) == 0 and s.pending() == 1
+    assert s.flush_once(10.0) == 1 and s.pending() == 0

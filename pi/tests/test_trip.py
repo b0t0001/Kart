@@ -41,3 +41,11 @@ def test_change_while_off_resets_at_startup(tmp_path):
                     get=Get([rows("new")]), start_thread=False)
     w.poll_once()
     assert resets == [1]
+
+
+def test_unexpected_errors_do_not_kill_the_watcher(tmp_path):  # review I3
+    import http.client
+    resets = []
+    g = Get([http.client.BadStatusLine("x"), ValueError("bad url"), rows("t1")])
+    w = TripWatcher("https://x", "k", "7", tmp_path / "trip.json", lambda: resets.append(1), get=g, start_thread=False)
+    assert w.poll_once() is None and w.poll_once() is None and w.poll_once() == "t1"

@@ -48,7 +48,8 @@ class TripWatcher:
     def poll_once(self) -> str | None:
         try:
             status, body = self._get(self.url, self.headers)
-        except OSError:
+        except Exception as e:  # offline, bad reply, bad URL: try again next poll
+            log.debug("trip watch: %s", e)
             return None
         if status != 200:
             return None
@@ -74,7 +75,10 @@ class TripWatcher:
 
     def _run(self) -> None:
         while not self._stop.is_set():
-            self.poll_once()
+            try:
+                self.poll_once()
+            except Exception:  # never let the watcher die: trip resets would silently stop
+                log.exception("trip watch failed")
             self._stop.wait(self.interval_s)
 
     def stop(self) -> None:
