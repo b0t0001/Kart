@@ -108,6 +108,28 @@ Feature `quantity_nudges` (CONTRACT v0.12). The global default lives in `feature
 - Plan lines carry the agent's `basis` either way.
 - To flip it for everyone: `update feature_flags set enabled_default = true where name = 'quantity_nudges'`.
 
+## Member memory (BETA, off by default)
+
+Feature `member_memory` (CONTRACT v0.14; spec `docs/specs/2026-10-24-member-memory-design.md`). It's off
+by default; turn it on per cart with `set_feature`. With it off, `set_member` and `set_demo_date` refuse,
+so no cart ever has a member and nothing below happens.
+- **Tables:** `members`, `member_purchases` and `member_memories` (`07_members.sql`). They have no anon
+  read and no realtime; the iPad and the agent use the RPCs.
+- **Signing in:** `set_member(cart, id)` signs a member in for one trip. An unknown id becomes a new
+  member, and a new trip signs out. `member_lookup` checks a number without creating anything.
+- **History:** a paid receipt on a member's cart is copied into `member_purchases`.
+- **The demo date:** `set_demo_date(cart, date)` is the demo fast-forward. It moves "today" for member
+  features only; receipts and analytics stay real.
+- **The profile:** `member_profile(member, cart)` returns the member, `picks` ("this week": the event's
+  saved list, what's due by purchase rhythm, and the usual for this weekday; at most 3, never anything
+  on a live deal), `usuals`, `memories` and `last_trip`. Dates use the store's time zone
+  (America/Los_Angeles).
+- **Memory writes:** `member_remember`, `member_save_for_later` and `member_forget` bump
+  `carts.member_rev`, so the iPad refetches.
+- **The demo member:** `python backend/members.py seed` (1029, Dylan) builds ten weeks of history plus
+  Leo's soccer party tomorrow with the pasta list. Run it right before judging
+  (`pre_judging.sh --members`). `members.py show 1029 [--cart 7]` prints the profile.
+
 ## Tests
 
 ```bash

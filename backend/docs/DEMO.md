@@ -24,6 +24,21 @@ commands run from the repo root. `P=backend/.venv/bin/python` is shorthand below
    It affects every team, so nobody else runs it or `reset-demo` on hosted. Rehearsals reset only
    their own cart: `$P backend/cart.py reset --cart <id>`.
 
+## Member memory beat (BETA, only if it ships)
+
+Spec §2. It needs `pre_judging.sh --members` (which seeds member 1029, "Dylan", with Leo's soccer party
+tomorrow), and the flag on for cart 7: `$P backend/cart.py feature member_memory on`, or the iPad's
+demo switch.
+1. On Welcome, tap **Member? Sign in** → `1029` → **That's me**. Kart says "Welcome back, Dylan!", then
+   brings up Leo's party ("want the pasta list?"). Say yes: the list is Meal A's, so the demo carries on
+   as usual, with the Parmesan card on the spaghetti.
+2. Mid-trip, say "Hey Kart". Kart asks about upcoming plans. Answer: "I'm hosting Friendsgiving next
+   Saturday, ten people." Kart remembers it and offers to save a list.
+3. Check out. The receipt says "Saved to Dylan's history."
+4. Open the demo controls (three-finger long press) → **Demo date** → **Day before Friendsgiving**.
+5. Sign in again. Kart opens with Friendsgiving.
+6. Afterwards: **Demo date → Today**.
+
 ## After the receipt (Dylan's actual purchases)
 
 Edit `data/store.json` with the exact names, sizes, shelf prices and camera descriptions, and set

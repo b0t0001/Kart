@@ -311,3 +311,21 @@ def test_writes_bump_member_rev(member_cart, conn):
         p_items=[{"product_id": "tostitos-salsa", "qty": 1}])
     rpc(conn, "member_forget", p_member_id="it-1", p_memory_id=saved["id"])
     assert rev() == start + 3
+
+
+# ── The demo seed ──
+
+def test_seed_member_makes_the_demo_profile(conn, member):
+    import members as members_cli
+    first = members_cli.seed_member(conn, "it-seed", "Dylan", 4, TODAY)
+    prof = profile(conn, "it-seed")
+    assert prof["member"]["name"] == "Dylan" and prof["member"]["household"] == 4
+    assert prof["member"]["trips"] >= 15
+    by_kind = {p["kind"]: p for p in prof["picks"]}
+    assert (by_kind["event"]["product_id"], by_kind["event"]["reason"]) == \
+        ("barilla-spaghetti", "Leo's soccer party · tomorrow")
+    assert (by_kind["due"]["product_id"], by_kind["due"]["reason"]) == ("whole-milk", "every week · last Sat")
+    assert (by_kind["usual"]["product_id"], by_kind["usual"]["reason"]) == ("mission-tortillas", "your Saturday usual")
+    assert [m["text"] for m in prof["memories"]] == ["Leo's soccer party, pasta for the team", "Likes the Marinara here"]
+    assert first["event_date"] == "2026-10-25"
+    assert members_cli.seed_member(conn, "it-seed", "Dylan", 4, TODAY) == first          # re-runnable
