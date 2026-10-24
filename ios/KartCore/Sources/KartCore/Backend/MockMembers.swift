@@ -65,7 +65,7 @@ struct MockMemberStore {
 
     static func empty(today: Int) -> MockMemberStore { MockMemberStore(since: today) }
 
-    /// Milk every week and tortillas most weeks on today's weekday, and Leo's soccer party tomorrow with the pasta list.
+    /// Milk every week and tortillas most weeks on today's weekday. No party: in the demo it's told live (Act 1).
     static func dylan(today: Int, catalog: Catalog) -> MockMemberStore {
         var store = MockMemberStore(name: "Dylan", household: 4, since: today - 71)
         func buy(_ id: String, _ daysAgo: [Int]) {
@@ -75,11 +75,6 @@ struct MockMemberStore {
         buy("whole-milk", [7, 14, 21, 28])
         buy("mission-tortillas", [3, 7, 14, 21])
         buy("tostitos-chips", [7, 14, 21, 28])
-        let party = ["barilla-spaghetti", "rao-marinara", "french-baguette"].compactMap { id in
-            catalog.product(id).map { SavedItem(productId: id, shortName: $0.shortName) }
-        }
-        store.memories.append(Memory(id: 16, kind: "event", text: "Leo's soccer party, pasta for the team",
-                                     eventDay: today + 1, items: party, createdDay: today - 7))
         if let marinara = catalog.product("rao-marinara") {
             store.memories.append(Memory(id: 17, kind: "preference", text: "Likes the \(marinara.shortName) here",
                                          createdDay: today - 21))
@@ -141,7 +136,8 @@ struct MockMemberStore {
                 chosen.append(c)
             }
         }
-        for c in candidates where chosen.count < 3 && ok(c.productId) && !chosen.map(\.productId).contains(c.productId) {
+        for c in candidates where chosen.count < 3 && c.kind != .event        // a saved list is one line on the card
+            && ok(c.productId) && !chosen.map(\.productId).contains(c.productId) {
             chosen.append(c)
         }
         let picks = chosen.map { c in

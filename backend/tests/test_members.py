@@ -388,3 +388,14 @@ def test_seed_prints_what_it_made(db_url, monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", argv + ["--with-party"])
     members_cli.main()
     assert "Leo's soccer team party: 2026-10-31 (next Saturday)" in capsys.readouterr().out
+
+
+def test_fill_skips_more_items_of_a_saved_list(conn, member):
+    """The event's list is one line on the card ("Shop it"); open slots go to other signals, not its second item."""
+    memory(conn, member, "event", "Leo's soccer team party", days=1,
+           items=[{"product_id": "barilla-spaghetti", "qty": 3}, {"product_id": "rao-marinara", "qty": 2}])
+    for days in (7, 14, 21, 28):
+        buy(conn, member, "whole-milk", days)
+    for days in (6, 13, 20, 27):
+        buy(conn, member, "large-eggs", days)
+    assert [p for p, _, _ in picks(profile(conn, member))] == ["barilla-spaghetti", "whole-milk", "large-eggs"]

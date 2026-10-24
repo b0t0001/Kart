@@ -274,7 +274,7 @@ begin
     where wt.n >= 2 and wb.n::numeric / wt.n >= 0.6)
   select coalesce(jsonb_agg(to_jsonb(cands) order by k, rank), '[]') into v_cands from cands;
 
-  -- First the top pick of each signal, then fill to 3 in the same order.
+  -- First the top pick of each signal, then fill to 3 in the same order (no second item from a saved list).
   foreach v_kind in array array['event', 'due', 'usual'] loop
     select x into c from jsonb_array_elements(v_cands) x
     where x->>'kind' = v_kind and x->>'product_id' = any(v_ok) and not (x->>'product_id' = any(v_picked))
@@ -285,9 +285,9 @@ begin
     end if;
     c := null;
   end loop;
-  for c in select x from jsonb_array_elements(v_cands) x loop
+  for c in select x from jsonb_array_elements(v_cands) x loop      -- a saved list is one line on the card: not twice
     exit when jsonb_array_length(v_picks) >= 3;
-    if c->>'product_id' = any(v_ok) and not (c->>'product_id' = any(v_picked)) then
+    if c->>'kind' <> 'event' and c->>'product_id' = any(v_ok) and not (c->>'product_id' = any(v_picked)) then
       v_picks := v_picks || jsonb_build_array(c);
       v_picked := v_picked || (c->>'product_id');
     end if;

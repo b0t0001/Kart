@@ -15,36 +15,34 @@ final class MemberMemoryTests: XCTestCase {
         launch()
         debugToggle("debug.memberMemory")
         signIn()
-        expectText("Welcome back, Dylan! Leo's soccer party is tomorrow.")
+        expectText("Welcome back, Dylan!")
         debug("debug.say.5")                                    // "Hey Kart": the greeting gives way to shopping
         expectText("Any fun plans coming up I can help you shop for?")
         XCTAssertTrue(app.descendants(matching: .any)["foryou.card"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["member.chip"].exists)
         shot("member-1-foryou")
-        debug("debug.say.6")                                    // "I'm hosting Friendsgiving next Saturday, ten people."
-        expectText("Ooh, fun. I'll remember that, and I started a list for it.")
 
-        debug("debug.add.whole-milk")
-        app.buttons["checkout.button"].tap()
-        app.buttons["pay.button"].tap()
-        expectText("Saved to Dylan's history.", timeout: 15)
-        shot("member-2-receipt")
-        app.buttons["receipt.done"].tap()
+        // Act 1: memory, made live.
+        debug("debug.say.6")                                    // "Oh, next Saturday is Leo's soccer team party, …"
+        expectText("Got it, I'll remember Leo's party on Saturday. Want me to save a list for it?")
+        debug("debug.say.1")                                    // "Yes"
+        expectText("Saved: three boxes of spaghetti and two jars of marinara for Leo's soccer team party.")
+        shot("member-2-saved")
+
+        // Act 2: the fast-forward, a new trip, and Kart remembers.
+        debug("debug.date.beforeEvent")                         // "Fast-forward to <day before> (day before Leo's …)"
         expectText("Tap to start shopping")
-
-        debug("debug.date.beforeEvent")                         // "Day before Friendsgiving"
         XCTAssertTrue(app.descendants(matching: .any)["demo.date"].waitForExistence(timeout: 5))
         signIn()
-        expectText("Friendsgiving is tomorrow")
-        debug("debug.say.5")                                    // a new trip: Kart may ask again
-        let shopIt = app.buttons["foryou.shopIt"]
-        XCTAssertTrue(shopIt.waitForExistence(timeout: 10))
-        XCTAssertTrue(shopIt.label.contains("Friendsgiving"), "Shop it is for \(shopIt.label)")
+        expectText("Leo's soccer team party is tomorrow. Want the list you saved?")
         shot("member-3-recall")
+        debug("debug.say.1")                                    // "Yes"
+        expectText("Done, it's on your list.")
+        expectText("Spaghetti")
 
         app.buttons["member.chip"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["memory.sheet"].waitForExistence(timeout: 5))
-        expectText("Leo's soccer party, pasta for the team")
+        expectText("Leo's soccer team party, pasta for 12")
         shot("member-4-memories")
     }
 

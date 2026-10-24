@@ -500,7 +500,7 @@ public final class AppModel {
     }
 
     public enum DemoJump: Sendable, Equatable {
-        case today, plusDays(Int), dayBeforeNextEvent
+        case today, plusDays(Int)
     }
 
     /// The nearest event at least two days off (so "the day before" is still ahead).
@@ -512,8 +512,18 @@ public final class AppModel {
         }.min { $0.1 < $1.1 }
     }
 
-    public var dayBeforeNextEventAvailable: Bool { nextEvent != nil }
-    public var nextEventTitle: String? { nextEvent?.title }
+    /// The demo's Act 2 button: "Fast-forward to Fri, Oct 30 (day before Leo's soccer team party)".
+    public var fastForwardLabel: String? {
+        nextEvent.map { "Fast-forward to \(StoreDay.format($0.day - 1, "EEE, MMM d")) (day before \($0.title))" }
+    }
+
+    /// Act 2: the day before the next event, on a new trip that starts signed out (back on Welcome to sign in).
+    public func fastForward() async {
+        guard let event = nextEvent else { return }
+        try? await backend.setDemoDate(StoreDay.iso(event.day - 1))
+        try? await backend.startTrip()                          // a new trip: the member is signed out
+        await finishTrip()                                      // ...and the cart waits on Welcome
+    }
 
     public func jumpDemoDate(to jump: DemoJump) async {
         let base = backend.cart.demoDate.flatMap(StoreDay.day(iso:)) ?? StoreDay.day(clock())
@@ -521,9 +531,6 @@ public final class AppModel {
         switch jump {
         case .today: target = nil
         case .plusDays(let n): target = base + n
-        case .dayBeforeNextEvent:
-            guard let event = nextEvent else { return }
-            target = event.day - 1
         }
         try? await backend.setDemoDate(target.map(StoreDay.iso))
     }

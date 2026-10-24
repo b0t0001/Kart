@@ -52,10 +52,8 @@ struct DebugPanel: View {
                         row("Today", id: "debug.date.today") { await world.model.jumpDemoDate(to: .today) }
                         row("+1 day", id: "debug.date.plus1") { await world.model.jumpDemoDate(to: .plusDays(1)) }
                         row("+1 week", id: "debug.date.plus7") { await world.model.jumpDemoDate(to: .plusDays(7)) }
-                        if let title = world.model.nextEventTitle {
-                            row("Day before \(title)", id: "debug.date.beforeEvent") {
-                                await world.model.jumpDemoDate(to: .dayBeforeNextEvent)
-                            }
+                        if let label = world.model.fastForwardLabel {     // Act 2: a new trip, back on Welcome
+                            row(label, id: "debug.date.beforeEvent") { await world.model.fastForward() }
                         }
                     }
                 }

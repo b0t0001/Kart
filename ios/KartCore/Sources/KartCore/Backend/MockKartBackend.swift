@@ -179,6 +179,21 @@ public final class MockKartBackend: KartBackend {
         await refreshMemberProfile()
     }
 
+    /// What the agent's `save_for_later` does: products on an event's saved list, merged (the new qty wins).
+    public func saveForLater(memoryId: Int, items: [PlanItem]) async throws {
+        guard let member = cart.memberId, let index = members[member]?.memories.firstIndex(where: { $0.id == memoryId })
+        else { throw KartBackendError.noActiveTrip }
+        var saved = members[member]?.memories[index].items ?? []
+        for item in items {
+            guard let product = catalog.product(item.productId) else { throw KartBackendError.unknownProduct(item.productId) }
+            let line = SavedItem(productId: item.productId, shortName: product.shortName, qty: item.qty)
+            if let at = saved.firstIndex(where: { $0.productId == item.productId }) { saved[at] = line } else { saved.append(line) }
+        }
+        members[member]?.memories[index].items = saved
+        cart.memberRev += 1
+        await refreshMemberProfile()
+    }
+
     public func lookUpMember(_ id: String) async -> MemberLookup? {
         if let store = members[id] { return MemberLookup(exists: true, name: store.name) }
         return id == "1029" && !forgotten.contains(id) ? MemberLookup(exists: true, name: "Dylan") : MemberLookup(exists: false)

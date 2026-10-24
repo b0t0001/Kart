@@ -62,9 +62,9 @@ struct MemberContractTests {
         try await b.signIn(memberId: "1029")
         #expect(b.cart.memberId == "1029" && b.memberProfile?.member.name == "Dylan")
         #expect(b.memberProfile?.weekday == "Saturday" && b.memberProfile?.today == "2026-10-24")
-        #expect(picks(b) == [["barilla-spaghetti", "event", "Leo's soccer party · tomorrow"],
-                             ["whole-milk", "due", "every week · last Sat"],
+        #expect(picks(b) == [["whole-milk", "due", "every week · last Sat"],          // no party: it's told live
                              ["mission-tortillas", "usual", "your Saturday usual"]])
+        #expect(b.memberProfile?.memories.map(\.text) == ["Likes the Marinara here"])
     }
 
     @Test func startTripClearsMember() async throws {
@@ -77,17 +77,17 @@ struct MemberContractTests {
     @Test func fastForwardShowsSavedEventAndDueMilk() async throws {
         let b = try await backend()
         try await b.signIn(memberId: "1029")
-        try await b.remember(kind: "event", text: "Friendsgiving for 10", eventDate: "2026-10-31",
-                             items: [PlanItem(productId: "barilla-spaghetti", reason: "Friendsgiving", qty: 3)])
+        try await b.remember(kind: "event", text: "Leo's soccer team party, pasta for 12", eventDate: "2026-10-31",
+                             items: [PlanItem(productId: "barilla-spaghetti", reason: "Leo", qty: 3),
+                                     PlanItem(productId: "rao-marinara", reason: "Leo", qty: 2)])
         try await b.applyManualEvent(.added, productId: "whole-milk", resolving: nil)
         _ = try await b.checkout(provider: "simulated")
         try await b.setDemoDate("2026-10-30")
         try await b.startTrip()
         try await b.signIn(memberId: "1029")
         #expect(b.memberProfile?.today == "2026-10-30")
-        #expect(picks(b).first == ["barilla-spaghetti", "event", "Friendsgiving for 10 · tomorrow"])
+        #expect(picks(b).first == ["barilla-spaghetti", "event", "Leo's soccer team party · tomorrow"])
         #expect(picks(b).contains(["whole-milk", "due", "every week · last Sat"]))
-        #expect(b.memberProfile?.memories.first { $0.title == "Leo's soccer party" }?.isPast == true)
     }
 
     @Test func unknownNumberIsANewMember() async throws {
@@ -162,11 +162,11 @@ struct MemberContractTests {
     @Test func forYouHidesPicksOnPlanAndAfterDismiss() async throws {
         let t = try await rig()
         await t.model.startTrip(memberId: "1029")
-        #expect(t.model.forYouPicks.map(\.productId) == ["barilla-spaghetti", "whole-milk", "mission-tortillas"])
+        #expect(t.model.forYouPicks.map(\.productId) == ["whole-milk", "mission-tortillas"])
         try await t.backend.setPlan([PlanItem(productId: "whole-milk", reason: "milk")])
-        #expect(t.model.forYouPicks.map(\.productId) == ["barilla-spaghetti", "mission-tortillas"])
+        #expect(t.model.forYouPicks.map(\.productId) == ["mission-tortillas"])
         await t.model.addPick(t.model.forYouPicks[0])
-        #expect(t.backend.cart.plan.contains { $0.productId == "barilla-spaghetti" && $0.reason == "for you" })
+        #expect(t.backend.cart.plan.contains { $0.productId == "mission-tortillas" && $0.reason == "for you" })
         t.model.dismissForYou()
         #expect(t.model.forYouPicks.isEmpty && t.model.savedEvent == nil)
     }
@@ -175,23 +175,39 @@ struct MemberContractTests {
         let t = try await rig()
         await t.model.startTrip(memberId: "1029")
         try await t.backend.setPlan([PlanItem(productId: "whole-milk", reason: "milk")])
+        let b = t.backend
+        try await b.remember(kind: "event", text: "Leo's soccer team party, pasta for 12", eventDate: "2026-10-31",
+                             items: [PlanItem(productId: "barilla-spaghetti", reason: "Leo", qty: 3),
+                                     PlanItem(productId: "rao-marinara", reason: "Leo", qty: 2)])
         let party = try #require(t.model.savedEvent)
-        #expect(party.title == "Leo's soccer party")
+        #expect(party.title == "Leo's soccer team party")
         await t.model.shopSavedList(party)
-        #expect(t.backend.cart.plan.map(\.productId) == ["whole-milk", "barilla-spaghetti", "rao-marinara", "french-baguette"])
-        #expect(t.backend.cart.plan.last?.reason == "Leo's soccer party" && t.model.savedEvent == nil)
+        #expect(t.backend.cart.plan.map { "\($0.productId)×\($0.qty)" } == ["whole-milk×1", "barilla-spaghetti×3", "rao-marinara×2"])
+        #expect(t.backend.cart.plan.last?.reason == "Leo's soccer team party" && t.model.savedEvent == nil)
     }
 
-    @Test func demoJumpDayBeforeNextEvent() async throws {
+    @Test func fastForwardEndsTheTripOnTheDayBeforeTheEvent() async throws {
         let t = try await rig()
         await t.model.startTrip(memberId: "1029")
-        #expect(!t.model.dayBeforeNextEventAvailable)                  // Leo's party is tomorrow: nothing to jump to
-        try await t.backend.remember(kind: "event", text: "Friendsgiving for 10", eventDate: "2026-10-31", items: [])
-        #expect(t.model.dayBeforeNextEventAvailable && t.model.nextEventTitle == "Friendsgiving for 10")
-        await t.model.jumpDemoDate(to: .dayBeforeNextEvent)
-        #expect(t.backend.cart.demoDate == "2026-10-30")
+        #expect(t.model.fastForwardLabel == nil)                        // nothing coming up yet
+        let b = t.backend
+        try await b.remember(kind: "event", text: "Leo's soccer team party, pasta for 12", eventDate: "2026-10-31",
+                             items: [PlanItem(productId: "barilla-spaghetti", reason: "Leo", qty: 3),
+                                     PlanItem(productId: "rao-marinara", reason: "Leo", qty: 2)])
+        #expect(t.model.fastForwardLabel == "Fast-forward to Fri, Oct 30 (day before Leo's soccer team party)")
+        let trip = b.cart.tripId
+        await t.model.fastForward()
+        #expect(b.cart.demoDate == "2026-10-30" && b.cart.status == .idle && t.model.screen == .welcome)
+        #expect(b.cart.memberId == nil && b.cart.tripId != trip && t.voice.stopCount == 1)   // a new trip, signed out
+    }
+
+    @Test func demoDateSteps() async throws {
+        let t = try await rig()
+        await t.model.startTrip(memberId: "1029")
         await t.model.jumpDemoDate(to: .plusDays(1))
-        #expect(t.backend.cart.demoDate == "2026-10-31")
+        #expect(t.backend.cart.demoDate == "2026-10-25")
+        await t.model.jumpDemoDate(to: .plusDays(7))
+        #expect(t.backend.cart.demoDate == "2026-11-01")
         await t.model.jumpDemoDate(to: .today)
         #expect(t.backend.cart.demoDate == nil)
     }
@@ -214,7 +230,7 @@ struct MemberContractTests {
     let welcome = try await run(.memberWelcome)
     #expect(welcome.cart.status == .idle && welcome.cart.memberMemoryOn)
     let member = try await run(.member)
-    #expect(member.cart.memberId == "1029" && member.memberProfile?.picks.count == 3)
+    #expect(member.cart.memberId == "1029" && member.memberProfile?.picks.count == 2)
     #expect(member.transcript.contains { $0.text.hasPrefix("Welcome back, Dylan!") })
     #expect(TripRouter.screen(cart: member.cart, transcript: member.transcript) == .shopping)
 }
@@ -306,8 +322,11 @@ struct MemberContractTests {
     }
 
     @Test func greetsAMemberWithTheirEvent() async throws {
-        let (_, brain) = try await setup()
-        #expect(brain.greeting() == "Welcome back, Dylan! Leo's soccer party is tomorrow. Want me to put up the list?")
+        let (b, brain) = try await setup()
+        #expect(brain.greeting() == "Welcome back, Dylan! What are we shopping for today?")
+        try await b.remember(kind: "event", text: "Leo's soccer team party, pasta for 12", eventDate: "2026-10-25",
+                             items: [PlanItem(productId: "barilla-spaghetti", reason: "Leo", qty: 3)])
+        #expect(brain.greeting() == "Welcome back, Dylan! Leo's soccer team party is tomorrow. Want the list you saved?")
         let (_, guest) = try await setup(member: nil)
         #expect(guest.greeting() == DemoScript.greeting)
     }
@@ -318,18 +337,25 @@ struct MemberContractTests {
         #expect(await brain.respond(to: "Hey Kart") != "Any fun plans coming up I can help you shop for?")
     }
 
-    @Test func friendsgivingIsRememberedWithAList() async throws {
+    @Test func leosPartyIsRememberedThenItsListSaved() async throws {
         let (b, brain) = try await setup()
-        #expect(await brain.respond(to: "I'm hosting Friendsgiving next Saturday, ten people.")
-                == "Ooh, fun. I'll remember that, and I started a list for it.")
-        let saved = try #require(b.memberProfile?.memories.first { $0.title == "Friendsgiving" })
-        #expect(saved.eventDate == "2026-10-31" && saved.items?.map(\.productId) == ["barilla-spaghetti", "rao-marinara", "french-baguette"])
+        #expect(await brain.respond(to: "Oh, next Saturday is Leo's soccer team party, we'll need pasta for 12.")
+                == "Got it, I'll remember Leo's party on Saturday. Want me to save a list for it?")
+        let party = try #require(b.memberProfile?.memories.first { $0.title == "Leo's soccer team party" })
+        #expect(party.eventDate == "2026-10-31" && party.items == nil)
+        #expect(await brain.respond(to: "Yes.")
+                == "Saved: three boxes of spaghetti and two jars of marinara for Leo's soccer team party.")
+        let saved = try #require(b.memberProfile?.memories.first { $0.id == party.id })
+        #expect(saved.items?.map { "\($0.productId)×\($0.qty)" } == ["barilla-spaghetti×3", "rao-marinara×2"])
     }
 
     @Test func yesShopsTheSavedList() async throws {
         let (b, brain) = try await setup()
-        #expect(await brain.respond(to: "Yes") == "Done. Your Leo's soccer party list is up.")
-        #expect(Set(b.cart.plan.map(\.productId)) == ["barilla-spaghetti", "rao-marinara", "french-baguette"])
+        try await b.remember(kind: "event", text: "Leo's soccer team party, pasta for 12", eventDate: "2026-10-25",
+                             items: [PlanItem(productId: "barilla-spaghetti", reason: "Leo", qty: 3),
+                                     PlanItem(productId: "rao-marinara", reason: "Leo", qty: 2)])
+        #expect(await brain.respond(to: "Yes").hasPrefix("Done, it's on your list."))
+        #expect(Set(b.cart.plan.map(\.productId)) == ["barilla-spaghetti", "rao-marinara"])
     }
 }
 

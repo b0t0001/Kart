@@ -26,7 +26,7 @@ public enum DemoScenario: String, CaseIterable, Sendable {
             return
         case .member:
             try await backend.signIn(memberId: "1029")
-            try await backend.appendTranscript(.agent, "Welcome back, Dylan! Leo's soccer party is tomorrow. Want the pasta list?")
+            try await backend.appendTranscript(.agent, "Welcome back, Dylan! What are we shopping for today?")
             try await backend.appendTranscript(.user, "Hey Kart")
             try await backend.appendTranscript(.agent, "Any fun plans coming up I can help you shop for?")
         case .shopping, .deal, .confirm:

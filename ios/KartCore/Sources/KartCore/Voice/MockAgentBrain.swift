@@ -6,8 +6,9 @@ import Foundation
     private static let yesWords: Set<String> = ["yes", "yeah", "yep", "sure", "ok", "okay"]
     private static let noWords: Set<String> = ["no", "nope", "nah"]
 
-    /// Member memory beta: the trip Kart already asked its one question on.
+    /// Member memory beta: the trip Kart already asked its one question on, and the event waiting for its list.
     private var askedOnTrip: UUID?
+    private var listFor: Int?
 
     public init(backend: any KartBackend) {
         self.backend = backend
@@ -18,9 +19,9 @@ import Foundation
         guard backend.cart.memberId != nil, let profile = backend.memberProfile else { return DemoScript.greeting }
         let welcome = profile.member.name.map { "Welcome back, \($0)!" }
             ?? (profile.member.trips == 0 && profile.memories.isEmpty ? "Nice to meet you!" : "Welcome back!")
-        if let event = savedEvent(profile), let days = event.daysUntil {
-            let when = days == 0 ? "today" : days == 1 ? "tomorrow" : "in \(days) days"
-            return "\(welcome) \(event.title) is \(when). Want me to put up the list?"
+        if let event = savedEvent(profile), let days = event.daysUntil, (0...2).contains(days) {
+            let when = days == 0 ? "today" : days == 1 ? "tomorrow" : "in 2 days"
+            return "\(welcome) \(event.title) is \(when). Want the list you saved?"
         }
         return "\(welcome) What are we shopping for today?"
     }
@@ -41,13 +42,21 @@ import Foundation
                 askedOnTrip = backend.cart.tripId
                 return "Any fun plans coming up I can help you shop for?"
             }
-            if words.contains("friendsgiving"), let mock = backend as? MockKartBackend,
-               let today = StoreDay.day(iso: profile.today) {
-                try? await mock.remember(kind: "event", text: "Friendsgiving, ten people", eventDate: StoreDay.iso(today + 7),
-                                         items: [PlanItem(productId: "barilla-spaghetti", reason: "Friendsgiving", qty: 3),
-                                                 PlanItem(productId: "rao-marinara", reason: "Friendsgiving", qty: 3),
-                                                 PlanItem(productId: "french-baguette", reason: "Friendsgiving", qty: 2)])
-                return "Ooh, fun. I'll remember that, and I started a list for it."
+            if words.contains("leos") && words.contains("party"), let mock = backend as? MockKartBackend,
+               let today = StoreDay.day(iso: profile.today) {          // Act 1: "next Saturday is Leo's soccer team party"
+                let weekday = ((today % 7) + 11) % 7                  // 0 = Sunday … 6 = Saturday
+                let nextSaturday = today + ((6 - weekday + 7) % 7 == 0 ? 7 : (6 - weekday + 7) % 7)
+                try? await mock.remember(kind: "event", text: "Leo's soccer team party, pasta for 12",
+                                         eventDate: StoreDay.iso(nextSaturday), items: [])
+                listFor = mock.memberProfile?.memories.first { $0.title == "Leo's soccer team party" }?.id
+                return "Got it, I'll remember Leo's party on Saturday. Want me to save a list for it?"
+            }
+            if !words.isDisjoint(with: Self.yesWords), let memoryId = listFor, let mock = backend as? MockKartBackend {
+                listFor = nil                                          // "Yes": pasta for 12, the Parmesan left to its card
+                try? await mock.saveForLater(memoryId: memoryId, items: [
+                    PlanItem(productId: "barilla-spaghetti", reason: "Leo's party", qty: 3),
+                    PlanItem(productId: "rao-marinara", reason: "Leo's party", qty: 2)])
+                return "Saved: three boxes of spaghetti and two jars of marinara for Leo's soccer team party."
             }
         }
 
@@ -78,7 +87,7 @@ import Foundation
                 let listed = Set(backend.cart.plan.map(\.productId))     // "Want me to put up the list?" "Yes."
                 try? await backend.setPlan(backend.cart.plan + (event.items ?? []).filter { !listed.contains($0.productId) }
                     .map { PlanItem(productId: $0.productId, reason: event.title, qty: $0.qty) })
-                return "Done. Your \(event.title) list is up."
+                return backend.cart.nextStep.map { "Done, it's on your list. First stop: \($0)." } ?? "Done, it's on your list."
             }
             return "Okay."
         }
