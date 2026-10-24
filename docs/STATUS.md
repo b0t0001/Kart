@@ -23,6 +23,13 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 afternoon · real-cart fixes, voice on the iPad, nudges beta
+- **CV on the real cart:** basket-floor ROI; rolling no longer fools it; tall items are billed after a 3 s stillness recheck; a big shift is only believed if it explains the change; light and shadow aren't items; judging runs off the camera loop. James's first 5 real clips pass as regression tests. 123 tests.
+- **Voice on Dylan's iPad works end to end** (iPadOS 26.7.1): ~1.5–2 s to Kart's first words. Hold-to-talk for loud floors, quiet on chatter, quantities with stock caps, and yes/no to deals by voice.
+- **Quantity nudges (BETA, flag `quantity_nudges`, OFF by default; rollback tag `stable-pre-nudges`):** backend live on hosted (verified identical with the flag off), the agent says the nudges, the iPad UI is in progress. CV `claude_count` beta is also off by default.
+- **Merchant console** = demo-setup housekeeping. smoke.py 19/19 on hosted.
+- **Waiting on Dylan:** the props/catalog decision; whether to add two saved store layouts (mini store vs real store).
+
 ### 2026-10-24 late morning · real-Claude tests pass; voice is unblocked
 - **Merchant agent on hosted with real Claude: PASS** (`7cfd108`, rerun with `merchant/smoke.py`). All four prompts: preview → Confirm → log → Undo. The parmesan beat reaches the cart 0.1 s after Confirm; owner message → preview takes 3–6 s.
 - **CV on hosted:** end-to-end 2/2. The real-Claude identifier got 12/12 on printed-name crops, median 1.6 s (an upper bound; the real props come after enrollment). 87 tests.
