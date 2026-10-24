@@ -7,7 +7,7 @@ Built overnight 2026-10-24, on the manager's relay of Dylan's message: "can you 
 1. **Look at it:** open `ios/build/shots/` (scenario screenshots) and `ios/build/shots/rehearsal/` (the automated §1.1 rehearsal, the live merchant beat, the failure paths).
 2. **Run it in the simulator:** `cd ios && xcodegen generate && open Kart.xcodeproj`, then Run on "iPad Pro 13-inch (M5)". With `ios/Config.xcconfig` present (`ios/scripts/make-config.sh` writes it from the repo `.env`), the app talks to the local Supabase. Without it, it uses the built-in mock. Three-finger long press opens the demo controls.
 3. **Create the voice pieces** (nothing secret was created overnight; see "What you need to create" below), then launch with `-KartVoice line`.
-4. **On a real iPad:** sign the `Kart` target with your Apple ID (Xcode → Signing & Capabilities → Team), set the bundle id if `com.kart.app` is taken, and run. The real iPad needs the **hosted** Supabase (https), or an ATS exception for the Mac's LAN IP.
+4. **On a real iPad (iPadOS 26):** plug it in and trust the Mac, turn on Developer Mode (Settings → Privacy & Security), pick it as the run destination in Xcode, and Run. `scripts/make-config.sh` fills in your signing team from the keychain (override with `KART_TEAM_ID` in `.env`). If Xcode says `com.kart.app` isn't available, change the bundle id in `project.yml`. For the backend: on the same Wi-Fi as the Mac, use the local Supabase at `http://<Mac name>.local:54321` (the app allows local-network http). Anywhere else, use the hosted project (https) or the offline demo mode.
 5. **Say yes or no to the rulings** below; each is a one-line change if you disagree.
 
 ## What you need to create

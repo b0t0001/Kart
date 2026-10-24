@@ -29,6 +29,7 @@ targets:
         KartSupabaseAnonKey: $(SUPABASE_ANON_KEY)
         KartCartID: $(CART_ID)
         NSMicrophoneUsageDescription: Kart listens so you can shop hands-free. The mic stays off until you tap Start.
+        NSLocalNetworkUsageDescription: Kart talks to the store's computer on this Wi-Fi to keep your cart in sync.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
     scheme:
