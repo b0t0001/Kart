@@ -1,8 +1,25 @@
 # KART edge-case catalog
 
-**Why this exists:** our moat is handling the messy real world seamlessly. This catalog collects real-world scenarios from every workstream (cameras, voice and iPad, backend, member memory, hardware), with what happens today and the fix. It doubles as **judge Q&A prep**: "what happens if…?" should always have an answer here.
+**Focus (Dylan, 2026-10-24): real-world SHOPPER INTERACTIONS with Kart.** Editing the list Kart makes, changing plans, constraints, questions mid-trip, and fixing mistakes, all handled seamlessly. That's the moat, and it doubles as **judge Q&A prep** ("what if I say…?"). The technical robustness work is in the appendix.
 
-Owned by the manager. Status: **handled** · **partly** · **not yet**. Cost: S / M / L.
+Owned by the manager. Status: **good** · **weak** · **broken** · **building**. Cost: S / M / L.
+
+## 1. Shopper interaction scenarios (main focus)
+The voice chat is running each scenario against the real model and recording Kart's actual reply. Results go here.
+
+| Group | Scenarios | Status |
+|---|---|---|
+| **List editing** | add · remove · "make it two" · swap brand ("no, I prefer Rao's") · not sold here → in-store substitute, then a nearby store · sold out → substitute · already on the list or in the cart · remove an item after accepting its deal | **building** |
+| **Changing plans** | "actually make it tacos" (keep what's in the cart) · "and breakfast for tomorrow" · "it's 6 people now" · "skip the garlic bread, we have some" | testing |
+| **Constraints** | gluten-free / vegetarian / no dairy · "keep it under $30" · "what's cheapest?" | testing |
+| **Questions mid-trip** | where is X · what's next · how much is X · what's on sale · what's in my cart · my total · did you get the chips · quick recipe help | testing |
+| **Conversation control** | say that again · slower · stop talking / be quiet · off-topic question · mumbled request · Spanish | testing |
+| **Cart mismatches** | "that's the wrong salsa" · "I put that back" · "I'm not buying that anymore" · personal item in the basket → **"that's mine"** | testing / building |
+| **Member moments** (beta) | "not me" after the greeting · "forget me" · "don't remember that" · "what did I buy last time?" · "what do you know about me?" | building (member chat) |
+
+---
+
+# Appendix: robustness (already covered or in progress)
 
 ## Already handled (proven by tests, clips or rehearsals)
 | Scenario | How KART handles it | Evidence |
