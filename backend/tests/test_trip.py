@@ -8,7 +8,7 @@ import psycopg
 import pytest
 
 import kartdb
-from test_cart import PASTA, add, current
+from test_cart import PASTA, add, current, remove
 
 
 # ── P2 status ──
@@ -204,11 +204,17 @@ def test_final_script_route(cart):
     assert row["suggestion"] is None                                          # no garlic bread: off the list
     row = add(cart, "barilla-spaghetti")                                       # the 2nd box: "too much"
     assert row["nudge"]["kind"] == "over" and row["next_step"] == "Aisle 4 → Parmesan, $1 off"
-    cart("dismiss_nudge", p_action="ok")
+    row = cart("dismiss_nudge", p_action="ok")                                # "No."
+    assert row["next_step"] == "Aisle 4 → Parmesan, $1 off"
+    row = remove(cart, "barilla-spaghetti")                                    # put back: a removal doesn't move
+    assert row["next_step"] == "Aisle 4 → Parmesan, $1 off"                   # the shopper (still Aisle 6)
+    assert row["location"]["section"] == "A6"
     row = add(cart, "kirkland-parmesan")
     assert row["next_step"] == "Aisle 9 → Kids' Scissors"                     # then the far aisle
     row = add(cart, "kids-scissors")
     assert row["next_step"] == "All done → Checkout"
+    row = remove(cart, "kids-scissors")                                        # "changing your mind"
+    assert row["next_step"] == "Aisle 9 → Kids' Scissors"
 
 
 LEOS_PARTY = [{"product_id": "barilla-spaghetti", "qty": 3, "basis": "pasta for 12", "meal": "Leo's soccer team party"},

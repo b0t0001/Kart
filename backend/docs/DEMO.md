@@ -78,11 +78,12 @@ goes to the **nearest** aisle next (ahead wins a tie). Next stop through the scr
 2. Spaghetti in → card **"Parmesan is $1 off in Aisle 4. Want it?"**.
 3. "Yes" → **"Aisle 6 → Marinara"** (finish this aisle first).
 4. Marinara in → **"Aisle 4 → Parmesan, $1 off"** (4 is nearer than 9).
-5. 2nd spaghetti box in → "too much" nudge; next stop unchanged.
+5. 2nd spaghetti box in → "too much" nudge; "No." and the box goes back out: next stop unchanged.
 6. Parmesan in → **"Aisle 9 → Kids' Scissors"**.
-7. Scissors in → **"All done → Checkout"**.
+7. Scissors in → **"All done → Checkout"**; taken back out ("changing your mind") → "Aisle 9 → Kids' Scissors".
 
-So the walk is 6 → 4 → 9. The Hershey's bar stays in the catalog (Aisle 7) but is out of the demo.
+So the walk is 6 → 4 → 9. "Where the shopper is" is the aisle of the last item **added** (or "I'm at
+aisle 5"); removals, nudge answers and list edits don't move it. The Hershey's bar stays in the catalog (Aisle 7) but is out of the demo.
 
 ## Meal A: pasta night for 4 (headline)
 
