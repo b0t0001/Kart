@@ -54,4 +54,5 @@ so Claude stages a change in one call without searching first. Then it writes a 
 Measured against the hosted project at effort `low`: about **3.4 to 6.4 s** from the owner's message
 to the preview card, and **about 0.1 s** from Confirm to the carts row. `merchant/smoke.py` re-measures
 it. It's safe while others use the database: it undoes its own changes, never touches cart 7 or the
-change log, and checks that the catalog still matches `store.json`.
+change log, and checks that it left prices, aisles, deals and products as it found them. Stock isn't
+compared, since other teams' checkouts change it.

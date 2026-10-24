@@ -9,8 +9,10 @@ the owner's "parmesan $3 off" must switch that cart's suggestion. Prints latency
 PASS/FAIL. Costs a few cents.
 
 Safe to run while other teams rehearse on the same database: it undoes exactly what it changed,
-never touches cart 7 or the change log, and finally checks the catalog matches data/store.json.
---reset also runs `db.py reset-demo` at the end (only when nobody else is using the database).
+never touches cart 7 or the change log, and finally checks that this run left prices, aisles,
+deals and the product list as it found them. Stock isn't compared: other teams' checkouts change
+it on a shared database. --reset also runs `db.py reset-demo` at the end (only when nobody else
+is using the database) and then compares everything, stock included, to data/store.json.
 """
 
 from __future__ import annotations
@@ -67,9 +69,14 @@ def check(name: str, ok: bool, detail: str = "") -> bool:
     return ok
 
 
-def safe(fn, ch) -> bool:
+def catalog_shape(store) -> dict:
+    """What this run must leave as it found it: each listed product's price, aisle and running deal."""
+    return {r["id"]: (float(r["price"]), r["section"], r["deal_id"]) for r in store.catalog()}
+
+
+def safe(fn, *args) -> bool:
     try:
-        return bool(fn(ch))
+        return bool(fn(*args))
     except Exception as e:  # a surprising shape from Claude fails the check, not the run
         print(f"  check raised {type(e).__name__}: {e}")
         return False
@@ -93,6 +100,7 @@ def run_case(console, store, prompt, tool, verify_applied, verify_undone, follow
     for extra in out["staged"]:
         if extra["id"] != ch["id"]:
             console.post(f"/api/changes/{extra['id']}/cancel")
+    before = {r["id"]: r for r in store.catalog()}       # what Undo must restore
     code, applied = console.post(f"/api/changes/{ch['id']}/confirm")
     check(f"{prompt}: Confirm applies", code == 200 and applied["status"] == "applied" and safe(verify_applied, ch),
           f"HTTP {code}" + ("" if code == 200 else f": {applied.get('detail')}"))
@@ -101,7 +109,7 @@ def run_case(console, store, prompt, tool, verify_applied, verify_undone, follow
     log = {c["id"]: c for c in store.changes(10)}
     check(f"{prompt}: in change log", log.get(ch["id"], {}).get("status") == "applied")
     code, _ = console.post(f"/api/changes/{ch['id']}/undo")
-    check(f"{prompt}: Undo restores", code == 200 and safe(verify_undone, ch), f"HTTP {code}")
+    check(f"{prompt}: Undo restores", code == 200 and safe(verify_undone, ch, before), f"HTTP {code}")
     return latency
 
 
@@ -113,6 +121,7 @@ def main() -> None:
 
     store = open_store()
     console = Console(args.url, store)
+    start = catalog_shape(store)
     p = store.product
     sunday = next_sunday_end()
     latencies = {}
@@ -121,20 +130,20 @@ def main() -> None:
         console, store, "Spaghetti $1 off through Sunday", "create_deal",
         lambda ch: (p("barilla-spaghetti")["deal_label"] == "$1 off"
                     and p("barilla-spaghetti")["deal_ends_at"].astimezone(STORE_TZ).date() == sunday.date()),
-        lambda ch: p("barilla-spaghetti")["deal_id"] is None)
+        lambda ch, before: p("barilla-spaghetti")["deal_id"] == before["barilla-spaghetti"]["deal_id"])
     latencies["out of Rao's"] = run_case(
         console, store, "We're out of Rao's", "set_stock",
         lambda ch: p("rao-marinara")["stock"] == 0,
-        lambda ch: p("rao-marinara")["stock"] == 24)
+        lambda ch, before: p("rao-marinara")["stock"] == before["rao-marinara"]["stock"])
     latencies["move parmesan"] = run_case(
         console, store, "Move parmesan to aisle 6", "move_product",
         lambda ch: p("kirkland-parmesan")["section"] == "A6",
-        lambda ch: p("kirkland-parmesan")["section"] == "A4")
+        lambda ch, before: p("kirkland-parmesan")["section"] == before["kirkland-parmesan"]["section"])
     latencies["add basil"] = run_case(
         console, store, "Add fresh basil, $2.49, produce aisle", "add_product",
         lambda ch: (bool(p(ch["args"]["id"])) and float(p(ch["args"]["id"])["price"]) == 2.49
                     and p(ch["args"]["id"])["section"] == "A1" and bool(ch["args"]["vision_hint"])),
-        lambda ch: p(ch["args"]["id"]) is None,
+        lambda ch, before: p(ch["args"]["id"]) is None,
         follow_up="20 in stock, go ahead and stage it")
 
     # The live beat on a throwaway cart
@@ -174,18 +183,22 @@ def main() -> None:
             store.q(f"delete from {table} where cart_id = %s", [cart])
         store.q("delete from carts where cart_id = %s", [cart])
 
-    seed = json.loads(STORE_JSON.read_text())
-    live = {r["id"]: r for r in store.catalog()}
-    drift = [q["id"] for q in seed["products"]
-             if q["id"] not in live or float(live[q["id"]]["price"]) != q["price"]
-             or live[q["id"]]["section"] != q["section"] or live[q["id"]]["stock"] != q["stock"]]
-    running = {r["deal_id"] for r in live.values() if r["deal_id"]}
-    check("catalog matches data/store.json afterwards",
-          not drift and running == {d["id"] for d in seed["deals"]} and len(live) == len(seed["products"]),
-          f"drift={drift}, deals={sorted(running)}" if drift or running != {d["id"] for d in seed["deals"]} else "")
+    end = catalog_shape(store)
+    changed = sorted(k for k in start.keys() | end.keys() if start.get(k) != end.get(k))
+    check("this run left prices, aisles, deals and products as it found them", not changed,
+          f"changed: {changed}" if changed else "stock not compared: shared with other teams' checkouts")
     if args.reset:
         subprocess.run(RESET, check=True, capture_output=True)
         print("  reset-demo done")
+        seed = json.loads(STORE_JSON.read_text())
+        live = {r["id"]: r for r in store.catalog()}
+        drift = [q["id"] for q in seed["products"]
+                 if q["id"] not in live or float(live[q["id"]]["price"]) != q["price"]
+                 or live[q["id"]]["section"] != q["section"] or live[q["id"]]["stock"] != q["stock"]]
+        running = {r["deal_id"] for r in live.values() if r["deal_id"]}
+        check("after reset-demo the catalog matches data/store.json (stock included)",
+              not drift and running == {d["id"] for d in seed["deals"]} and len(live) == len(seed["products"]),
+              f"drift={drift}, deals={sorted(running)}" if drift else "")
 
     print("\n════ latency per prompt (owner message → reply with staged preview)")
     for k, v in latencies.items():
