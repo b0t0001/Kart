@@ -6,13 +6,18 @@
 
 **Architecture:** Snapshot-diff ("version B"). Cheap motion detection waits until both cameras have been still for 1 s. Then each camera compares its frame with its previous still frame and finds changed blobs, and one combined decision is made per settle. Added items are identified by an on-device few-shot gallery (CNN embeddings), with Claude Haiku as the fallback. Removed items are matched against the cart's own memory. Everything is driven tick by tick (`Pipeline.step(frames)`), so live cameras, recordings, and synthetic test scenes all run the same code.
 
-**Tech Stack:** Python ≥ 3.11, OpenCV ≥ 4.6, NumPy, onnxruntime (+ `onnx` for the one-time model fetch), `anthropic` SDK, python-dotenv, pytest. The server uses the stdlib `http.server`, and the backend HTTP calls use stdlib `urllib`.
+**Tech Stack:** Python 3.12 (Mac) / 3.13 (Pi), OpenCV 4.10, NumPy, onnxruntime (+ `onnx` for the one-time model fetch), `anthropic` SDK, python-dotenv, pytest. The server uses the stdlib `http.server`, and the backend HTTP calls use stdlib `urllib`.
 
 **Spec:** `pi/docs/specs/2026-10-24-cv-pipeline-design.md`
 
 ## Global Constraints
 
-- **Python and OpenCV:** code must run on **Python 3.11** (Pi OS Bookworm), so use no 3.12-only syntax. Every module starts with `from __future__ import annotations`. The Mac dev venv is `/opt/homebrew/bin/python3.12 -m venv pi/.venv`. Use only OpenCV ≥ 4.6 core APIs (no contrib modules).
+- **Python and OpenCV:** the Pi (measured, `hardware/README.md`) runs Debian 13 trixie with **Python 3.13.5**. Its `~/venv` has OpenCV 4.10.0 and numpy 2.2.4 from apt, plus onnxruntime 1.31.0, anthropic 2.3.0 and httpx 0.28.1. Code must run on Python 3.12 (Mac) and 3.13 (Pi). Every module starts with `from __future__ import annotations`. The Mac dev venv is `/opt/homebrew/bin/python3.12 -m venv pi/.venv`. Use only OpenCV core APIs present in 4.10 (no contrib modules).
+- **Cameras (measured):** 2× Logitech Brio 101 on USB 2.0.
+  - Addressed by `/dev/v4l/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.1:1.0-video-index0` (cam0) and `...usb-0:1.3:1.0-video-index0` (cam1).
+  - **Never set `CAP_PROP_BUFFERSIZE`**: it halves the fps on this driver. Keep the default buffers, with a grab thread holding only the latest frame.
+  - Frames from the first `camera_warmup_s` (3.0) seconds after each open are dark and slow while auto exposure settles, and are never handed out.
+- **`pi/requirements-pi.txt`** is installed by `hardware/setup_pi.sh` (plus pytest), so keep it accurate: it lists only pip packages that aren't apt-provided.
 - **Git:** only create, edit, or commit files under `pi/` and `tools/`. The checkout is shared with another session on `main`, so commit with explicit paths (`git add <paths> && git commit -m "..." -- <paths>`) and never `git add -A`/`.`. End every commit message with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - **Secrets** come only from the env file `KART_ENV_FILE` or `<repo>/.env`, never from tracked files. Variable names: `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `CART_ID`.
 - **`tools/*.py` are thin CLIs.** Logic lives in `pi/kartcv/`. Each tool starts with `sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pi"))`.
@@ -86,7 +91,7 @@ Deviation from spec §4 layout: the synthetic generator lives in `pi/kartcv/synt
   - `Config` dataclass. Fields and defaults are in Global Constraints, plus:
     - `cart_id="7"`, `cameras: list[int | str] = [0]`, `width=1280`, `height=720`, `fps=30`
     - `catalog_path="data/store.json"`, `state_dir="pi/state"`, `gallery_dir="pi/gallery"`, `model_path="pi/models/features.onnx"` (all relative to `REPO_ROOT` unless absolute)
-    - `debug_view=False`, `max_shift_px=4.0`
+    - `debug_view=False`, `max_shift_px=4.0`, `camera_warmup_s=3.0`
     - `features="auto"`: `"auto"` = ONNX if the model file exists, otherwise the histogram; `"hist"` = always the histogram. Tests use `"hist"` so results don't depend on whether the model was downloaded.
     - `Config.path(name) -> Path` resolves one of the path fields.
   - `load_config(path: Path | None = None, overrides: dict | None = None) -> Config`. Precedence: defaults < JSON file < overrides. Unknown keys are ignored with a `logging` warning; tuple fields accept JSON lists.
@@ -204,7 +209,7 @@ def test_event_json_shape():
 Run: `pi/.venv/bin/python -m pytest pi/tests -q`
 Expected: FAIL / ERROR with `ModuleNotFoundError: No module named 'kartcv'`.
 
-- [ ] **Step 4: Implement `config.py`, `http.py`, `catalog.py`, `events.py` and `config.example.json`** per the Interfaces block. `config.example.json` holds every Config field with its default, except `cameras`, which is `["/dev/v4l/by-path/REPLACE-cam0", "/dev/v4l/by-path/REPLACE-cam1"]`.
+- [ ] **Step 4: Implement `config.py`, `http.py`, `catalog.py`, `events.py` and `config.example.json`** per the Interfaces block. `config.example.json` holds every Config field with its default, except `cameras`, which gets the two measured Pi by-path strings from Global Constraints (cam0 = USB port 1.1, cam1 = 1.3).
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
@@ -231,9 +236,10 @@ git commit -m "pi: scaffold kartcv package with config, catalog, events" -- pi/p
 - Produces:
   - `Frame(image: np.ndarray, ts: float, cam: int)` dataclass. `image` is BGR uint8.
   - `Tick = dict[int, Frame | None]`.
-  - `LiveCamera(cam: int, source: int | str, width: int, height: int, fps: int)`:
-    - A daemon thread grabs continuously (`CAP_PROP_FOURCC` MJPG; width, height, fps).
-    - `.read() -> Frame | None` returns the latest frame, or `None` if there is no fresh frame within 2 s.
+  - `LiveCamera(cam: int, source: int | str, width: int, height: int, fps: int, warmup_s: float = 3.0, capture_factory=None)`:
+    - A daemon thread grabs continuously (`CAP_PROP_FOURCC` MJPG; width, height, fps; **never `CAP_PROP_BUFFERSIZE`**).
+    - `capture_factory(source)` defaults to `cv2.VideoCapture(source, cv2.CAP_V4L2)` on Linux and `cv2.VideoCapture(source)` elsewhere.
+    - `.read() -> Frame | None` returns the latest frame. It returns `None` during the first `warmup_s` after each (re)open, or when there's no fresh frame within 2 s.
     - `.healthy: bool`. `.close()`. Reopens every 5 s after failure.
   - `FrameListSource(cam: int, frames: list[Frame])`: `.read()` returns the next frame, then `None`. `.exhausted: bool`.
   - `save_tick(root: Path, tick: Tick) -> None`: writes `root/cam{k}/{round(ts*1000):013d}.jpg`.
@@ -267,7 +273,25 @@ def test_live_camera_bad_source_is_unhealthy_not_crashing():
     time.sleep(0.3)
     assert cam.read() is None and not cam.healthy
     cam.close()
+
+class FakeCap:
+    def __init__(self, src): self.props = {}
+    def isOpened(self): return True
+    def set(self, prop, val): self.props[prop] = val; return True
+    def read(self): time.sleep(0.01); return True, np.full((720, 1280, 3), 100, np.uint8)
+    def release(self): pass
+
+def test_live_camera_warmup_and_no_buffersize():
+    caps = []
+    cam = LiveCamera(0, "/dev/fake", 1280, 720, 30, warmup_s=0.3, capture_factory=lambda s: caps.append(FakeCap(s)) or caps[-1])
+    time.sleep(0.1); assert cam.read() is None                    # still warming up
+    time.sleep(0.4); f = cam.read()
+    assert f is not None and f.image.shape == (720, 1280, 3) and cam.healthy
+    assert cv2.CAP_PROP_BUFFERSIZE not in caps[0].props and cv2.CAP_PROP_FOURCC in caps[0].props
+    cam.close()
 ```
+
+(Imports for this file add `import cv2`.)
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -1021,7 +1045,7 @@ git commit -m "pi: event sinks with persistent ordered outbox" -- pi/kartcv/sink
     5. `decide` → for each decision: save crops `state_dir/crops/<event_id>_cam<k>.jpg` (after crop for added, before crop for removed). Fill `View.crop_path`, call `apply_decision`, and build the `Event` (`crops` relative to `state_dir.parent`). Every non-`moved` decision is sent to all sinks.
   - `.request_reset()` is thread-safe and applied on the next complete tick. `.status() -> dict` with keys `state`, `cameras` (`{cam: {"last_ts": float | None}}`), `items`, `last_events` (≤ 10 event dicts). `.latest_frames() -> dict[int, np.ndarray]`. `.cart` attribute.
   - `main(argv: list[str] | None = None) -> int` with subcommands:
-    - `live [--config P] [--debug-view]`: 10 Hz loop over `LiveCamera`s; Ctrl-C exits 0.
+    - `live [--config P] [--debug-view]`: 10 Hz loop over `LiveCamera(..., warmup_s=cfg.camera_warmup_s)`s; Ctrl-C exits 0.
     - `replay DIR [--config P] [--no-cloud] [--state DIR] [--gallery DIR] [--catalog FILE]`: runs `iter_ticks(load_recording(DIR))`, prints events, returns 0.
     - `reset`: POST `http://127.0.0.1:<port>/reset`; if refused, deletes `cart.json` and `empty_cam*.jpg` and prints `next start will reset`.
   - `build(cfg, env, args) -> tuple[Pipeline, list[Sink]]`:
@@ -1277,9 +1301,9 @@ git commit -m "pi: control server, debug view, trip_id reset watcher" -- pi/kart
     - Stops after `rounds` added events and returns the count.
   - `tools/enroll.py PRODUCT_ID [--rounds 5] [--config P]`: live cameras feed ticks at 10 Hz; it prints `put PRODUCT_ID in the cart` first.
   - `pi/README.md`, plain English for whoever runs `pi/` on the Pi (the hardware chat or the operator):
-    - **Install:** `sudo apt install -y python3-opencv python3-numpy python3-venv v4l-utils`; `python3 -m venv --system-site-packages ~/venv`; `~/venv/bin/pip install -r pi/requirements-pi.txt`; `~/venv/bin/python tools/fetch_model.py`.
-    - **Configure:** copy `pi/config.example.json` → `pi/config.json`, run `tools/snap.py --list`, and paste the two `-video-index0` `/dev/v4l/by-path/...` paths into `cameras`.
-    - **Run command for autostart:** `~/venv/bin/python pi/main.py live`, from the repo root, restarted on exit. The hardware chat owns the systemd unit.
+    - **Install and autostart** live in `hardware/`: `hardware/setup_pi.sh` (venv + `pi/requirements-pi.txt`, repo at `~/kart`) and `hardware/install_service.sh` (systemd running `pi/main.py live`). Link those; don't repeat them.
+    - **CV-specific setup:** run `~/venv/bin/python tools/fetch_model.py` once. Copy `pi/config.example.json` → `pi/config.json`; its camera paths are already the measured ports, so check them with `tools/snap.py --list` only if the USB cables moved. Put the shared env file at `~/kart/.env`.
+    - **Manual run:** `~/venv/bin/python pi/main.py live [--debug-view]` from `~/kart`; stop the service first with `sudo systemctl stop kart-cv`.
     - The spec §14 milestone checks, each as "do this → you should see that".
     - The enrollment how-to.
     - Two warnings: the cart floor needs a solid mat, and the cart must be empty on first start (or run `python pi/main.py reset` with it empty).
@@ -1333,7 +1357,7 @@ git commit -m "pi: product enrollment through the real pipeline, run guide" -- p
 ## Hardware follow-up (not part of this plan's execution)
 
 These happen once the Pi and Brios are set up, following `pi/README.md`. The hardware chat owns Pi setup and the autostart unit.
-1. Install the dependencies and set the camera paths in `pi/config.json`.
+1. Run `hardware/setup_pi.sh`, then `tools/fetch_model.py`, and copy `pi/config.example.json` → `pi/config.json` (the camera paths are already the measured ports).
 2. Check milestones 1–3 on the real cart.
 3. Enroll the demo props from `data/store.json`.
 4. Record replay clips with `tools/record.py` and tune `change_thresh`, `empty_thresh`, and `local_min_score`/`local_min_margin` against them.

@@ -24,8 +24,12 @@ Two webcams on the cart watch items go **in** and **out**. Each time something i
 
 ## 3. Hardware assumptions
 
-- Raspberry Pi 4, Raspberry Pi OS Lite 64-bit (Bookworm, Python 3.11), headless.
-- 2× Logitech Brio 100 in **diagonally opposite corners, looking down** into the basket. Requested at **MJPEG 1280×720**. On the Pi, cameras are addressed by `/dev/v4l/by-path/...` (stable per USB port), not `/dev/videoN` (which can swap on reboot).
+- Raspberry Pi 4 (3.7 GB RAM) running Debian 13 trixie 64-bit, **Python 3.13.5**, with OpenCV 4.10 from apt. These were measured on the real Pi; details are in `hardware/README.md`.
+- 2× **Logitech Brio 101** (USB 2.0) in **diagonally opposite corners, looking down** into the basket.
+  - Requested at **MJPEG 1280×720**. Measured 13–15 fps each in dim light and 30 in bright light, with both streaming.
+  - Addressed by `/dev/v4l/by-path/...` (cam0 = USB port 1.1, cam1 = 1.3), not `/dev/videoN` (which can swap on reboot).
+  - `CAP_PROP_BUFFERSIZE` is never set, because it halves the fps on this driver.
+  - Frames from the first ~3 s after a camera opens are ignored while auto exposure settles.
 - **A solid mat or cardboard lines the cart floor.** A wire-mesh bottom shows the store floor sliding by and breaks snapshot comparison.
 - Development happens on the Mac first (built-in camera + recordings + synthetic scenes); the same code runs on the Pi.
 
@@ -202,8 +206,8 @@ A small HTTP server on port **8080** (stdlib, one thread):
 
 - `pi/config.json` (copied from `config.example.json`): camera sources, resolution, every threshold above, cart id, sink settings, model names. Missing keys fall back to code defaults.
 - Secrets come from the shared env file, never the repo: `KART_ENV_FILE` if set, otherwise `<repo root>/.env`. Variables: `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `CART_ID`. Names are listed in `pi/.env.example`.
-- **Mac:** a venv in `pi/.venv` on Python 3.11+, with `opencv-python-headless`, `numpy`, `onnxruntime`, `anthropic`, `httpx`, `python-dotenv`, `pytest`.
-- **Pi:** `~/venv` created with `--system-site-packages` (apt `python3-opencv`), plus the same pip packages minus OpenCV. Code must work on OpenCV ≥ 4.6.
+- **Mac:** a venv in `pi/.venv` on Python 3.12, with `opencv-python-headless`, `numpy`, `onnxruntime`, `onnx`, `anthropic`, `python-dotenv`, `pytest`. Backend HTTP calls use stdlib `urllib`.
+- **Pi:** `hardware/setup_pi.sh` builds `~/venv` (`--system-site-packages`, apt OpenCV/NumPy) and installs `pi/requirements-pi.txt` (`onnxruntime`, `onnx`, `anthropic`, `python-dotenv`) plus pytest. The hardware lane owns install and autostart. Code must work on Python 3.12 and 3.13 and on OpenCV 4.10.
 - `pi/.gitignore` ignores `state/`, `models/`, `.venv/`, `config.json`, and test output.
 
 ## 12. Upgrade seam for version A (floor map)
