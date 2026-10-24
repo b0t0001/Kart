@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any, AsyncIterator
 
 from line.events import AgentSendCustom, AgentSendText, CallEnded, CallStarted, UserCustomSent, UserTurnEnded, UserTurnStarted
@@ -13,6 +14,7 @@ from .lines import (DECLINED_LINE, KEEP_LINE, NUDGE_OK_LINE, accepted_line, nudg
 from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
+ADD_THEN_DEAL_SECONDS = 3.0                         # a deal this soon after an add says "Got the X." first
 SPEAKING_EVENTS = {"suggestion", "nudge", "deal_changed", "cart_changed", "ui_action"}
 
 
@@ -58,6 +60,7 @@ class KartAgent:
         self._catalog: list[dict[str, Any]] = []
         self._speaking = False
         self._pending: str | None = None            # a proactive line that arrived while Kart was talking
+        self._last_add: tuple[dict[str, Any], float] | None = None   # the latest "added" event, until it's said
         self._offer: dict[str, Any] | None = None   # the deal Kart just asked about, until it's answered
         self._nudge: dict[str, Any] | None = None   # the quantity nudge Kart just said (v0.12 beta)
         self._last_asked: str | None = None         # "offer" or "nudge": a plain answer goes to the latest question
@@ -87,6 +90,8 @@ class KartAgent:
                 self._said.add(key)
             if meta.get("type") == "suggestion" and self._digest:   # mid walk-through: Kart is reading them out
                 return False
+            if meta.get("type") == "cart_changed" and meta.get("change") == "added":
+                self._last_add = (meta, time.monotonic())   # a paired deal right behind it says "Got the X" first
             if meta.get("type") == "suggestion":
                 self._offer = meta                       # "Want it?" can now be answered with a plain yes or no
                 self._last_asked = "offer"
@@ -203,6 +208,14 @@ class KartAgent:
                 await asyncio.sleep(self.coalesce_seconds)   # a paired deal suggestion arriving now replaces this line
             await self._refresh()
             line = proactive_line(meta, self._catalog, self._plan, self._items, self._meal, self._nudges)
+            if meta.get("type") == "cart_changed" and meta.get("change") == "added":
+                self._last_add = None                    # said (or nothing to say): a later deal stands alone
+            elif line and meta.get("type") == "suggestion" and self._last_add:
+                add, at = self._last_add
+                self._last_add = None
+                got = proactive_line(add, self._catalog, self._plan, self._items, self._meal, self._nudges)
+                if got and time.monotonic() - at < ADD_THEN_DEAL_SECONDS:   # the deal cancelled the add's own line
+                    line = f"{got} {line}"
             if line:
                 async for out in self._say([line], interruptible=False):
                     yield out

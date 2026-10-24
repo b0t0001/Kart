@@ -87,6 +87,31 @@ async def test_an_added_line_waits_a_beat_for_a_paired_deal():
     assert said == ["Got the Rao's Sauce."] and time.monotonic() - started >= 0.2   # a suggestion in that window cancels it
 
 
+async def test_a_deal_on_the_heels_of_an_add_says_both():
+    agent, backend = make()
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "done": True}]
+    backend.cart["items"] = [{"product_id": "barilla-spaghetti", "qty": 1}]
+    added = UserCustomSent(metadata={"type": "cart_changed", "change": "added", "product_id": "barilla-spaghetti"})
+    offer = UserCustomSent(metadata={"type": "suggestion", "deal_id": "d-parm-3off", "product_id": "kirkland-parmesan",
+                                     "text": "Parmesan is $1 off in Aisle 4. Want it?"})
+    await agent._refresh()                                              # the call already knows the list
+    assert agent.run_filter(added) and agent.run_filter(offer)          # the offer cancels the add's line in Line
+    assert await run(agent, offer) == ["Got the Spaghetti. Parmesan is $1 off in Aisle 4. Want it?"]
+
+
+async def test_a_deal_long_after_an_add_is_said_alone():
+    agent, backend = make()
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "done": True}]
+    backend.cart["items"] = [{"product_id": "barilla-spaghetti", "qty": 1}]
+    await agent._refresh()
+    agent.run_filter(UserCustomSent(metadata={"type": "cart_changed", "change": "added", "product_id": "barilla-spaghetti"}))
+    agent._last_add = (agent._last_add[0], agent._last_add[1] - 10)  # the add was ten seconds ago
+    offer = UserCustomSent(metadata={"type": "suggestion", "deal_id": "d-parm-3off", "product_id": "kirkland-parmesan",
+                                     "text": "Parmesan is $1 off in Aisle 4. Want it?"})
+    assert agent.run_filter(offer)
+    assert await run(agent, offer) == ["Parmesan is $1 off in Aisle 4. Want it?"]
+
+
 async def test_no_greeting_when_rejoining_a_trip_in_progress():
     agent, backend = make()
     backend.cart["plan"] = [{"product_id": "rao-marinara", "reason": "pasta", "done": False}]
