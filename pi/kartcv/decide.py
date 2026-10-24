@@ -36,6 +36,7 @@ class Decision:
     views: dict[int, View] = field(default_factory=dict)  # after-crop fingerprints (added / moved)
     instance_id: str | None = None                       # removed / moved
     awaiting: dict[int, list] = field(default_factory=dict)  # added: cameras whose view was held back
+    count: int = 1  # added: identical units in this blob (claude_count beta); one event and one unit each
 
 
 def _iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
@@ -121,7 +122,7 @@ def _decide_added(added: dict[int, list[Blob]], identifier, features) -> list[De
         blobs = sorted((bs[0] for bs in added.values()), key=lambda b: -b.area_frac)
         ident = identifier.identify([b.after_core for b in blobs], cloud_crops=[b.after for b in blobs])
         return [Decision("added", ident.product_id, ident.confidence, ident.method, ident.label,
-                         sorted(b.cam for b in blobs), blobs, _views(blobs, features))]
+                         sorted(b.cam for b in blobs), blobs, _views(blobs, features), count=max(1, ident.count))]
 
     idents = {id(b): identifier.identify([b.after_core], cloud_crops=[b.after]) for bs in added.values() for b in bs}
     by_pid: dict[str, dict[int, list[Blob]]] = {}
@@ -144,7 +145,7 @@ def _decide_added(added: dict[int, list[Blob]], identifier, features) -> list[De
     for conf, pid, unit in candidates[:n]:
         first = idents[id(unit[0])]
         decisions.append(Decision("added", pid, conf, first.method, first.label,
-                                  sorted(b.cam for b in unit), unit, _views(unit, features)))
+                                  sorted(b.cam for b in unit), unit, _views(unit, features), count=max(1, first.count)))
         used.update(id(b) for b in unit)
 
     busiest = max(added, key=lambda c: len(added[c]))

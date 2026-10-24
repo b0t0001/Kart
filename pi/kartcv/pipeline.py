@@ -252,30 +252,37 @@ class Pipeline:
             if d.kind == "moved":
                 apply_decision(self.cart, d)
                 continue
-            ev = Event.new(cart_id=self.cfg.cart_id, type=d.kind, product_id=d.product_id,
-                           confidence=round(float(d.confidence), 3), method=d.method, label=d.label,
-                           cameras=list(d.cameras), crops=[])
-            if d.kind == "removed" and d.product_id is None:
-                inst = self.cart.instances.get(d.instance_id)
-                ev.resolves_event_id = (inst.event_id or None) if inst else None
-            for b in d.blobs:
-                name = f"{ev.event_id}_cam{b.cam}.jpg"
-                cv2.imwrite(str(self.crops_dir / name), b.after if d.kind == "added" else b.before)
-                rel = f"{self.state_dir.name}/crops/{name}"
-                ev.crops.append(rel)
-                if b.cam in d.views:
-                    d.views[b.cam].crop_path = rel
-            # Queue the event (outbox) before changing memory: if the process dies in between, the
-            # backend still gets the event and memory catches up on the next settle, not the reverse.
-            for s in self.sinks:
-                try:
-                    s.send(ev)
-                except Exception:  # one broken sink must not stop the cart
-                    log.exception("sink %s failed", type(s).__name__)
-            inst = apply_decision(self.cart, d)
-            if d.kind == "added" and inst is not None:
-                self.cart.set_event_id(inst.instance_id, ev.event_id)
-            with self._lock:
-                self._last_events.append(ev.to_json())
-            events.append(ev)
+            crops: list[str] = []
+            for unit in range(d.count if d.kind == "added" else 1):  # N identical units: N events, N units
+                events.append(self._emit(d, crops))
         return events
+
+    def _emit(self, d, crops: list[str]) -> Event:
+        """One event and one unit of memory for decision d. The first unit saves the crops; the rest reuse them."""
+        ev = Event.new(cart_id=self.cfg.cart_id, type=d.kind, product_id=d.product_id,
+                       confidence=round(float(d.confidence), 3), method=d.method, label=d.label,
+                       cameras=list(d.cameras), crops=list(crops))
+        if d.kind == "removed" and d.product_id is None:
+            inst = self.cart.instances.get(d.instance_id)
+            ev.resolves_event_id = (inst.event_id or None) if inst else None
+        for b in d.blobs if not crops else []:
+            name = f"{ev.event_id}_cam{b.cam}.jpg"
+            cv2.imwrite(str(self.crops_dir / name), b.after if d.kind == "added" else b.before)
+            rel = f"{self.state_dir.name}/crops/{name}"
+            ev.crops.append(rel)
+            crops.append(rel)
+            if b.cam in d.views:
+                d.views[b.cam].crop_path = rel
+        # Queue the event (outbox) before changing memory: if the process dies in between, the
+        # backend still gets the event and memory catches up on the next settle, not the reverse.
+        for s in self.sinks:
+            try:
+                s.send(ev)
+            except Exception:  # one broken sink must not stop the cart
+                log.exception("sink %s failed", type(s).__name__)
+        inst = apply_decision(self.cart, d)
+        if d.kind == "added" and inst is not None:
+            self.cart.set_event_id(inst.instance_id, ev.event_id)
+        with self._lock:
+            self._last_events.append(ev.to_json())
+        return ev

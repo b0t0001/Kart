@@ -38,7 +38,8 @@ class CartMemory:
 
     # --- mutations (each one saves) ---
     def add(self, product_id: str | None, label: str, views: dict[int, View], awaiting: dict | None = None) -> Instance:
-        inst = Instance(uuid.uuid4().hex, product_id, label, utc_now_iso(), dict(views),
+        views = {c: View(v.cam, tuple(v.box), list(v.fingerprint), v.crop_path) for c, v in views.items()}  # own copies
+        inst = Instance(uuid.uuid4().hex, product_id, label, utc_now_iso(), views,
                         awaiting={int(c): [tuple(b) for b in bs] for c, bs in (awaiting or {}).items()})
         self.instances[inst.instance_id] = inst
         self.save()

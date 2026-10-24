@@ -13,6 +13,9 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 MAX_CROPS = 2  # one per camera: smaller upload, faster answer
+MAX_COUNT = 6
+COUNT_HINT = (" count is how many identical units of that product the photos show together (1 if you are "
+              "unsure or the units differ).")
 MAX_SIDE = 512
 
 SYSTEM = (
@@ -29,6 +32,7 @@ class CloudAnswer:
     product_id: str | None
     confidence: float
     label: str
+    count: int = 1  # identical units in the photos (only asked for with claude_count)
 
 
 def _jpeg_b64(crop: np.ndarray) -> str:
@@ -41,14 +45,15 @@ def _jpeg_b64(crop: np.ndarray) -> str:
 
 
 class CloudIdentifier:
-    def __init__(self, catalog, model: str, timeout_s: float, client=None):
+    def __init__(self, catalog, model: str, timeout_s: float, client=None, count: bool = False):
         self.catalog = catalog
+        self.count = count
         self.model = model
         self.timeout_s = timeout_s
         self._client = client if client is not None else anthropic.Anthropic()
 
     def _schema(self) -> dict:
-        return {
+        schema = {
             "type": "object",
             "properties": {
                 "product_id": {"type": "string", "enum": self.catalog.ids() + ["unknown"]},
@@ -58,6 +63,10 @@ class CloudIdentifier:
             "required": ["product_id", "confidence", "label"],
             "additionalProperties": False,
         }
+        if self.count:
+            schema["properties"]["count"] = {"type": "integer", "enum": list(range(1, MAX_COUNT + 1))}
+            schema["required"].append("count")
+        return schema
 
     def identify(self, crops: list[np.ndarray]) -> CloudAnswer:
         """Never raises: any failure is an unknown answer, so the cart loop can't stall or crash."""
@@ -68,7 +77,7 @@ class CloudIdentifier:
             resp = self._client.with_options(timeout=self.timeout_s, max_retries=0).messages.create(
                 model=self.model,
                 max_tokens=1024,
-                system=SYSTEM,
+                system=SYSTEM + (COUNT_HINT if self.count else ""),
                 messages=[{"role": "user", "content": images + [text]}],
                 output_config={"effort": "low", "format": {"type": "json_schema", "schema": self._schema()}},
             )
@@ -92,6 +101,12 @@ class CloudIdentifier:
             label = str(data.get("label", ""))
         except (ValueError, TypeError, AttributeError):
             return CloudAnswer(None, 0.0, "error: bad answer")
+        n = 1
+        if self.count:
+            try:
+                n = min(MAX_COUNT, max(1, int(data.get("count", 1))))
+            except (TypeError, ValueError):
+                n = 1
         if pid == "unknown" or self.catalog.get(pid) is None:
             return CloudAnswer(None, conf, label or "unknown")
-        return CloudAnswer(pid, conf, label)
+        return CloudAnswer(pid, conf, label, n)

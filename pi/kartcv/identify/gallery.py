@@ -17,6 +17,7 @@ class Gallery:
         self.features = features
         self._paths: list[Path] = []
         self._pids: list[str] = []
+        self._areas: list[int] = []  # crop size (px) of each photo: one enrolled unit's footprint
         self._vecs = np.zeros((0, 0), np.float32)
 
     @property
@@ -27,25 +28,26 @@ class Gallery:
         cache: dict[str, tuple[float, np.ndarray]] = {}
         if self._index.exists():
             data = np.load(self._index, allow_pickle=False)
-            if str(data["features"]) == self.features.name:
-                for rel, mtime, vec in zip(data["paths"], data["mtimes"], data["vectors"]):
-                    cache[str(rel)] = (float(mtime), vec)
-        paths, pids, vecs = [], [], []
+            if str(data["features"]) == self.features.name and "areas" in data:
+                for rel, mtime, vec, area in zip(data["paths"], data["mtimes"], data["vectors"], data["areas"]):
+                    cache[str(rel)] = (float(mtime), vec, int(area))
+        paths, pids, vecs, areas = [], [], [], []
         for p in sorted(self.root.glob("*/*.jpg")):
             if p.parent.name.startswith("."):
                 continue
             rel, mtime = p.relative_to(self.root).as_posix(), p.stat().st_mtime
             if rel in cache and cache[rel][0] == mtime:
-                vec = cache[rel][1]
+                vec, area = cache[rel][1], cache[rel][2]
             else:
                 img = cv2.imread(str(p), cv2.IMREAD_COLOR)
                 if img is None:
                     continue
-                vec = self.features(img)
+                vec, area = self.features(img), img.shape[0] * img.shape[1]
             paths.append(p)
             pids.append(p.parent.name)
             vecs.append(vec)
-        self._paths, self._pids = paths, pids
+            areas.append(area)
+        self._paths, self._pids, self._areas = paths, pids, areas
         self._vecs = np.stack(vecs).astype(np.float32) if vecs else np.zeros((0, 0), np.float32)
         self._save_index()
 
@@ -57,6 +59,7 @@ class Gallery:
                  paths=np.array([p.relative_to(self.root).as_posix() for p in self._paths]),
                  mtimes=np.array([p.stat().st_mtime for p in self._paths]),
                  vectors=self._vecs,
+                 areas=np.array(self._areas),
                  features=np.array(self.features.name))
 
     def add(self, product_id: str, crop: np.ndarray) -> Path:
@@ -68,12 +71,18 @@ class Gallery:
         vec = self.features(cv2.imread(str(path), cv2.IMREAD_COLOR))  # embed what load() will see (post-JPEG)
         self._paths.append(path)
         self._pids.append(product_id)
+        self._areas.append(crop.shape[0] * crop.shape[1])
         self._vecs = np.vstack([self._vecs, vec[None]]) if self._vecs.size else vec[None].astype(np.float32)
         self._save_index()
         return path
 
     def products(self) -> set[str]:
         return set(self._pids)
+
+    def typical_area(self, product_id: str) -> float | None:
+        """Median crop size (px) of one enrolled unit of this product, or None if not enrolled."""
+        a = [ar for p, ar in zip(self._pids, self._areas) if p == product_id]
+        return float(np.median(a)) if a else None
 
     def leave_one_out(self) -> dict:
         """How well the enrolled photos identify each other (each photo scored against all the others).

@@ -61,7 +61,7 @@ def build(cfg, env: dict, args, cams: list[int], send_events: bool = True, backg
 
     cloud = None
     if env.get("ANTHROPIC_API_KEY") and not getattr(args, "no_cloud", False):
-        cloud = CloudIdentifier(catalog, cfg.cloud_model, cfg.cloud_timeout_s)
+        cloud = CloudIdentifier(catalog, cfg.cloud_model, cfg.cloud_timeout_s, count=cfg.claude_count)
     else:
         log.warning("local-only mode: no Claude fallback (ANTHROPIC_API_KEY unset or --no-cloud)")
     identifier = HybridIdentifier(gallery, cloud, catalog, cfg)

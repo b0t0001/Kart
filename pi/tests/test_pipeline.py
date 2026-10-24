@@ -303,3 +303,33 @@ def test_background_judging_keeps_order_add_then_remove(tmp_path):
     p.close()
     assert [(e.type, e.product_id) for e in sink.events] == [("added", "green-bag"), ("removed", "green-bag")]
     assert len(p.cart.instances) == 0
+
+
+def _counting_pipeline(tmp_path, flag):
+    from kartcv.identify.cloud import CloudAnswer
+    from kartcv.identify.hybrid import HybridIdentifier
+    w = world(tmp_path)
+    w.cfg.claude_count = flag
+
+    class ThreeCloud:  # Claude sees three identical units in one clump
+        def identify(self, crops):
+            return CloudAnswer("green-bag", 0.9, "three bags", 3)
+
+    sink = MemorySink()
+    ident = HybridIdentifier(None, ThreeCloud(), w.catalog, w.cfg)
+    return Pipeline(w.cfg, [0, 1], ident, w.features, [sink], tmp_path / "state"), sink
+
+
+def test_claude_count_bills_each_unit_in_a_clump_and_removes_them_all(tmp_path):  # flag on
+    p, sink = _counting_pipeline(tmp_path, True)
+    sc = Script(Scene()).still(1.0).drop(RED)
+    assert run(p, sc) == [("added", "green-bag")] * 3
+    assert len({e.event_id for e in sink.events}) == 3 and len(p.cart.instances) == 3
+    n = len(sc.ticks)
+    sc.take("red-box")
+    assert run(p, sc, n) == [("removed", "green-bag")] * 3 and len(p.cart.instances) == 0
+
+
+def test_claude_count_off_bills_one_unit(tmp_path):  # flag off: the stable behavior
+    p, _ = _counting_pipeline(tmp_path, False)
+    assert run(p, Script(Scene()).still(1.0).drop(RED)) == [("added", "green-bag")]

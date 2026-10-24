@@ -112,3 +112,38 @@ def test_hybrid_policy():
     assert hyb([("kirkland-parmesan", 0.6)], None) == Identification(None, 0.6, "none", "Kirkland Parmigiano Reggiano")
     assert hyb([("gone-product", 0.95), ("kirkland-parmesan", 0.6)], None) == \
         Identification(None, 0.6, "none", "Kirkland Parmigiano Reggiano")
+
+
+def ans_n(pid, n, conf=0.9):
+    return json.dumps({"product_id": pid, "confidence": conf, "label": "x", "count": n})
+
+
+def test_count_is_off_by_default():  # claude_count: false = the stable behavior
+    fc = FakeClient(ans_n("rao-marinara", 3))
+    a = CloudIdentifier(CAT, "m", 6.0, client=fc).identify([CROP])
+    assert "count" not in fc.kwargs["output_config"]["format"]["schema"]["properties"] and a.count == 1
+
+
+def test_count_when_enabled():
+    fc = FakeClient(ans_n("rao-marinara", 3))
+    a = CloudIdentifier(CAT, "m", 6.0, client=fc, count=True).identify([CROP])
+    props = fc.kwargs["output_config"]["format"]["schema"]["properties"]
+    assert props["count"]["enum"] == [1, 2, 3, 4, 5, 6] and "count" in fc.kwargs["output_config"]["format"]["schema"]["required"]
+    assert a == CloudAnswer("rao-marinara", 0.9, "x", 3)
+    assert CloudIdentifier(CAT, "m", 6.0, client=FakeClient(ans_n("rao-marinara", 40)), count=True).identify([CROP]).count == 6
+    assert CloudIdentifier(CAT, "m", 6.0, client=FakeClient(ans_n("rao-marinara", "many")), count=True).identify([CROP]).count == 1
+
+
+class SizedGallery(FakeGallery):
+    def typical_area(self, pid):
+        return 30_000  # enrolled single-unit crops are ~4x smaller than CROP (120,000 px)
+
+
+def test_oversized_blob_asks_claude_for_the_count_only_with_the_flag():
+    from kartcv.config import Config as C
+    c = FakeCloud(CloudAnswer("kirkland-parmesan", 0.9, "two wedges", 2))
+    on = HybridIdentifier(SizedGallery([("kirkland-parmesan", 0.95)]), c, CAT, C(claude_count=True)).identify([CROP])
+    assert (on.product_id, on.method, on.count, c.calls) == ("kirkland-parmesan", "cloud", 2, 1)
+    c2 = FakeCloud(CloudAnswer("kirkland-parmesan", 0.9, "two wedges", 2))
+    off = HybridIdentifier(SizedGallery([("kirkland-parmesan", 0.95)]), c2, CAT, C()).identify([CROP])
+    assert (off.method, off.count, c2.calls) == ("local", 1, 0)
