@@ -98,7 +98,7 @@ def _combined_line(items: list[dict[str, Any]], catalog: list[dict[str, Any]], m
     if not parts:
         return None
     listed = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
-    return f"Before you go: you still need {listed}{f' for {meal}' if meal else ''}."
+    return f"Before you go: you still need {listed}{f' for {meal}' if meal else ''}. Want to grab them?"
 
 
 def _nudge_line(event: dict[str, Any], catalog: list[dict[str, Any]], meal: str | None) -> str | None:
@@ -153,7 +153,7 @@ NUDGE_OK_LINE = "Got it."
 _KEEP = {"keep it", "keep", "keep them", "keep both", "keeping it", "i'll keep it", "i'll keep them", "yes keep it",
          "yeah keep it", "i want it", "i want them"}
 _NUDGE_OK = {"ok", "okay", "got it", "gotcha", "i'll put it back", "put it back", "putting it back", "no",
-             "nope", "nah", "fine", "right", "my bad", "oops", "never mind", "it's fine"}
+             "nope", "nah", "fine", "right", "my bad", "oops", "never mind", "it's fine", "no thanks", "no thank you"}
 _SKIP = {"skip it", "skip", "skip that", "skip them", "skip those"}
 _FETCH = ("go get it", "go get them", "i'll get it", "i'll go get it", "i'll grab it", "let me get it", "let me grab it",
           "go back", "i'll go back", "get it", "get them")

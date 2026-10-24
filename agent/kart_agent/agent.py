@@ -116,6 +116,8 @@ class KartAgent:
             if nudge_reply:                              # "keep it" / "got it": dismiss_nudge, no Claude round
                 await self._caption("user", text)
                 nudge, self._nudge = self._nudge, None
+                if nudge_reply == "ok" and nudge.get("items"):  # "no thanks" to the checkout list: skip them all
+                    nudge_reply = "skip"
                 await run_tool("dismiss_nudge", {"action": nudge_reply}, ctx)   # shop: the backend goes back to shopping
                 line = KEEP_LINE if nudge_reply == "keep" else NUDGE_OK_LINE
                 if nudge_reply == "shop":                    # short at checkout: say where to go

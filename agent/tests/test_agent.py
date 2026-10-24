@@ -273,3 +273,14 @@ async def test_the_agent_knows_when_the_cart_has_the_nudge_beta():
     agent.coalesce_seconds = 0
     assert await run(agent, UserCustomSent(metadata={"type": "cart_changed", "change": "added",
                                                      "product_id": "barilla-spaghetti"})) == []
+
+
+
+async def test_no_thanks_to_the_checkout_list_skips_it():
+    agent, backend = make()
+    combined = {"type": "nudge", "product_id": "rao-marinara", "kind": "under", "have": 0, "need": 1, "text": "x",
+                "items": [{"product_id": "rao-marinara", "have": 0, "need": 1, "aisle": "Aisle 6"},
+                          {"product_id": "kirkland-parmesan", "have": 0, "need": 1, "aisle": "Aisle 4"}]}
+    agent.run_filter(UserCustomSent(metadata=combined))
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="No thanks.")])) == ["Got it."]
+    assert [p["p_action"] for name, p in backend.calls if name == "dismiss_nudge"] == ["skip"]

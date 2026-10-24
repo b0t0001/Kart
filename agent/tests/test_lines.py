@@ -93,4 +93,5 @@ def test_the_combined_checkout_nudge_is_said_as_one_list():
                 "items": [{"product_id": "barilla-spaghetti", "have": 0, "need": 1, "aisle": "Aisle 6"},
                           {"product_id": "kirkland-parmesan", "have": 0, "need": 2, "aisle": "Aisle 4"}]}
     assert proactive_line(combined, CATALOG, [], meal="pasta night for 4") == (
-        "Before you go: you still need one pound of spaghetti and two wedges of parmesan for pasta night for 4.")
+        "Before you go: you still need one pound of spaghetti and two wedges of parmesan for pasta night for 4. "
+        "Want to grab them?")
