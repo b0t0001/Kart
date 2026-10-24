@@ -2,7 +2,7 @@
 
 Built 2026-10-24 overnight, hands-off, from the plan you approved through the manager
 (`pi/docs/plans/2026-10-24-cv-pipeline.md`). Everything is in `pi/` and `tools/`, committed on `main`
-in 24 CV commits, **not pushed** (the manager handles push/pull).
+in 25 CV commits. The manager pushes `main` to GitHub (it had already pushed these by the end of the night).
 
 ## Where it stands
 
