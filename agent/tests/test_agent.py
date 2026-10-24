@@ -609,3 +609,14 @@ async def test_the_deals_question_leaves_out_deals_that_break_the_diet():
     no_dairy(agent)
     outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
     assert cards(outs) == []                                       # the only deal (Parmesan) is cheese
+
+
+async def test_a_deal_on_something_taken_off_the_list_is_not_offered():
+    drop = ToolUse("t1", "remove_from_plan", {"product_id": "kirkland-parmesan"})
+    agent, backend = make([Turn(chunks=["Sure."], tools=[drop])])
+    backend.cart["plan"] = [{"product_id": "kirkland-parmesan", "reason": "pasta", "qty": 1, "done": False}]
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="We've got parmesan at home, take it off.")])) == \
+        ["Sure.", " Took parmesan off your list."]
+    assert agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
+    assert await run(agent, UserCustomSent(metadata=PARM_OFFER)) == []     # "we have some at home": no deal on it
+    assert ("dismiss_suggestion", {"p_cart_id": "7"}) in backend.calls

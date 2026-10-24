@@ -261,6 +261,9 @@ async def _edit_plan(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> di
         result["edit"] = {"kind": "added", "what": _added(target, product), "aisle": product.get("aisle")}
     if kind in ("added", "removed", "swapped", "amount") and isinstance(ctx.get("undo"), list):
         ctx["undo"].append({"plan": before, "readback": _undo_line(kind, product, had or 1, old)})
+    if isinstance(ctx.get("skipped"), set):                 # taken off the list: no deals on it this trip
+        ctx["skipped"] |= ({product_id} if kind == "removed" else set()) | ({old["id"]} if old else set())
+        ctx["skipped"] -= {product_id} if kind in ("added", "swapped", "amount") else set()
     return {**result, "notes": [note]} if note else result
 
 
