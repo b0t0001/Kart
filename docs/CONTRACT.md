@@ -1,4 +1,4 @@
-# KART integration contract — v0.5 (DRAFT)
+# KART integration contract — v0.6 (DRAFT)
 
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
@@ -20,7 +20,10 @@ Product background: `project_context/claude_CLAUDE.md` and `project_context/clau
 | `pi/`, `tools/` | **CV** chat | Runs on the Raspberry Pi in the end; develop on the Mac first |
 | `ios/`, `agent/` | **iPad app** chat | Cart-mounted SwiftUI iPad app + Cartesia Line voice agent: navigation, cart, auto-checkout |
 | `backend/`, `data/`, `merchant/` | **Market backend** chat (Dylan is starting it) | Catalog, DB schema, RPCs, deal/route logic, and the merchant admin agent; publish `data/store.json` early, since CV needs it |
+| `hardware/` | **Hardware teammate's** chat (on his own computer, synced through GitHub) | Pi setup, autostart, camera/wiring checks; runs `pi/` on the real hardware and reports bugs |
 | `docs/CONTRACT.md`, root `.gitignore` | **Manager** | Propose changes, don't edit |
+
+**Sync:** the teammate's machine syncs through GitHub (`b0t0001/kart`, `main`). Pull before you work, push right after you commit; if a push is rejected, run `git pull --rebase` and push again. On Dylan's Mac, the manager pushes and pulls `main`.
 
 Stay inside your paths. Put ignore rules in a `.gitignore` **inside your own directory** (avoids merge conflicts). Commit only your own paths (`git commit -- <your dir>`); the manager coordinates anything that spans workstreams with the user.
 
@@ -117,7 +120,7 @@ Writers **only** use these; nobody writes `carts.items` directly.
 - LCD (later milestone): poll or subscribe to `carts` for `lcd_line1` (line 1) and format line 2 from `total` + item count, e.g. `"$42.17   3 items"`.
 - Trust & privacy: cameras point into the basket only; send crops of the changed region, never full frames with people; snapshots (optional, stretch) go to Supabase Storage bucket `snapshots/{cart_id}/{event_id}.jpg`.
 
-## 5. iPad app ↔ backend (v0.5; pending Dylan's approval of the iPad spec)
+## 5. iPad app ↔ backend (v0.6)
 
 Spec: `ios/docs/specs/2026-10-24-ipad-app-design.md`. This replaces the phone web app.
 
@@ -128,9 +131,9 @@ Spec: `ios/docs/specs/2026-10-24-ipad-app-design.md`. This replaces the phone we
 - Manual fixes ("that was the Barilla") call `apply_cart_event` with `source: "manual"` (plus `p_resolves_event_id`, P4).
 - **The LCD is deferred:** the iPad is the cart's screen and ignores `lcd_line1`. The backend can keep computing it (it's cheap), and CV should treat the Grove LCD milestone as optional/last.
 
-### 5a. Proposed by the iPad chat (P1–P9): pending Dylan's approval of the iPad spec
+### 5a. iPad chat's changes (P1–P10): ACCEPTED in v0.6
 
-All additive; nothing already built breaks. The backend can design its schema to fit them, but should only build them once the manager marks them accepted here.
+All additive; nothing already built breaks. **Accepted at the contract level (v0.6)**, so the backend builds them after the core tables and RPCs that unblock the iPad's milestone 2. P9 stays a v2 nice-to-have. Dylan still approves the iPad spec itself in that chat; if his review changes anything, the iPad chat sends the manager a delta.
 
 | # | Change | Why |
 |---|---|---|
@@ -143,6 +146,12 @@ All additive; nothing already built breaks. The backend can design its schema to
 | P7 | Supabase Edge Function `voice-token`: uses `CARTESIA_API_KEY` to return a short-lived Line token. **The backend writes it** (it owns the Supabase project); the iPad chat specifies the request and response | keeps the key off the iPad |
 | P8 | `carts.savings` + per-item `list_price`; RPC `checkout(p_cart_id, p_provider)` writes a `receipts` row (`cart_id`, `trip_id`, `total`, `savings`, `item_count`, `duration_s`, `provider`, `status`) and sets status `paid`. Payment is simulated in v1 | "saved $x", strikethrough prices, receipt |
 | P9 | (nice to have, CV, v2) upload each event's crop to `snapshots/{cart_id}/{event_id}.jpg` and set `snapshot_url` | photos on confirm cards and at checkout (Visa trust story) |
+| P10 | When the merchant changes a price or deal, the backend recomputes affected open carts (item prices, `deal_label`, `total`, `savings`, `suggestion`). Manager's suggested default: **new deals and price drops apply to items already in the cart; price increases apply only to items added after the change.** The shopper never sees the bill rise for something already in the cart. **Agreed with the iPad (extension):** a deal that ends (its `ends_at` passes) or is removed counts as a price increase, so items added while it was live keep it. One rule: *the price you saw is the price you pay.* Implementation hint: each cart line keeps the effective price at the moment it was added, and recompute sets `price = min(price at add, current effective price)` | the bill updates live, not just the catalog; shopper trust (Visa pitch line) |
+
+**iPad read/write summary (v0.5):**
+- **Reads (all realtime, anon):** the `carts` row; `cart_events` (null `product_id` → "Is this X?" cards); `products` (`id`, `name`, `short_name`, `price`, `section`, `category`, `tags`, `stock`); `deals` (`id`, `product_id`, `type`, `label`, `pairs_with`, `ends_at`); a bundled `store.json` for the map only.
+- **Writes:** `reset_cart` (new trip), `apply_cart_event` (`source: "manual"`), `set_plan` (voice agent, plus "Yes" on a deal card), and P2/P3/P5/P6/P8 once accepted.
+- The iPad follows the §5 catalog rule (live products/deals) as of its v0.4 update.
 
 ## 6. Secrets & env
 
@@ -188,4 +197,5 @@ All three feature chats work in the **same main checkout**, so stay inside your 
 - v0.2 — market backend moves to its own chat, which adds a merchant admin agent (`merchant/`). The iPad chat no longer owns `backend/` or `data/`.
 - v0.3 — §4 rewritten from CV's settled spec. `apply_cart_event` gains `p_event_id` (idempotent retries) and `p_method`. Proposed: reset via `carts.trip_id`.
 - v0.4 — `data/store.json` v1 published (`e44879c`). Additive §2 fields: `version`, `short_name`, `stock`, `ends_at`, `percent_off`. Supabase becomes the source of truth for prices and deals (the iPad reads it live). Backend accepted the `trip_id` reset and answered CV's questions. Added `SUPABASE_DB_URL`.
-- v0.5 — §5 rewritten for the native iPad app and the Cartesia Line agent. Catalog rule: names, prices, deals and stock come live from Supabase; the bundled `store.json` covers only the map and offline fallback. LCD deferred. iPad proposals P1–P9 recorded in §5a, pending Dylan's approval of the iPad spec.
+- v0.5 — §5 rewritten for the native iPad app and the Cartesia Line agent. Catalog rule: names, prices, deals and stock come live from Supabase; the bundled `store.json` covers only the map and offline fallback. LCD deferred. iPad proposals P1–P9 recorded in §5a, pending Dylan's approval of the iPad spec. Added P10 (open carts get recomputed on merchant changes), the iPad read/write summary, and the `hardware/` lane plus GitHub sync rules for the teammate's machine.
+- v0.6 — P1–P10 accepted (P9 stays v2). P10's rule, agreed with the iPad: the price you saw is the price you pay, which covers ended deals too. The manager now pushes and pulls `main` at each check-in.
