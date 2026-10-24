@@ -82,6 +82,9 @@ create table if not exists carts (
 alter table products drop constraint if exists products_short_name_check;
 alter table products add constraint products_short_name_check check (char_length(short_name) <= 16);
 
+-- store layouts (v0.15): which layout's sections are live (data/layouts/<name>.json)
+alter table store_info add column if not exists layout text not null default 'mini';
+
 -- added after first deploy (v0.12): keep existing databases in step
 alter table carts add column if not exists features jsonb not null default '{}';
 alter table carts add column if not exists nudge jsonb;

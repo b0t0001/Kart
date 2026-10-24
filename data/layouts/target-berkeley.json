@@ -1,0 +1,112 @@
+{
+  "name": "target-berkeley",
+  "placeholder": true,
+  "_note": "Target Berkeley Central, 2187 Shattuck Ave. PLACEHOLDER aisles: replace each product's aisle (and the section list) with the real ones after the shopping trip, set prices to the shelf prices paid, then set placeholder to false. Grid is rough: aisles front to back as vertical strips.",
+  "store": {
+    "name": "Target Berkeley Central",
+    "width": 20,
+    "height": 12
+  },
+  "entrance": {
+    "x": 0,
+    "y": 6
+  },
+  "sections": [
+    {
+      "id": "G1",
+      "name": "Aisle G1 · Produce",
+      "x": 2,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "G4",
+      "name": "Aisle G4 · Bakery & Bread",
+      "x": 4,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "G8",
+      "name": "Aisle G8 · Meat",
+      "x": 6,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "G12",
+      "name": "Aisle G12 · Cheese & Dairy",
+      "x": 8,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "G16",
+      "name": "Aisle G16 · Mexican & Salsa",
+      "x": 10,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "G20",
+      "name": "Aisle G20 · Snacks & Chips",
+      "x": 12,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "G23",
+      "name": "Aisle G23 · Pasta & Sauce",
+      "x": 14,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "H5",
+      "name": "Aisle H5 · Household & Batteries",
+      "x": 16,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "CK",
+      "name": "Checkout",
+      "x": 6,
+      "y": 10,
+      "w": 8,
+      "h": 1
+    }
+  ],
+  "products": {
+    "kirkland-parmesan": "G12",
+    "barilla-spaghetti": "G23",
+    "rao-marinara": "G23",
+    "ground-beef": "G8",
+    "caesar-salad-kit": "G1",
+    "french-baguette": "G4",
+    "mission-tortillas": "G4",
+    "tillamook-mexican-cheese": "G12",
+    "tostitos-salsa": "G16",
+    "taco-seasoning": "G16",
+    "queso": "G16",
+    "black-beans": "G16",
+    "jalapenos": "G16",
+    "tostitos-chips": "G20",
+    "avocados": "G1",
+    "daisy-sour-cream": "G12",
+    "bananas": "G1",
+    "whole-milk": "G12",
+    "large-eggs": "G12",
+    "kirkland-paper-towels": "H5",
+    "kirkland-batteries": "H5"
+  },
+  "prices": {}
+}

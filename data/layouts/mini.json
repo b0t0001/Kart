@@ -1,0 +1,120 @@
+{
+  "name": "mini",
+  "placeholder": false,
+  "_note": "The table-top mini store (CONTRACT §2 grid). Mirrors data/store.json's sections and each product's section.",
+  "store": {
+    "name": "Kart Demo Warehouse",
+    "width": 20,
+    "height": 12
+  },
+  "entrance": {
+    "x": 0,
+    "y": 6
+  },
+  "sections": [
+    {
+      "id": "A1",
+      "name": "Aisle 1 · Produce",
+      "x": 2,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A2",
+      "name": "Aisle 2 · Bakery & Tortillas",
+      "x": 4,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A3",
+      "name": "Aisle 3 · Meat",
+      "x": 6,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A4",
+      "name": "Aisle 4 · Cheese & Deli",
+      "x": 8,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A5",
+      "name": "Aisle 5 · Mexican & Salsa",
+      "x": 10,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A6",
+      "name": "Aisle 6 · Pasta & Sauce",
+      "x": 12,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A7",
+      "name": "Aisle 7 · Snacks & Chips",
+      "x": 14,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A8",
+      "name": "Aisle 8 · Dairy & Eggs",
+      "x": 16,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A9",
+      "name": "Aisle 9 · Household",
+      "x": 18,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "CK",
+      "name": "Checkout",
+      "x": 6,
+      "y": 10,
+      "w": 8,
+      "h": 1
+    }
+  ],
+  "products": {
+    "kirkland-parmesan": "A4",
+    "barilla-spaghetti": "A6",
+    "rao-marinara": "A6",
+    "ground-beef": "A3",
+    "caesar-salad-kit": "A1",
+    "french-baguette": "A2",
+    "mission-tortillas": "A2",
+    "tillamook-mexican-cheese": "A4",
+    "tostitos-salsa": "A5",
+    "taco-seasoning": "A5",
+    "queso": "A5",
+    "black-beans": "A5",
+    "jalapenos": "A5",
+    "tostitos-chips": "A7",
+    "avocados": "A1",
+    "daisy-sour-cream": "A8",
+    "bananas": "A1",
+    "whole-milk": "A8",
+    "large-eggs": "A8",
+    "kirkland-paper-towels": "A9",
+    "kirkland-batteries": "A9"
+  },
+  "prices": {}
+}

@@ -14,13 +14,14 @@ begin
   return recompute_cart(p_cart_id);
 end $$;
 
--- P3: "I'm at aisle 5". Accepts a section id ("A5"), "5", "aisle 5" or a section name.
+-- P3: "I'm at aisle 5". Accepts a section id ("A5", "G23"), "5", "aisle 5", "aisle G23" or a name.
 create or replace function set_location(p_cart_id text, p_section text)
 returns carts language plpgsql security definer set search_path = public as $$
 declare v_section text;
 begin
   select id into v_section from sections
   where lower(id) = lower(trim(p_section))
+     or lower(id) = lower(regexp_replace(trim(p_section), '^aisle\s*', '', 'i'))
      or id = 'A' || nullif(regexp_replace(p_section, '\D', '', 'g'), '')
      or lower(name) = lower(trim(p_section))
   order by lower(id) = lower(trim(p_section)) desc

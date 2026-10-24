@@ -8,8 +8,7 @@
 create table if not exists merchant_changes (
   id          bigserial primary key,
   created_at  timestamptz not null default now(),
-  tool        text not null check (tool in ('update_price', 'move_product', 'set_stock',
-                                            'add_product', 'create_deal', 'end_deal', 'undo')),
+  tool        text not null,           -- checked below (merchant_changes_tool_check)
   args        jsonb not null,          -- validated tool input (+ "expect": values the preview showed)
   summary     text not null,           -- the plain-English preview the owner confirmed
   request     text,                    -- what the owner said
@@ -21,6 +20,10 @@ create table if not exists merchant_changes (
   undo_of     bigint references merchant_changes(id)
 );
 create index if not exists merchant_changes_recent on merchant_changes (id desc);
+alter table merchant_changes drop constraint if exists merchant_changes_tool_check;
+alter table merchant_changes add constraint merchant_changes_tool_check
+  check (tool in ('update_price', 'move_product', 'set_stock', 'add_product', 'create_deal', 'end_deal',
+                  'undo', 'set_layout'));
 
 alter table merchant_changes enable row level security;     -- no policies: anon sees nothing
 revoke all on merchant_changes from anon, authenticated;
@@ -70,6 +73,15 @@ begin
 
   elsif ch.tool = 'end_deal' then
     update deals set active = true where id = ch.before->>'id' returning to_jsonb(deals.*) into r;
+
+  elsif ch.tool = 'set_layout' then
+    -- only if nobody moved or repriced a product since; otherwise undo would clobber that edit
+    cur := layout_snapshot();
+    if cur->'products' is distinct from ch.after->'products' or cur->'prices' is distinct from ch.after->'prices' then
+      raise exception 'stale: products were moved or repriced since the layout switch; undo those first';
+    end if;
+    perform apply_layout(ch.before);
+    r := layout_snapshot();
 
   else
     raise exception 'change % (%) cannot be undone', ch.id, ch.tool;
@@ -133,6 +145,11 @@ begin
       raise exception 'deal % is not running', a->>'deal_id';
     end if;
     update deals set active = false where id = a->>'deal_id' returning to_jsonb(deals.*) into r;
+
+  elsif ch.tool = 'set_layout' then
+    b := layout_snapshot();
+    perform apply_layout(a);
+    r := layout_snapshot();
 
   elsif ch.tool = 'undo' then
     select * into tgt from merchant_changes where id = (a->>'change_id')::bigint for update;

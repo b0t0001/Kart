@@ -74,7 +74,10 @@ def sync_catalog(conn: psycopg.Connection, store_path: Path = STORE_JSON, with_s
                    coalesce((p->>'stock')::int, 0), coalesce(p->>'vision_hint', ''), true, ord::int
             from jsonb_array_elements(%s::jsonb) with ordinality as t(p, ord)
             on conflict (id) do update set name = excluded.name, short_name = excluded.short_name,
-              price = excluded.price, section = excluded.section, category = excluded.category,
+              price = excluded.price, category = excluded.category,
+              -- store.json places products in the mini layout; another active layout owns placement
+              section = case when (select layout from store_info where id = 1) = 'mini'
+                             then excluded.section else products.section end,
               tags = excluded.tags, {stock} vision_hint = excluded.vision_hint, active = true, sort = excluded.sort
             """, [json.dumps(store["products"])]).rowcount
         d = conn.execute("""
@@ -88,6 +91,24 @@ def sync_catalog(conn: psycopg.Connection, store_path: Path = STORE_JSON, with_s
               starts_at = excluded.starts_at, ends_at = excluded.ends_at, active = true
             """, [json.dumps(store["deals"])]).rowcount
     return {"products": n, "deals": d, "stock": "from file" if with_stock else "kept (new products: from file)"}
+
+
+LAYOUTS = REPO / "data" / "layouts"
+
+
+def apply_layout(conn: psycopg.Connection, name: str, request: str = "db.py layout") -> dict:
+    """Switch to data/layouts/<name>.json in place, logged as one undoable merchant change."""
+    layout = json.loads((LAYOUTS / f"{name}.json").read_text())
+    layout = {k: v for k, v in layout.items() if not k.startswith("_") and k != "placeholder"}
+    summary = (f"Switch the store layout to {layout['name']}: {len(layout['sections'])} aisles, "
+               f"{len(layout['products'])} products placed"
+               + (f", {len(layout['prices'])} shelf prices" if layout.get("prices") else "") + ".")
+    with conn.transaction():
+        cid = conn.execute("insert into merchant_changes (tool, args, summary, request) "
+                           "values ('set_layout', %s::jsonb, %s, %s) returning id",
+                           [json.dumps(layout), summary, request]).fetchone()[0]
+        conn.execute("select merchant_apply(%s)", [cid])
+    return {"change": cid, "summary": summary}
 
 
 def catalog_is_empty(conn: psycopg.Connection) -> bool:

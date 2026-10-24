@@ -65,6 +65,25 @@ Read with the anon key (realtime on `carts`, `cart_events`, `products`, `deals`,
   not in the cart, offered once per trip; the most recently added pairing wins. A deal the store
   creates after the current suggestion was offered replaces it, so new deals reach shoppers at once.
 
+## Store layouts
+
+`data/layouts/<name>.json` holds a layout's sections (aisles on a rough grid, in walking order by
+`x`), a product → section map and optional shelf prices. There are two:
+- `mini`: the table-top store, mirroring `data/store.json`.
+- `target-berkeley`: Target Berkeley Central, for the video. Its aisles are **placeholders** until the
+  shopping trip.
+
+Commands:
+- `db.py layout <name>` switches in place. It's one undoable merchant change (`set_layout`); carts and
+  deals are untouched, and routing, `next_step`, aisle labels and the LCD follow the new sections.
+- `db.py layout --show` prints the active layout.
+
+Rules:
+- A layout must place every active product; otherwise nothing changes.
+- Undo refuses if products were moved or repriced after the switch.
+- `reset-demo` always returns to `mini`, and `sync-catalog` keeps another active layout's placement.
+- A placeholder layout won't apply to the hosted project without `--force`.
+
 ## Quantity nudges (BETA, off by default)
 
 Feature `quantity_nudges` (CONTRACT v0.12). The global default lives in `feature_flags`, seeded

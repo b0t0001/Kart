@@ -60,6 +60,21 @@ on purpose: **cards only show for items not on the list.**
 | 4 | Drop **queso, black beans, jalapeños** | each billed and ticked off |
 | 5 | *(beta)* Check out | "Before you go: you still need Sour Cream." |
 
+## The video shoot (Target Berkeley Central)
+
+1. After the trip, fill `data/layouts/target-berkeley.json`:
+   - the real aisle for each product, with the section list to match (ids like `G23`, names like
+     `"Aisle G23 · Pasta & Sauce"`, `x` in walking order);
+   - the shelf prices paid, under `prices`;
+   - `"placeholder": false`.
+2. `$P backend/db.py layout target-berkeley`: the cart now guides to the real aisles.
+3. After the shoot: Undo that change in the merchant console, or `$P backend/db.py layout mini`. The
+   pre-judging reset returns to `mini` anyway.
+
+The iPad's map draws sections from its bundled `store.json`, so it needs to load `sections` and
+`store_info` live to show Target's aisles. The text on the iPad (Next stop, aisles on list rows,
+cards) already follows the active layout.
+
 ## Optional moments
 
 - **New product with zero training:** in the console, "Add Tide detergent, $12.99, household aisle",
