@@ -12,6 +12,8 @@ public enum VoiceEvent: Sendable, Equatable {
     case suggestion(Suggestion)
     case dealChanged(Deal)
     case cardResponse(cardId: String, action: CardAction)
+    /// v0.12 beta: the cart's amount doesn't match the list (Kart says `text` once).
+    case nudge(Nudge)
     case uiAction(String)
 }
 

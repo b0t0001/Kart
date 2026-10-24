@@ -97,6 +97,16 @@ public final class SupabaseKartBackend: KartBackend {
         await refreshCart()
     }
 
+    public func dismissNudge(_ action: NudgeAction) async throws {
+        try await rest.rpc("dismiss_nudge", ["p_cart_id": .string(cartId), "p_action": .string(action.rawValue)])
+        await refreshCart()
+    }
+
+    public func setFeature(_ feature: String, on: Bool) async throws {
+        try await rest.rpc("set_feature", ["p_cart_id": .string(cartId), "p_feature": .string(feature), "p_on": .bool(on)])
+        await refreshCart()
+    }
+
     public func setStatus(_ status: TripStatus) async throws {
         guard status != .paid else { throw KartBackendError.invalidStatus }
         try await rest.rpc("set_cart_status", ["p_cart_id": .string(cartId), "p_status": .string(status.rawValue)])

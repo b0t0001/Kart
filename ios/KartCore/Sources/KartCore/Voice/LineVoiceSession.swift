@@ -83,6 +83,9 @@ public enum LineCodec {
             return ["type": "card_response", "card_id": cardId, "action": name(of: action)]
         case .uiAction(let action):
             return ["type": "ui_action", "action": action]
+        case .nudge(let nudge):
+            return ["type": "nudge", "product_id": nudge.productId, "kind": nudge.kind.rawValue, "text": nudge.text,
+                    "have": nudge.have, "need": nudge.need]
         }
     }
 
@@ -108,6 +111,7 @@ public enum LineCodec {
         case .remove: "remove"
         case .addIt: "add_it"
         case .gotIt: "got_it"
+        case .keepIt: "keep_it"
         case .retry: "retry"
         case .choose(let productId): "choose:\(productId)"
         }

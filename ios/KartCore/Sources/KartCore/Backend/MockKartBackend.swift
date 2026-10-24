@@ -28,7 +28,8 @@ public final class MockKartBackend: KartBackend {
 
     public func startTrip() async throws {
         cart = CartState(cartId: cart.cartId, tripId: UUID(), items: [], itemCount: 0, total: 0, savings: 0,
-                         plan: [], suggestedDeals: [], status: .shopping, tripStartedAt: now, updatedAt: now)
+                         plan: [], suggestedDeals: [], status: .shopping, tripStartedAt: now, updatedAt: now,
+                         features: cart.features)                 // feature switches belong to the cart, not the trip
         events = []
         transcript = []
         receipt = nil
@@ -60,12 +61,30 @@ public final class MockKartBackend: KartBackend {
 
     public func dismissSuggestion() async throws {
         cart.suggestion = nil
+        refreshNudge()                                          // an over nudge waiting behind the deal card shows now
         cart.updatedAt = now
     }
 
     public func setStatus(_ status: TripStatus) async throws {
         guard status != .paid else { throw KartBackendError.invalidStatus }
         cart.status = status
+        if status == .checkout { nudgeIfShort() }
+        cart.updatedAt = now
+    }
+
+    public func dismissNudge(_ action: NudgeAction) async throws {
+        guard let nudge = cart.nudge else { return }
+        if action == .keep, nudge.kind == .over, let index = cart.plan.firstIndex(where: { $0.productId == nudge.productId }) {
+            cart.plan[index].qty = nudge.have                    // keep: the list now wants what's in the cart
+        }
+        if !cart.nudged.contains(nudge.key) { cart.nudged.append(nudge.key) }
+        cart.nudge = nil
+        recompute()
+    }
+
+    public func setFeature(_ feature: String, on: Bool) async throws {
+        cart.features[feature] = on
+        if !cart.quantityNudgesOn { cart.nudge = nil }
         cart.updatedAt = now
     }
 
@@ -175,6 +194,65 @@ public final class MockKartBackend: KartBackend {
         if cart.items[index].qty <= 0 { cart.items.remove(at: index) }
     }
 
+    // MARK: Quantity nudges (v0.12 beta), as the backend: plan items only, once per product per direction per
+    // trip, a pending deal suggestion first, and a nudge clears itself when the counts match.
+
+    private func inCart(_ productId: String) -> Int {
+        cart.items.filter { $0.productId == productId }.reduce(0) { $0 + $1.qty }
+    }
+
+    private func mayNudge(_ key: String) -> Bool {
+        cart.quantityNudgesOn && cart.suggestion == nil && !cart.nudged.contains(key)
+    }
+
+    /// Clears a nudge whose counts now match, else raises the first "over" one (plan items only: impulse buys are
+    /// never nudged). Runs after every change, so one that waited behind a deal card shows once the card is answered.
+    private func refreshNudge() {
+        clearMatchedNudge()
+        guard cart.nudge == nil else { return }
+        for line in cart.plan {
+            guard let product = catalog.product(line.productId) else { continue }
+            nudgeIfOver(product, line: line)
+            if cart.nudge != nil { return }
+        }
+    }
+
+    private func nudgeIfOver(_ product: Product, line: PlanItem) {
+        let have = inCart(product.id)
+        guard have > line.qty, mayNudge("over:\(product.id)") else { return }
+        cart.nudged.append("over:\(product.id)")                 // raised once per trip, answered or not
+        cart.nudge = Nudge(productId: product.id, name: product.shortName, kind: .over, have: have, need: line.qty,
+                           basis: line.basis, text: "That's your \(Self.ordinal(have)) \(product.shortName). Your list says \(line.qty). Keep it?",
+                           savings: effectivePrice(of: product).price * Decimal(have - line.qty),
+                           aisle: catalog.section(product.section)?.aisleLabel, at: now)
+    }
+
+    private func nudgeIfShort() {
+        for line in cart.plan {
+            guard let product = catalog.product(line.productId), product.stock > 0 else { continue }
+            let have = inCart(line.productId)
+            guard have < line.qty, mayNudge("under:\(line.productId)") else { continue }
+            cart.nudged.append("under:\(line.productId)")
+            let short = line.qty - have
+            let aisle = catalog.section(product.section)?.aisleLabel ?? product.section
+            cart.nudge = Nudge(productId: line.productId, name: product.shortName, kind: .under, have: have, need: line.qty,
+                               basis: line.basis,
+                               text: "Before you go: you're \(short == 1 ? "one" : "\(short)") short on \(product.shortName). It's in \(aisle).",
+                               aisle: aisle, at: now)
+            return
+        }
+    }
+
+    private func clearMatchedNudge() {
+        guard let nudge = cart.nudge, let line = cart.plan.first(where: { $0.productId == nudge.productId }) else { return }
+        if inCart(nudge.productId) == line.qty { cart.nudge = nil }
+    }
+
+    private static func ordinal(_ n: Int) -> String {
+        let suffix = (11...13).contains(n % 100) ? "th" : [1: "st", 2: "nd", 3: "rd"][n % 10] ?? "th"
+        return "\(n)\(suffix)"
+    }
+
     /// Effective price after the product's active deal, rounded to cents.
     func effectivePrice(of product: Product) -> (price: Decimal, deal: Deal?) {
         guard let deal = catalog.activeDeal(for: product.id, at: now) else { return (product.price, nil) }
@@ -238,6 +316,7 @@ public final class MockKartBackend: KartBackend {
         cart.savings = cart.items.reduce(0) { $0 + (($1.listPrice ?? $1.price) - $1.price) * Decimal($1.qty) }
         cart.itemCount = cart.items.reduce(0) { $0 + $1.qty }
         refreshPlan()
+        refreshNudge()
         cart.updatedAt = now
     }
 

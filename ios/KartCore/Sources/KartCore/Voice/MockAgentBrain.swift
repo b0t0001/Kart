@@ -61,6 +61,8 @@ import Foundation
             return "Good news, \(shortName(productId)) just dropped to \(Money.format(to))."
         case .suggestion(let suggestion):
             return suggestion.text
+        case .nudge(let nudge):
+            return nudge.text
         case .dealChanged(let deal):
             return "Heads up, \(shortName(deal.productId)) just went \(deal.label)."
         case .tripContext, .cardResponse, .uiAction:

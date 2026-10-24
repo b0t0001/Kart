@@ -12,7 +12,8 @@ struct TripPanel: View {
         VStack(spacing: Theme.xl) {
             NextStopCard(model: model)
             HStack(alignment: .top, spacing: Theme.xl) {
-                ListColumn(plan: cart.plan, items: cart.items, catalog: catalog)
+                ListColumn(plan: cart.plan, items: cart.items, catalog: catalog,
+                           onAdjust: cart.quantityNudgesOn ? { id, delta in Task { await model.adjust(id, by: delta) } } : nil)
                 CartColumn(items: cart.items, unresolved: model.unresolvedCount, catalog: catalog)
             }
             .frame(maxHeight: .infinity)
@@ -58,6 +59,8 @@ private struct ListColumn: View {
     let plan: [PlanItem]
     let items: [CartItem]
     let catalog: Catalog
+    /// Quantity-nudge beta only: + / − on each line, a one-tap fix for a camera miscount.
+    let onAdjust: ((String, Int) -> Void)?
 
     private func inCart(_ productId: String) -> Int {
         items.filter { $0.productId == productId }.reduce(0) { $0 + $1.qty }
@@ -88,9 +91,12 @@ private struct ListColumn: View {
                         if let progress = PlanRow.progress(line, inCart: inCart(line.productId)) {
                             // Partly in the cart: you're at that shelf, so "1 of 2" takes the aisle's place.
                             Text(progress).font(Theme.caption.weight(.medium)).foregroundStyle(Theme.greenInk)
-                        } else if let aisle = line.aisle {
+                        } else if let aisle = line.aisle, onAdjust == nil {   // with +/−, Next stop carries the aisle
                             Text(aisle).font(Theme.caption).foregroundStyle(Theme.inkSecondary)
                         }
+                    }
+                    if let onAdjust, line.inStock != false {
+                        CountStepper(count: inCart(line.productId), id: line.productId, onAdjust: onAdjust)
                     }
                 }
                 .frame(minHeight: Theme.minTap)
@@ -98,6 +104,34 @@ private struct ListColumn: View {
             }
         }
         .animation(Theme.spring, value: plan)
+    }
+}
+
+/// − / + for one list line (quantity-nudge beta): taps go through `apply_cart_event` as manual events. − is
+/// disabled with nothing in the cart.
+private struct CountStepper: View {
+    let count: Int
+    let id: String
+    let onAdjust: (String, Int) -> Void
+
+    var body: some View {
+        HStack(spacing: Theme.xs) {
+            button("minus", delta: -1).disabled(count == 0).opacity(count == 0 ? 0.35 : 1)
+            button("plus", delta: 1)
+        }
+    }
+
+    private func button(_ symbol: String, delta: Int) -> some View {
+        Button { onAdjust(id, delta) } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Theme.brandDeep)
+                .frame(width: 40, height: 40)
+                .background(Theme.brandSoft, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(delta > 0 ? "One more" : "One fewer")
+        .accessibilityIdentifier("list.\(delta > 0 ? "plus" : "minus").\(id)")
     }
 }
 

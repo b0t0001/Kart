@@ -30,6 +30,10 @@ struct DebugPanel: View {
                             LaunchPreferences.persistVoice(.mock, defaults: .standard)
                         }
                     }
+                    Toggle("Quantity nudges (beta)", isOn: Binding(
+                        get: { world.backend.cart.quantityNudgesOn },
+                        set: { on in Task { try? await world.backend.setFeature("quantity_nudges", on: on) } }))
+                        .accessibilityIdentifier("debug.quantityNudges")
                     Toggle("Hold to talk (for a loud store)", isOn: Binding(
                         get: { world.voice.holdToTalk },
                         set: { world.voice.holdToTalk = $0; LaunchPreferences.persistHoldToTalk($0, defaults: .standard) }))

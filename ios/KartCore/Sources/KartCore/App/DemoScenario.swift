@@ -3,7 +3,7 @@ import Foundation
 /// Seeded states for screenshots, rehearsal, and the offline demo (launch with `-KartScenario <name>`).
 /// Nothing is spoken: transcript lines are written directly.
 public enum DemoScenario: String, CaseIterable, Sendable {
-    case welcome, greeting, shopping, deal, confirm, crowded, talkative, amounts, checkout, checkoutUnresolved, receipt
+    case welcome, greeting, shopping, deal, confirm, crowded, talkative, amounts, nudge, checkout, checkoutUnresolved, receipt
 
     static let unsureLabel = "red jar of Rao's marinara"
     static let crowdedProducts = [
@@ -54,6 +54,15 @@ public enum DemoScenario: String, CaseIterable, Sendable {
                                        PlanItem(productId: "taco-seasoning", reason: "tacos")])
             await backend.simulateVision(.added, productId: "ground-beef", confidence: 0.95, label: "ground beef")
             try await backend.dismissSuggestion()
+        case .nudge:                                         // quantity-nudge beta: +/− on the list and an "over" card
+            try await backend.setFeature("quantity_nudges", on: true)
+            try await backend.appendTranscript(.user, "Taco night for four.")
+            try await backend.appendTranscript(.agent, "Taco night for four, love it. One pound of ground beef, one pack "
+                + "of tortillas and seasoning are on your list.")
+            try await backend.setPlan([PlanItem(productId: "ground-beef", reason: "tacos", qty: 1),
+                                       PlanItem(productId: "mission-tortillas", reason: "tacos"),
+                                       PlanItem(productId: "taco-seasoning", reason: "tacos")])
+            for _ in 0..<2 { await backend.simulateVision(.added, productId: "ground-beef", confidence: 0.95, label: "ground beef") }
         case .checkout, .checkoutUnresolved, .receipt:
             for id in Self.checkoutProducts { await backend.simulateVision(.added, productId: id, confidence: 0.95, label: id) }
             try await backend.dismissSuggestion()

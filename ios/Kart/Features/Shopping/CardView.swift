@@ -77,7 +77,7 @@ struct CardView: View {
                 try? await Task.sleep(for: .milliseconds(300))
                 withAnimation(Theme.spring) { pulse = false }
             }
-        case .confirmItem, .offline:
+        case .confirmItem, .offline, .nudge:
             break
         }
     }
@@ -87,6 +87,7 @@ struct CardView: View {
         case .confirmItem(_, let candidates): candidates.first?.category ?? "unknown"
         case .deal(let suggestion): catalog.product(suggestion.productId)?.category
         case .newDeal(let deal): catalog.product(deal.productId)?.category
+        case .nudge(let nudge): catalog.product(nudge.productId)?.category
         case .offline: nil
         }
     }
@@ -94,7 +95,7 @@ struct CardView: View {
     private var fill: Color {
         switch card.kind {
         case .confirmItem: Theme.amberSoft
-        case .deal, .newDeal: Theme.brandSoft
+        case .deal, .newDeal, .nudge: Theme.brandSoft
         case .offline: Theme.surface
         }
     }
@@ -102,7 +103,7 @@ struct CardView: View {
     private var border: Color {
         switch card.kind {
         case .confirmItem: Theme.amber
-        case .deal, .newDeal: Theme.brand.opacity(0.35)
+        case .deal, .newDeal, .nudge: Theme.brand.opacity(0.35)
         case .offline: Theme.hairline
         }
     }
@@ -110,7 +111,7 @@ struct CardView: View {
     private var titleInk: Color {
         switch card.kind {
         case .confirmItem: Theme.amberInk
-        case .deal, .newDeal: Theme.brandDeep
+        case .deal, .newDeal, .nudge: Theme.brandDeep
         case .offline: Theme.ink
         }
     }

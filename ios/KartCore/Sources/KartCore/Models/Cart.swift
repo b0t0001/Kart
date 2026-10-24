@@ -50,11 +50,13 @@ public struct PlanItem: Codable, Sendable, Equatable, Identifiable {
     public var aisle: String?
     public var inStock: Bool?
     public var dealLabel: String?
+    /// The agent's math for the amount, e.g. "8 people × 2 tacos ≈ 16 tortillas → 2 packs of 10" (v0.12).
+    public var basis: String?
 
     public var id: String { productId }
 
     public init(productId: String, reason: String, qty: Int, done: Bool, name: String? = nil, section: String? = nil,
-                aisle: String? = nil, inStock: Bool? = nil, dealLabel: String? = nil) {
+                aisle: String? = nil, inStock: Bool? = nil, dealLabel: String? = nil, basis: String? = nil) {
         self.productId = productId
         self.reason = reason
         self.qty = qty
@@ -64,6 +66,7 @@ public struct PlanItem: Codable, Sendable, Equatable, Identifiable {
         self.aisle = aisle
         self.inStock = inStock
         self.dealLabel = dealLabel
+        self.basis = basis
     }
 
     /// What the agent sends with `set_plan`.
@@ -81,8 +84,45 @@ public struct PlanItem: Codable, Sendable, Equatable, Identifiable {
                   section: try c.decodeIfPresent(String.self, forKey: .section),
                   aisle: try c.decodeIfPresent(String.self, forKey: .aisle),
                   inStock: try c.decodeIfPresent(Bool.self, forKey: .inStock),
-                  dealLabel: try c.decodeIfPresent(String.self, forKey: .dealLabel))
+                  dealLabel: try c.decodeIfPresent(String.self, forKey: .dealLabel),
+                  basis: try c.decodeIfPresent(String.self, forKey: .basis))
     }
+}
+
+/// `carts.nudge` (v0.12, beta): the cart's amount of a planned item doesn't match the list.
+public enum NudgeKind: String, Codable, Sendable { case under, over }
+
+/// `dismiss_nudge`: `keep` raises the list to what's in the cart; `ok` just acknowledges.
+public enum NudgeAction: String, Sendable { case keep, ok }
+
+public struct Nudge: Codable, Sendable, Equatable {
+    public var productId: String
+    public var name: String?
+    public var kind: NudgeKind
+    public var have: Int
+    public var need: Int
+    public var basis: String?
+    public var text: String
+    public var savings: Decimal?
+    public var aisle: String?
+    public var at: Date?
+
+    public init(productId: String, name: String? = nil, kind: NudgeKind, have: Int, need: Int, basis: String? = nil,
+                text: String, savings: Decimal? = nil, aisle: String? = nil, at: Date? = nil) {
+        self.productId = productId
+        self.name = name
+        self.kind = kind
+        self.have = have
+        self.need = need
+        self.basis = basis
+        self.text = text
+        self.savings = savings
+        self.aisle = aisle
+        self.at = at
+    }
+
+    /// `carts.nudged` entry: once per product per direction per trip.
+    public var key: String { "\(kind.rawValue):\(productId)" }        // as the backend writes it
 }
 
 /// `carts.suggestion`: the deal offered at the moment of decision. `text` is a complete spoken line.
@@ -143,11 +183,19 @@ public struct CartState: Codable, Sendable, Equatable {
     public var tripStartedAt: Date?
     public var location: CartLocation?
     public var updatedAt: Date?
+    /// Per-cart feature switches (v0.12), e.g. `["quantity_nudges": true]`.
+    public var features: [String: Bool]
+    public var nudge: Nudge?
+    public var nudged: [String]
+
+    /// The quantity-nudge beta is on for this cart: only then does the iPad show nudges and +/−.
+    public var quantityNudgesOn: Bool { features["quantity_nudges"] == true }
 
     public init(cartId: String, tripId: UUID? = nil, items: [CartItem], itemCount: Int, total: Decimal,
                 savings: Decimal? = nil, plan: [PlanItem], nextStep: String? = nil, suggestion: Suggestion? = nil,
                 suggestedDeals: [String], status: TripStatus, tripStartedAt: Date? = nil,
-                location: CartLocation? = nil, updatedAt: Date? = nil) {
+                location: CartLocation? = nil, updatedAt: Date? = nil, features: [String: Bool] = [:],
+                nudge: Nudge? = nil, nudged: [String] = []) {
         self.cartId = cartId
         self.tripId = tripId
         self.items = items
@@ -162,6 +210,9 @@ public struct CartState: Codable, Sendable, Equatable {
         self.tripStartedAt = tripStartedAt
         self.location = location
         self.updatedAt = updatedAt
+        self.features = features
+        self.nudge = nudge
+        self.nudged = nudged
     }
 
     public static func empty(cartId: String) -> CartState {
@@ -184,6 +235,9 @@ public struct CartState: Codable, Sendable, Equatable {
                   status: try c.decodeIfPresent(TripStatus.self, forKey: .status) ?? .idle,
                   tripStartedAt: try c.decodeIfPresent(Date.self, forKey: .tripStartedAt),
                   location: try c.decodeIfPresent(CartLocation.self, forKey: .location),
-                  updatedAt: try c.decodeIfPresent(Date.self, forKey: .updatedAt))
+                  updatedAt: try c.decodeIfPresent(Date.self, forKey: .updatedAt),
+                  features: (try? c.decodeIfPresent([String: Bool].self, forKey: .features)) ?? [:],
+                  nudge: try c.decodeIfPresent(Nudge.self, forKey: .nudge),
+                  nudged: try c.decodeIfPresent([String].self, forKey: .nudged) ?? [])
     }
 }

@@ -1,7 +1,7 @@
 import Foundation
 
 public enum CardAction: Sendable, Equatable, Hashable {
-    case yes, no, somethingElse, remove, addIt, gotIt, retry
+    case yes, no, somethingElse, remove, addIt, gotIt, keepIt, retry
     case choose(productId: String)
 
     public var title: String {
@@ -12,6 +12,7 @@ public enum CardAction: Sendable, Equatable, Hashable {
         case .remove: "Remove"
         case .addIt: "Add it"
         case .gotIt: "Got it"
+        case .keepIt: "Keep it"
         case .retry: "Retry"
         case .choose: ""
         }
@@ -24,6 +25,7 @@ public struct Card: Identifiable, Sendable, Equatable {
         case confirmItem(eventId: UUID, candidates: [Product])
         case offline
         case deal(Suggestion)
+        case nudge(Nudge)
         case newDeal(Deal)
     }
 
@@ -69,9 +71,17 @@ public struct CardContext: Sendable {
 public enum CardDeriver {
     static let confidentMatch = 0.5
 
-    /// Cards in priority order: confirm items, offline, the deal suggestion, then new store deals.
+    /// Cards in priority order: confirm items, offline, the deal suggestion, a quantity nudge (beta), then new store
+    /// deals.
     public static func cards(_ ctx: CardContext) -> [Card] {
-        confirmCards(ctx) + offlineCards(ctx) + dealCards(ctx) + newDealCards(ctx)
+        confirmCards(ctx) + offlineCards(ctx) + dealCards(ctx) + nudgeCards(ctx) + newDealCards(ctx)
+    }
+
+    /// Only with the cart's `quantity_nudges` flag on; with it off nothing changes.
+    private static func nudgeCards(_ ctx: CardContext) -> [Card] {
+        guard ctx.cart.quantityNudgesOn, let nudge = ctx.cart.nudge else { return [] }
+        return [Card(id: "nudge-\(nudge.key)", kind: .nudge(nudge), title: nudge.text,
+                     actions: nudge.kind == .over ? [.keepIt, .gotIt] : [.gotIt])]
     }
 
     private static func confirmCards(_ ctx: CardContext) -> [Card] {

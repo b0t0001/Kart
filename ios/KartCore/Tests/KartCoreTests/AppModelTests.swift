@@ -220,3 +220,34 @@ import Testing
     await t.model.respond(to: card, with: .choose(productId: "no-such-product"))   // the backend rejects it
     #expect(t.model.unresolvedCount == 1 && t.model.visibleCard?.id == card.id)
 }
+
+// MARK: Quantity nudges (beta)
+
+@MainActor @Test func theNudgeCardKeepsItAndKartSaysItOnce() async throws {
+    let t = try make(); try await t.backend.setFeature("quantity_nudges", on: true); await t.model.startTrip()
+    try await t.backend.setPlan([PlanItem(productId: "ground-beef", reason: "tacos", qty: 1)]); t.model.ingest(cart: t.backend.cart)
+    for _ in 0..<2 { await t.backend.simulateVision(.added, productId: "ground-beef", confidence: 0.9, label: "b"); t.model.ingest(cart: t.backend.cart) }
+    t.model.ingest(cart: t.backend.cart)
+    let card = try #require(t.model.visibleCard)
+    #expect(card.title == "That's your 2nd Ground Beef. Your list says 1. Keep it?" && card.actions == [.keepIt, .gotIt])
+    #expect(t.voice.sent.filter { if case .nudge = $0 { true } else { false } }.count == 1)
+    await t.model.respond(to: card, with: .keepIt)
+    #expect(t.backend.cart.plan.first?.qty == 2 && t.backend.cart.nudge == nil)
+}
+
+@MainActor @Test func noNudgeCardWithTheFlagOff() async throws {
+    let t = try make(); await t.model.startTrip()
+    try await t.backend.setPlan([PlanItem(productId: "ground-beef", reason: "tacos", qty: 1)])
+    for _ in 0..<2 { await t.backend.simulateVision(.added, productId: "ground-beef", confidence: 0.9, label: "b") }
+    t.model.ingest(cart: t.backend.cart)
+    #expect(t.model.visibleCard == nil && !t.voice.sent.contains { if case .nudge = $0 { true } else { false } })
+}
+
+@MainActor @Test func plusAndMinusFixAMiscount() async throws {
+    let t = try make(); await t.model.startTrip()
+    await t.model.adjust("ground-beef", by: 1)
+    await t.model.adjust("ground-beef", by: 1)
+    await t.model.adjust("ground-beef", by: -1)
+    #expect(t.backend.cart.items.map { ($0.productId, $0.qty) }.first.map { $0 == ("ground-beef", 1) } == true)
+    #expect(t.backend.events.allSatisfy { $0.source == .manual })
+}

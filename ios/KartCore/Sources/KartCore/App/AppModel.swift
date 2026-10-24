@@ -39,6 +39,7 @@ public final class AppModel {
     @ObservationIgnored private let clock: @MainActor () -> Date
     @ObservationIgnored private var lastCart: CartState?
     @ObservationIgnored private var lastSuggestionDealId: String?
+    @ObservationIgnored private var lastNudgeKey: String?
     @ObservationIgnored private var seenEvents: Set<UUID> = []
     @ObservationIgnored private var seenNewDealCards: Set<String> = []
     @ObservationIgnored private var announcedDeals: Set<String> = []
@@ -134,6 +135,14 @@ public final class AppModel {
                 voice.send(.cartChanged(change))
             }
         }
+        if cart.quantityNudgesOn, let nudge = cart.nudge {      // beta: Kart says each nudge once
+            let key = "\(nudge.key)|\(nudge.at.map { "\($0.timeIntervalSince1970)" } ?? "")"
+            if key != lastNudgeKey {
+                lastNudgeKey = key
+                voice.send(.nudge(nudge))
+                sounds.play(.card)
+            }
+        }
         if let suggestion = cart.suggestion {
             if suggestion.dealId != lastSuggestionDealId {
                 lastSuggestionDealId = suggestion.dealId
@@ -208,6 +217,7 @@ public final class AppModel {
         seenEvents = []
         seenNewDealCards = []
         lastSuggestionDealId = nil
+        lastNudgeKey = nil
     }
 
     /// Adopts a trip that started outside this model (a demo scenario, or an app relaunch mid-trip)
@@ -243,12 +253,20 @@ public final class AppModel {
         case .deal(let suggestion):
             if action == .yes { await addToPlan(suggestion.productId) }
             if action == .no { try? await backend.dismissSuggestion() }
+        case .nudge:
+            try? await backend.dismissNudge(action == .keepIt ? .keep : .ok)
         case .newDeal(let deal):
             if action == .addIt { await addToPlan(deal.productId) }
             acknowledgedNewDeals.insert("\(deal.id)|\(deal.label)")
         case .offline:
             if action == .retry { await retryVoice() }
         }
+    }
+
+    /// The list's + / − (quantity-nudge beta): a one-tap fix for a camera miscount, as a manual cart event.
+    public func adjust(_ productId: String, by delta: Int) async {
+        noteActivity()
+        try? await backend.applyManualEvent(delta > 0 ? .added : .removed, productId: productId, resolving: nil)
     }
 
     public func beginCheckout() async {

@@ -34,6 +34,10 @@ public enum KartBackendError: Error, Equatable {
     func setPlan(_ plan: [PlanItem]) async throws
     /// P5.
     func dismissSuggestion() async throws
+    /// v0.12 beta: answer the quantity nudge ("Keep it" / "Got it").
+    func dismissNudge(_ action: NudgeAction) async throws
+    /// v0.12: a per-cart feature switch, e.g. `quantity_nudges`.
+    func setFeature(_ feature: String, on: Bool) async throws
     /// P2: idle, shopping, or checkout; `.paid` throws `.invalidStatus`.
     func setStatus(_ status: TripStatus) async throws
     /// P8: the receipts row, idempotent per trip.
