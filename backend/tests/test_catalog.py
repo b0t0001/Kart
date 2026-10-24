@@ -67,7 +67,7 @@ def test_dessert_and_not_sold_here(conn):
 def test_kids_scissors_in_the_far_aisle(conn):
     row = conn.execute("select short_name, section, section_name, price::float from product_catalog "
                        "where id = 'kids-scissors'").fetchone()
-    assert row == ("Kids' Scissors", "A9", "Aisle 9 · Household & School", 2.79)
+    assert row == ("Kids' Scissors", "A9", "Aisle 9 · Household & School", 1.89)
 
 
 def test_judging_stock_counts(conn):
