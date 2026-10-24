@@ -18,9 +18,9 @@ def member_ctx(**extra):
 def test_member_section_mentions_events_and_today():
     section = member_section(PROFILE)
     assert section.startswith("About this shopper, from Kart's memory (today is Saturday, 2026-10-24):")
-    for fact in ("Dylan", "household of 4", "Leo's soccer party, pasta for the team", "Sunday 2026-10-25 (tomorrow)",
+    for fact in ("Dylan", "household of 4", "Leo's soccer party, pasta for the team", "Thursday 2026-10-29 (in 5 days)",
                  "memory id 16", "Spaghetti x1", "Likes the Marinara here", "Milk (every 7 days, usually Saturday",
-                 "Last trip (2026-10-17): Milk, Tortillas", "Spaghetti: Leo's soccer party · tomorrow"):
+                 "Last trip (2026-10-17): Milk, Tortillas", "Spaghetti: Leo's soccer party · Thu"):
         assert fact in section, fact
     assert section.endswith(MEMBER_RULES)
 

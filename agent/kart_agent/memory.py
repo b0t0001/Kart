@@ -7,15 +7,17 @@ Claude's prompt, the fixed lines Kart says on its own, and the member-only tools
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
+from .lines import _amount
 from .tools import _tool
 
 WELCOME_BACK = "Welcome back!"
 NICE_TO_MEET = "Nice to meet you!"
 PROFILE_FAILED_LINE = "Welcome back! What are we shopping for today?"
 FORGOTTEN_LINE = "Done. I've forgotten everything about you."
+LIST_LATER_LINE = "Okay, it's saved for later."
 NAME_QUESTION = "By the way, what should I call you?"
 QUESTIONS = ["Any fun plans coming up I can help you shop for?", "Anyone coming over soon?",
              "Got anything coming up, like a party or a holiday?"]
@@ -35,6 +37,10 @@ the store doesn't carry.
 - A lasting preference ("we're vegetarian now") is remember kind "preference"; their name or how many people are \
 in the household is kind "name" or "household". Small talk is never saved.
 - If a memory tool returns an error, say you couldn't save it, and never claim you'll remember.
+- When they mention a coming event, call remember (kind "event", with its date), then say "Got it, I'll remember \
+<the event, short> on <weekday>. Want me to save a list for it?"
+- A saved list is sized like a meal for their guests (about a pound of pasta per four people, a jar of sauce per six), \
+basics only: leave cheese, bread and extras off unless they ask. After save_for_later, say its readback.
 - "Forget that" is forget with that memory's id. If they say "don't remember that" right after you saved \
 something, forget that memory (its id came back from remember) and say so.
 - "What do you know about me?": call show_memories (it opens the memory screen), then say one short sentence \
@@ -103,6 +109,22 @@ def still_there_line(profile: dict[str, Any] | None) -> str:
     return f"Still shopping, {_name(profile)}?" if _name(profile) else "Still shopping?"
 
 
+def saved_list_offer(profile: dict[str, Any] | None) -> tuple[dict[str, Any], str] | None:
+    """An event in the next two days with a saved list: Kart offers it in a fixed line (the demo's recall moment)."""
+    for m in (profile or {}).get("memories") or []:
+        if m.get("kind") == "event" and m.get("items") and m.get("days_until") is not None and 0 <= m["days_until"] <= 2:
+            return m, f"{_label(m)} is {_when(m['days_until'])}. Want the list you saved?"
+    return None
+
+
+def list_shopped_line(next_step: str | None) -> str:
+    return f"Done, it's on your list. First stop: {next_step}." if next_step else "Done, it's on your list."
+
+
+def _label(memory: dict[str, Any]) -> str:
+    return memory["text"].split(",")[0].strip()
+
+
 def _when(days: int | None) -> str:
     if days is None:
         return "no date yet"
@@ -136,6 +158,10 @@ def member_section(profile: dict[str, Any] | None) -> str:
     if member.get("household"):
         who += f", household of {member['household']}"
     lines.append(f"{who}. Trips here: {member.get('trips', 0)}.")
+    start = date.fromisoformat(profile["today"])
+    lines.append("- Next two weeks: " + ", ".join(f"{d:%a} {d.isoformat()}" for d in (start + timedelta(days=n)
+                                                                                     for n in range(1, 15)))
+                 + '. "next Saturday" means the first Saturday after today (the same for any weekday).')
     memories = profile.get("memories") or []
     for m in memories:
         if m["kind"] == "event" and m.get("upcoming"):
@@ -223,6 +249,12 @@ async def member_dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) 
         result = await backend.rpc("member_save_for_later", p_member_id=member_id, p_memory_id=_memory_id(args),
                                    p_items=[{"product_id": i.get("product_id"), "qty": i.get("qty", 1)}
                                             for i in items if isinstance(i, dict)])
+        if isinstance(result, dict) and result.get("items"):    # "Saved: three boxes of spaghetti and two jars of marinara"
+            catalog = {p["id"]: p for p in await backend.get_catalog()}
+            said = [_amount(i["qty"], catalog[i["product_id"]]) if i["product_id"] in catalog
+                    else f"{i['qty']} {i['short_name']}" for i in result["items"]]
+            listed = said[0] if len(said) == 1 else ", ".join(said[:-1]) + " and " + said[-1]
+            result = {**result, "readback": f"Saved: {listed} for {_label(result)}."}
     elif name == "forget":
         result = await backend.rpc("member_forget", p_member_id=member_id, p_memory_id=_memory_id(args))
     else:

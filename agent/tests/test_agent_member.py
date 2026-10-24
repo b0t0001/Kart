@@ -1,6 +1,7 @@
 """Member memory in the Line agent (CONTRACT v0.14, BETA)."""
 
 import asyncio
+import json
 import copy
 import time
 
@@ -221,3 +222,76 @@ async def test_quiet_mode_silences_the_lull_and_idle_lines():
     agent._quiet = True                                    # "be quiet": Kart only answers
     assert agent.run_filter(UserCustomSent(metadata={"type": "lull"})) is False
     assert agent.run_filter(UserCustomSent(metadata={"type": "member_idle"})) is False
+
+
+# ── The demo flow, v2 (Dylan, 2026-10-24): memory made live in Act 1, recalled after the fast-forward in Act 2 ──
+
+LEO = {"id": 30, "kind": "event", "text": "Leo's soccer team party, pasta for 12", "event_date": "2026-10-25",
+       "days_until": 1, "upcoming": True,
+       "items": [{"product_id": "barilla-spaghetti", "short_name": "Spaghetti", "qty": 3},
+                 {"product_id": "rao-marinara", "short_name": "Rao's Sauce", "qty": 2}]}
+
+
+def with_leo():
+    profile = copy.deepcopy(PROFILE)
+    profile["memories"] = [LEO]
+    return MemberBackend(profile=profile)
+
+
+async def test_member_section_has_a_calendar_for_next_weekday():
+    from kart_agent.memory import member_section
+    section = member_section(PROFILE)
+    assert "Next two weeks: Sun 2026-10-25, Mon 2026-10-26" in section and "Sat 2026-10-31" in section
+    assert '"next Saturday" means the first Saturday after today' in section
+
+
+async def test_save_for_later_reads_the_list_back():
+    from kart_agent.tools import run_tool
+    backend = MemberBackend()
+
+    async def saved(name, **params):
+        backend.calls.append((name, params))
+        return {**LEO, "items": [{"product_id": "barilla-spaghetti", "short_name": "Spaghetti", "qty": 3},
+                                 {"product_id": "rao-marinara", "short_name": "Rao's Sauce", "qty": 2}]}
+    backend.rpc = saved
+    ctx = {"backend": backend, "cart_id": "7", "trip_id": "trip-1", "member_id": "1029", "profile": PROFILE}
+    out = json.loads(await run_tool("save_for_later", {"memory_id": 30, "items": [
+        {"product_id": "barilla-spaghetti", "qty": 3}, {"product_id": "rao-marinara", "qty": 2}]}, ctx))
+    assert out["readback"] == "Saved: three boxes of spaghetti and two rao's sauce for Leo's soccer team party."
+
+
+async def test_greeting_offers_the_saved_list_and_yes_shops_it():
+    agent, backend, llm = make(backend=with_leo())
+    assert await run(agent, CallStarted()) == ["Welcome back, Dylan!",
+                                               "Leo's soccer team party is tomorrow. Want the list you saved?"]
+    assert llm.requests == []                                         # a fixed line: fast, and nothing invented
+    assert await run(agent, said_by_user("Yes.")) == ["Done, it's on your list. First stop: Aisle 6 → Spaghetti."]
+    plan = [params["p_plan"] for name, params in backend.calls if name == "set_plan"][-1]
+    assert [(p["product_id"], p["qty"]) for p in plan] == [("barilla-spaghetti", 3), ("rao-marinara", 2)]
+
+
+async def test_no_to_the_saved_list_keeps_it_for_later():
+    agent, backend, llm = make(backend=with_leo())
+    await run(agent, CallStarted())
+    assert await run(agent, said_by_user("Not today.")) == ["Okay, it's saved for later."]
+    assert not any(name == "set_plan" for name, _ in backend.calls)
+
+
+async def test_member_yeah_after_kart_asks_reaches_claude():
+    agent, backend, llm = make([Turn(chunks=["Got it, I'll remember Leo's party on Saturday. Want me to save a list for it?"]),
+                                Turn(chunks=["Saved."])])
+    await run(agent, said_by_user("Next Saturday is Leo's soccer team party, we'll need pasta for 12."))
+    assert await run(agent, said_by_user("Yeah.")) == ["Saved."]
+
+
+async def test_guest_yeah_after_a_question_stays_unchanged():
+    agent, backend, llm = make([Turn(chunks=["Want me to add bread?"])], member=None)
+    await run(agent, said_by_user("Pasta night."))
+    assert await run(agent, said_by_user("Yeah.")) == [] and len(llm.requests) == 1
+
+
+async def test_rejoined_member_call_keeps_the_member_without_regreeting():
+    agent, backend, llm = make()
+    backend.transcript = [("agent", "Welcome back, Dylan!")]           # this trip already talked: a dropped call
+    assert await run(agent, CallStarted()) == []
+    assert len(profile_calls(backend)) == 1 and "About this shopper" in agent.brain.system

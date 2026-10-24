@@ -15,8 +15,8 @@ from .brain import Brain
 from .lines import (DECLINED_LINE, KEEP_LINE, LIST_KEPT, LIST_TOO, NUDGE_OK_LINE, QUIET_OFF_LINE, QUIET_ON_LINE,
                     WELCOME_LINE, accepted_line, nudge_answer, only_ack, only_filler, only_thanks, proactive_line,
                     quiet_request, yes_or_no)
-from .memory import (FORGOTTEN_LINE, GREETING_TURN, PROFILE_FAILED_LINE, member_section, only_greeting, question,
-                     still_there_line, welcome_line)
+from .memory import (FORGOTTEN_LINE, GREETING_TURN, LIST_LATER_LINE, PROFILE_FAILED_LINE, list_shopped_line,
+                     member_section, only_greeting, question, saved_list_offer, still_there_line, welcome_line)
 from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
@@ -96,6 +96,8 @@ class KartAgent:
         self._asked = False                         # Kart's one question this trip ("Hey Kart" or a lull)
         self._questions = 0                         # which question in the rotation comes next
         self._question: str | None = None           # a lull question still waiting for its answer
+        self._list_offer: dict[str, Any] | None = None   # "Want the list you saved?": the memory, until answered
+        self._kart_asked = False                    # Kart's last words were a question (a member's "yeah" answers it)
 
     # Line filters --------------------------------------------------------------------------------
 
@@ -182,8 +184,16 @@ class KartAgent:
             except TimeoutError:
                 pass
             await self._refresh()
-            if self._plan or self._items:                # rejoining a trip in progress (app relaunch, reconnect)
+            rejoining = bool(self._plan or self._items)
+            if not rejoining and self.member_id:         # a member's trip that already talked: a dropped call
+                try:
+                    rejoining = bool(await self.backend.get_transcript(self.cart_id, self.trip_id))
+                except Exception:
+                    pass
+            if rejoining:                                # rejoining a trip in progress (app relaunch, reconnect)
                 await self._rejoin()
+                if self.member_id:                       # no second "Welcome back", but Kart still knows them
+                    await self._load_profile()
                 return
             if self.member_id:                           # a signed-in member: welcome back, then what Kart remembers
                 await self._load_profile()
@@ -194,6 +204,13 @@ class KartAgent:
                 welcome = welcome_line(self._profile)
                 async for out in self._say([welcome], interruptible=False):
                     yield out
+                offer = saved_list_offer(self._profile)
+                if offer:                                # the event's day is here: offer its saved list, word for word
+                    self._list_offer, line = offer
+                    self.brain.remember("(The shopper just signed in.)", f"{welcome} {line}")
+                    async for out in self._say([line], interruptible=False):
+                        yield out
+                    return
                 cue = GREETING_TURN.format(welcome=welcome)
                 async for out in self._say(self.brain.respond(cue, self._ctx()), interruptible=self.barge_in):
                     yield out
@@ -215,7 +232,8 @@ class KartAgent:
             if not text or only_filler(text):            # "Um." gets no answer and no caption
                 return
             quiet = quiet_request(text)
-            nothing_asked = not self._offer and not self._nudge and not self._digest and not self._list_too
+            nothing_asked = not self._offer and not self._nudge and not self._digest and not self._list_too \
+                and not self._list_offer and not (self.member_id and self._kart_asked)   # member beta: Kart's own question
             if quiet or (nothing_asked and only_thanks(text)):   # "Be quiet." / "Thanks!": no Claude round
                 await self._caption("user", text)
                 if quiet:
@@ -230,6 +248,21 @@ class KartAgent:
             await self._refresh()
             await self._ensure_profile()
             ctx = self._ctx()
+            saved = yes_or_no(text) if self._list_offer else None
+            if saved:                                    # "Want the list you saved?" "Yes." / "Not today."
+                await self._caption("user", text)
+                memory, self._list_offer = self._list_offer, None
+                line = LIST_LATER_LINE
+                if saved == "yes":
+                    out = json.loads(await run_tool("shop_saved_list", {"memory_id": memory["id"]}, ctx))
+                    line = list_shopped_line(out.get("next_step")) if "error" not in out else "Sorry, I couldn't put it up."
+                self.brain.remember(text, line)
+                async for out_text in self._say([line], interruptible=False):
+                    yield out_text
+                return
+            if self._list_offer:                         # more than a yes or no: Claude hears what was asked
+                self._list_offer = None
+                self._question = "Want the list you saved?"
             plain = yes_or_no(text) if self._list_too and self._last_asked == "list_too" else None
             if plain:                                    # "Take it off the list too?" "Yes."
                 await self._caption("user", text)
@@ -489,6 +522,7 @@ class KartAgent:
     async def _flush_caption(self, spoken: list[str]) -> None:
         if spoken:
             text = "".join(spoken).strip()
+            self._kart_asked = text.endswith("?")
             spoken.clear()
             await asyncio.shield(asyncio.ensure_future(self._caption("agent", text)))
 
