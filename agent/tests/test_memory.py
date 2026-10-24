@@ -55,7 +55,8 @@ def test_only_greeting_no(text):
 
 
 def test_member_tools_are_declared():
-    assert [t["name"] for t in MEMBER_TOOLS] == ["remember", "save_for_later", "forget", "shop_saved_list"]
+    assert [t["name"] for t in MEMBER_TOOLS] == ["remember", "save_for_later", "forget", "shop_saved_list",
+                                                 "show_memories", "sign_out"]
 
 
 async def test_remember_calls_rpc_with_member():
@@ -89,3 +90,25 @@ async def test_shop_saved_list_one_set_plan_keeps_existing():
     assert [(p["product_id"], p["reason"]) for p in plans[0]] == [
         ("kirkland-parmesan", "deal"), ("barilla-spaghetti", "Leo's soccer party"),
         ("rao-marinara", "Leo's soccer party")]
+
+
+def test_member_section_lists_due_reminders_only():
+    reminder = {"id": 50, "kind": "reminder", "text": "batteries", "event_date": "2026-10-30", "days_until": 6,
+                "upcoming": True, "items": [{"product_id": "kirkland-batteries", "short_name": "AA Batteries", "qty": 1}]}
+    later = member_section({**PROFILE, "memories": [reminder]})
+    assert "Reminder due now" not in later and "Reminder for later: batteries" in later
+    due = member_section({**PROFILE, "memories": [{**reminder, "event_date": "2026-10-25", "days_until": 1}]})
+    assert "Reminder due now: batteries" in due
+
+
+def test_still_there_and_forgotten_lines():
+    from kart_agent.memory import FORGOTTEN_LINE, still_there_line
+    assert FORGOTTEN_LINE == "Done. I've forgotten everything about you."
+    assert still_there_line(PROFILE) == "Still shopping, Dylan?"
+    assert still_there_line(None) == "Still shopping?"
+
+
+def test_member_rules_cover_the_conversational_moments():
+    for phrase in ("show_memories", "sign_out", "don't remember that", "what did I buy last time",
+                   "remind me", "health"):
+        assert phrase in MEMBER_RULES, phrase

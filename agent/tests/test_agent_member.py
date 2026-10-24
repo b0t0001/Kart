@@ -129,3 +129,88 @@ async def test_new_trip_resets_question_budget():
     assert await run(agent, said_by_user("Hey Kart")) == [ANY_PLANS]
     agent.run_filter(trip_context("1029", "trip-2"))
     assert await run(agent, said_by_user("Hey Kart")) == ["Anyone coming over soon?"]
+
+
+# ── Edge cases (spec §3.9) ──
+
+async def customs(agent, event):
+    return [o.metadata for o in [o async for o in agent.process(None, event)] if isinstance(o, AgentSendCustom)]
+
+
+async def test_member_forgotten_drops_profile_and_tools():
+    from kart_agent.memory import FORGOTTEN_LINE
+    agent, backend, llm = make([Turn(chunks=["Hey."]), Turn(chunks=["Sure, pasta."])])
+    await run(agent, CallStarted())
+    forgotten = UserCustomSent(metadata={"type": "member_forgotten"})
+    assert agent.run_filter(forgotten) is True
+    assert await run(agent, forgotten) == [FORGOTTEN_LINE]
+    assert agent.member_id is None
+    await run(agent, said_by_user("pasta night for four"))
+    request = llm.requests[-1]
+    assert "About this shopper" not in request["system"]
+    assert "remember" not in [t["name"] for t in request["tools"]]
+
+
+async def test_same_trip_context_without_member_drops_silently():
+    agent, backend, llm = make([Turn(chunks=["Hey."]), Turn(chunks=["Okay."])])
+    await run(agent, CallStarted())
+    assert agent.run_filter(trip_context(None, "trip-1")) is False
+    assert agent.member_id is None
+    await run(agent, said_by_user("what's on my list"))
+    assert "About this shopper" not in llm.requests[-1]["system"]
+
+
+async def test_same_trip_context_same_member_reloads_profile():
+    agent, backend, llm = make([Turn(chunks=["Hey."]), Turn(chunks=["Okay."])])
+    await run(agent, CallStarted())
+    agent.run_filter(trip_context("1029", "trip-1"))      # the iPad forgot one memory: same member, same trip
+    await run(agent, said_by_user("what's on my list"))
+    assert len(profile_calls(backend)) == 2
+
+
+async def test_member_idle_line():
+    agent, backend, llm = make()
+    idle = UserCustomSent(metadata={"type": "member_idle"})
+    assert agent.run_filter(idle) is True
+    assert await run(agent, idle) == ["Still shopping, Dylan?"]
+    guest, _, _ = make(member=None)
+    assert guest.run_filter(idle) is False
+
+
+async def test_show_memories_sends_custom_event():
+    agent, backend, llm = make([
+        Turn(chunks=["Hey."]),
+        Turn(tools=[ToolUse("t1", "show_memories", {})]),
+        Turn(chunks=["Leo's party, the marinara, and your weekly milk. It's all on screen."]),
+    ])
+    await run(agent, CallStarted())
+    assert await customs(agent, said_by_user("what do you know about me?")) == [{"type": "show_memories"}]
+
+
+async def test_sign_out_tool_clears_member_and_tools():
+    agent, backend, llm = make([
+        Turn(chunks=["Hey."]),
+        Turn(tools=[ToolUse("t1", "sign_out", {})]),
+        Turn(chunks=["Sorry about that, you're shopping as a guest now. What are we getting?"]),
+        Turn(chunks=["Sure."]),
+    ])
+    await run(agent, CallStarted())
+    await run(agent, said_by_user("that's not me"))
+    assert ("set_member", {"p_cart_id": "7", "p_member_id": None}) in backend.calls
+    assert agent.member_id is None
+    await run(agent, said_by_user("pasta night"))
+    assert "About this shopper" not in llm.requests[-1]["system"]
+
+
+async def test_dont_remember_that_forgets_saved_id():
+    agent, backend, llm = make([
+        Turn(chunks=["Hey."]),
+        Turn(tools=[ToolUse("t1", "remember", {"kind": "note", "text": "Out of milk at home"})]),
+        Turn(chunks=["Got it."]),
+        Turn(tools=[ToolUse("t2", "forget", {"memory_id": 41})]),
+        Turn(chunks=["Okay, forgotten."]),
+    ])
+    await run(agent, CallStarted())
+    await run(agent, said_by_user("we're out of milk at home"))
+    await run(agent, said_by_user("actually don't remember that"))
+    assert ("member_forget", {"p_member_id": "1029", "p_memory_id": 41}) in backend.calls

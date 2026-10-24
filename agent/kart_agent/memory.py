@@ -15,6 +15,7 @@ from .tools import _tool
 WELCOME_BACK = "Welcome back!"
 NICE_TO_MEET = "Nice to meet you!"
 PROFILE_FAILED_LINE = "Welcome back! What are we shopping for today?"
+FORGOTTEN_LINE = "Done. I've forgotten everything about you."
 NAME_QUESTION = "By the way, what should I call you?"
 QUESTIONS = ["Any fun plans coming up I can help you shop for?", "Anyone coming over soon?",
              "Got anything coming up, like a party or a holiday?"]
@@ -34,7 +35,18 @@ the store doesn't carry.
 - A lasting preference ("we're vegetarian now") is remember kind "preference"; their name or how many people are \
 in the household is kind "name" or "household". Small talk is never saved.
 - If a memory tool returns an error, say you couldn't save it, and never claim you'll remember.
-- "Forget that" is forget with that memory's id."""
+- "Forget that" is forget with that memory's id. If they say "don't remember that" right after you saved \
+something, forget that memory (its id came back from remember) and say so.
+- "What do you know about me?": call show_memories (it opens the memory screen), then say one short sentence \
+naming at most three things.
+- "That's not me" right after you greet them: call sign_out, then say "Sorry about that, you're shopping as a guest \
+now. What are we getting?"
+- "what did I buy last time?": answer briefly from the last trip, items only, no prices unless asked. Otherwise \
+never volunteer their history.
+- "remind me about X next week": remember kind "reminder" with its date, then save_for_later for the product if \
+the store has it. A reminder comes up near its date; don't bring it up before then.
+- Never save health, pregnancy, religion, sexuality, finances or details about children beyond what the plan \
+needs. Save the event, not the reason ("dinner on Saturday", not why)."""
 
 KINDS = ("event", "reminder", "preference", "note", "name", "household")
 MEMBER_TOOLS: list[dict[str, Any]] = [
@@ -51,6 +63,8 @@ MEMBER_TOOLS: list[dict[str, Any]] = [
           ["memory_id"]),
     _tool("shop_saved_list", "Put a saved event list on today's shopping list, keeping what's already on it.",
           {"memory_id": {"type": "integer"}}, ["memory_id"]),
+    _tool("show_memories", "The shopper asked what you know or remember about them: open the memory screen."),
+    _tool("sign_out", "The shopper says they aren't this member, or wants to sign out."),
 ]
 MEMBER_TOOL_NAMES = {t["name"] for t in MEMBER_TOOLS}
 
@@ -82,6 +96,11 @@ def question(profile: dict[str, Any] | None, n: int) -> str:
     if profile is not None and not _name(profile):   # a member Kart can't name yet (an unknown profile: don't ask)
         return NAME_QUESTION
     return QUESTIONS[n % len(QUESTIONS)]
+
+
+def still_there_line(profile: dict[str, Any] | None) -> str:
+    """Said after 3 quiet minutes while signed in; the iPad signs out at 5."""
+    return f"Still shopping, {_name(profile)}?" if _name(profile) else "Still shopping?"
 
 
 def _when(days: int | None) -> str:
@@ -125,6 +144,14 @@ def member_section(profile: dict[str, Any] | None) -> str:
         if m["kind"] == "event" and not m.get("upcoming") and m.get("days_until") is not None and m["days_until"] >= -7:
             lines.append(f"- Recently: {m['text']}, {_dated(m)} [memory id {m['id']}]. You may ask how it went.")
     for m in memories:
+        if m["kind"] != "reminder" or m.get("days_until") is None:
+            continue
+        if -3 <= m["days_until"] <= 1:
+            lines.append(f"- Reminder due now: {m['text']}, {_dated(m)} [memory id {m['id']}]; saved list: {_items(m)}.")
+        elif m["days_until"] > 1:
+            lines.append(f"- Reminder for later: {m['text']}, {_dated(m)} [memory id {m['id']}]. "
+                         "Don't bring it up before then.")
+    for m in memories:
         if m["kind"] == "preference":
             lines.append(f"- Likes: {m['text']} [memory id {m['id']}].")
         elif m["kind"] == "note":
@@ -160,6 +187,13 @@ async def member_dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) 
     if not member_id:
         raise ValueError("no member is signed in")
     backend = ctx["backend"]
+    if name == "show_memories":
+        ctx["show_memories"] = True
+        return {"ok": True}
+    if name == "sign_out":
+        await backend.rpc("set_member", p_cart_id=ctx["cart_id"], p_member_id=None)
+        ctx["signed_out"] = True
+        return {"ok": True, "now": "guest"}
     if name == "shop_saved_list":
         memory_id = _memory_id(args)
         memory = next((m for m in (ctx.get("profile") or {}).get("memories") or [] if m.get("id") == memory_id), None)

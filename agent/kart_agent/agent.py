@@ -11,7 +11,8 @@ from line.events import AgentSendCustom, AgentSendText, CallEnded, CallStarted, 
 from .brain import Brain
 from .lines import (DECLINED_LINE, KEEP_LINE, NUDGE_OK_LINE, accepted_line, nudge_answer, only_ack, only_filler,
                     proactive_line, yes_or_no)
-from .memory import GREETING_TURN, PROFILE_FAILED_LINE, member_section, only_greeting, question, welcome_line
+from .memory import (FORGOTTEN_LINE, GREETING_TURN, PROFILE_FAILED_LINE, member_section, only_greeting, question,
+                     still_there_line, welcome_line)
 from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
@@ -91,10 +92,19 @@ class KartAgent:
                     self._said, self._meal, self._offer, self._nudge = set(), None, None, None
                     self._digest, self._digest_offered = None, False
                     self._profile, self._profile_tried, self._asked, self._question = None, False, False, None
-                self.member_id = meta.get("member_id") or None
+                member = meta.get("member_id") or None
+                if member != self.member_id:             # signed in, out ("not me", idle) or switched: drop it all
+                    self._drop_member()
+                elif member:                             # same member: a memory changed on the screen, reload it
+                    self._profile_tried = False
+                self.member_id = member
                 self.trip_id = meta.get("trip_id") or self.trip_id
                 self._context.set()
                 return False
+            if meta.get("type") == "member_forgotten":  # "Forget me" on the screen: Kart lets go at once
+                return bool(self.member_id)
+            if meta.get("type") == "member_idle":       # 3 quiet minutes while signed in
+                return bool(self.member_id and not self._speaking)
             if meta.get("type") == "lull":              # the iPad saw a quiet minute: Kart's one question
                 return bool(self.member_id and not self._asked and not self._speaking and not self._offer
                             and not self._nudge and not self._digest)
@@ -235,14 +245,30 @@ class KartAgent:
             async for out in self._say(self._caption_first(text, self.brain.respond(heard, ctx)), interruptible=self.barge_in):
                 yield out
             self._meal = ctx.get("meal") or self._meal
-            if ctx.get("memory_changed"):                # remember / save_for_later / forget: reload what Kart knows
+            if ctx.get("signed_out"):                    # "that's not me": a guest from here on
+                self._drop_member()
+                self.member_id = None
+            elif ctx.get("memory_changed"):              # remember / save_for_later / forget: reload what Kart knows
                 await self._load_profile()
+            if ctx.get("show_memories"):                 # "what do you know about me?": the memory screen opens
+                yield AgentSendCustom(metadata={"type": "show_memories"})
             await self._refresh()                        # Claude's tools may have changed the list
             if ctx.get("planned") and not self._digest_offered:     # a new list: ask about the deals, after a beat
                 async for out in self._offer_digest():
                     yield out
         elif isinstance(event, UserCustomSent):
             meta = event.metadata or {}
+            if meta.get("type") == "member_forgotten":
+                self._drop_member()
+                self.member_id = None
+                async for out in self._say([FORGOTTEN_LINE], interruptible=False):
+                    yield out
+                return
+            if meta.get("type") == "member_idle":
+                await self._ensure_profile()
+                async for out in self._say([still_there_line(self._profile)], interruptible=False):
+                    yield out
+                return
             if meta.get("type") == "lull":
                 await self._ensure_profile()
                 line = self._next_question()
@@ -395,6 +421,10 @@ class KartAgent:
     def _ctx(self) -> dict[str, Any]:
         return {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id,
                 "member_id": self.member_id, "profile": self._profile}
+
+    def _drop_member(self) -> None:
+        self._profile, self._profile_tried, self._question = None, False, None
+        self.brain.set_member(None)
 
     def _next_question(self) -> str:
         line = question(self._profile, self._questions)
