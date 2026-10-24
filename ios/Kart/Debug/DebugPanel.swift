@@ -21,6 +21,15 @@ struct DebugPanel: View {
                             LaunchPreferences.persist(.supabase, defaults: .standard)
                         }
                     }
+                    if world.voiceKind == .mock, SupabaseConfig.fromInfoPlist() != nil {
+                        row("Use Kart's real voice, Cartesia (relaunch)", id: "debug.useLineVoice") {
+                            LaunchPreferences.persistVoice(.line, defaults: .standard)
+                        }
+                    } else if world.voiceKind == .line {
+                        row("Use the scripted voice (relaunch)", id: "debug.useMockVoice") {
+                            LaunchPreferences.persistVoice(.mock, defaults: .standard)
+                        }
+                    }
                     if let error = world.supabase?.lastError {
                         Text("Last backend error: \(error)").foregroundStyle(.red).font(.footnote)
                     }

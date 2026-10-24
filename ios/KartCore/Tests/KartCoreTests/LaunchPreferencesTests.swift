@@ -26,3 +26,17 @@ private func defaults() -> UserDefaults {
     #expect(LaunchPreferences.backend(defaults: d, scenario: nil, hasConfig: true) == .supabase)
     #expect(LaunchPreferences.backend(defaults: d, scenario: nil, hasConfig: false) == .mock)   // no config: can't go live
 }
+
+@Test func theScriptedVoiceIsTheDefault() {
+    #expect(LaunchPreferences.voice(defaults: defaults(), scenario: nil, hasConfig: true) == .mock)
+}
+
+@Test func theRealVoiceSwitchSurvivesARelaunch() {
+    let d = defaults()
+    LaunchPreferences.persistVoice(.line, defaults: d)                // debug panel: "Use real voice"
+    #expect(LaunchPreferences.voice(defaults: d, scenario: nil, hasConfig: true) == .line)
+    #expect(LaunchPreferences.voice(defaults: d, scenario: nil, hasConfig: false) == .mock)   // no backend: no voice token
+    #expect(LaunchPreferences.voice(defaults: d, scenario: "shopping", hasConfig: true) == .mock)   // screenshots stay scripted
+    LaunchPreferences.persistVoice(.mock, defaults: d)
+    #expect(LaunchPreferences.voice(defaults: d, scenario: nil, hasConfig: true) == .mock)
+}

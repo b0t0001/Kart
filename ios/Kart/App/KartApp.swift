@@ -50,7 +50,7 @@ extension MockKartBackend: DemoLevers {}
 extension SupabaseKartBackend: DemoLevers {}
 
 /// Composition root. Backend: `-KartBackend mock|supabase` (default: Supabase when Config has a URL and key;
-/// any `-KartScenario` forces the mock). Voice: `-KartVoice mock|line` (default: the scripted mock voice).
+/// any `-KartScenario` forces the mock). Voice: `-KartVoice mock|line`, or the debug panel's switch (default: the scripted mock voice).
 @MainActor @Observable
 final class KartWorld {
     enum BackendKind: String { case mock, supabase }
@@ -101,8 +101,7 @@ final class KartWorld {
             backendKind = .mock
         }
 
-        let requestedVoice = defaults.string(forKey: "KartVoice").flatMap(VoiceKind.init(rawValue:))
-        if requestedVoice == .line, let config {
+        if LaunchPreferences.voice(defaults: defaults, scenario: scenario, hasConfig: config != nil) == .line, let config {
             voice = LineVoiceSession(tokens: SupabaseVoiceTokenProvider(url: config.url, anonKey: config.anonKey),
                                      transport: WebSocketTransport(), audio: EngineAudio())
             mockVoice = nil

@@ -6,7 +6,7 @@ Built overnight 2026-10-24, on the manager's relay of Dylan's message: "can you 
 
 1. **Look at it:** open `ios/build/shots/` (scenario screenshots) and `ios/build/shots/rehearsal/` (the automated §1.1 rehearsal, the live merchant beat, the failure paths).
 2. **Run it in the simulator:** `cd ios && xcodegen generate && open Kart.xcodeproj`, then Run on "iPad Pro 13-inch (M5)". With `ios/Config.xcconfig` present (`ios/scripts/make-config.sh` writes it from the repo `.env`), the app talks to the local Supabase. Without it, it uses the built-in mock. Three-finger long press opens the demo controls.
-3. **Create the voice pieces** (nothing secret was created overnight; see "What you need to create" below), then launch with `-KartVoice line`.
+3. **Create the voice pieces** (nothing secret was created overnight; see "What you need to create" below), then turn on Kart's real voice: demo controls (three-finger long press) → **Use Kart's real voice, Cartesia (relaunch)**, and quit and reopen the app. From Xcode, `-KartVoice line` does the same for one run.
 4. **On a real iPad (iPadOS 26):** plug it in and trust the Mac, turn on Developer Mode (Settings → Privacy & Security), pick it as the run destination in Xcode, and Run. `scripts/make-config.sh` fills in your signing team from the keychain (override with `KART_TEAM_ID` in `.env`). If Xcode says `com.kart.app` isn't available, change the bundle id in `project.yml`. For the backend: on the same Wi-Fi as the Mac, use the local Supabase at `http://<Mac name>.local:54321` (the app allows local-network http). Anywhere else, use the hosted project (https) or the offline demo mode.
 5. **Say yes or no to the rulings** below; each is a one-line change if you disagree.
 
@@ -48,7 +48,8 @@ Local test of the agent before deploying: `cd agent && .venv/bin/python main.py`
 | `-KartBackend mock` / `supabase` | Pick the backend for this launch. The default is Supabase when `Config.xcconfig` has a URL, else the mock. |
 | Debug panel → **Use offline demo mode (relaunch)** | The on-device way to drop to the mock if the network dies at the demo; this choice sticks across launches. **Use the live backend (relaunch)** switches back. Quit and reopen the app after tapping. |
 | `-KartCartID <id>` | Use another cart row (the live rehearsal uses `ipad-live`). |
-| `-KartVoice line` / `mock` | Real voice through Cartesia Line, or the scripted mock (default). |
+| `-KartVoice line` / `mock` | Real voice through Cartesia Line, or the scripted mock (default), for this launch. |
+| Debug panel → **Use Kart's real voice, Cartesia (relaunch)** | The same, and it sticks across launches (for an iPad started from the home screen). **Use the scripted voice (relaunch)** switches back. |
 | `-KartScenario <name>` | Seed a screen for screenshots (always the mock). |
 | `-KartStill YES`, `-KartDebugButton YES` | Freeze Kart's idle animation (UI tests); show a corner button for the debug panel. |
 
@@ -57,4 +58,5 @@ Local test of the agent before deploying: `cd agent && .venv/bin/python main.py`
 - **The suggestion rule follows the backend's SQL (f6e41f3):** nothing is offered for a product already on the list, and a "Yes" (which puts the product on the list) consumes the card, so the next eligible deal pops right away. A deal on a listed product shows as "$3 off" on its list row instead. A store deal created mid-trip on a listed product also gets a one-tap "New deal: … · Got it" note, and Kart says it once. The offline mock follows the same rule. The voice agent plans the basics for a meal (pasta, sauce, bread), so the Parmesan deal card still shows in the demo.
 - **Kart's voice format from Line isn't documented.** The iPad assumes 16 kHz mono PCM16, the same as it sends. If Kart sounds chipmunky or slowed on the iPad, change `EngineAudio.outputSampleRate` (24 000 or 44 100).
 - **The mock backend's route and suggestion order are simpler than the backend's.** That only affects the offline demo mode.
-- **Throwaway test carts:** `ios-it-*`, `agent-it-*`, and `ipad-live` rows exist in the local DB from the integration runs.
+- **Throwaway test carts:** `ios-it-*`, `agent-it-*`, and `ipad-live` rows exist from the integration runs and rehearsals.
+- **Rehearsals reset only their own cart.** `scripts/rehearse-live.sh` resets `ipad-live` with `backend/cart.py reset` and `status idle`, before and after (even on failure), and never touches the store's catalog, deals or merchant log. Never run `backend/db.py reset-demo` on hosted: it re-seeds the catalog and wipes the merchant log for everyone. Only the demo operator runs it, right before judging.

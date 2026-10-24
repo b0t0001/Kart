@@ -99,15 +99,7 @@ final class RehearsalTests: XCTestCase {
 
     @MainActor
     private func openPanel(find id: String) -> XCUIElement {
-        app.buttons["debug.open"].tap()
-        let target = app.descendants(matching: .any)[id]
-        var swipes = 0
-        while !target.exists && swipes < 12 {
-            app.tables.firstMatch.exists ? app.tables.firstMatch.swipeUp() : app.collectionViews.firstMatch.swipeUp()
-            swipes += 1
-        }
-        XCTAssertTrue(target.waitForExistence(timeout: 3), "debug control \(id) not found")
-        return target
+        app.demoControl(id)
     }
 
     @MainActor

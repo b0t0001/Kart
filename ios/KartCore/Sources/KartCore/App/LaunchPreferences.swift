@@ -19,3 +19,18 @@ public enum LaunchPreferences {
         defaults.set(backend.rawValue, forKey: backendKey)
     }
 }
+
+public enum LaunchVoice: String, Sendable { case mock, line }
+
+extension LaunchPreferences {
+    public static let voiceKey = "KartVoice"
+
+    /// Kart's real voice (Cartesia Line) when asked for, by `-KartVoice line` or the debug panel, and only with a
+    /// backend to get the voice token from. Scenarios keep the scripted voice for screenshots.
+    public static func voice(defaults: UserDefaults, scenario: String?, hasConfig: Bool) -> LaunchVoice {
+        guard scenario == nil, hasConfig else { return .mock }
+        return defaults.string(forKey: voiceKey).flatMap(LaunchVoice.init(rawValue:)) ?? .mock
+    }
+
+    public static func persistVoice(_ voice: LaunchVoice, defaults: UserDefaults) { defaults.set(voice.rawValue, forKey: voiceKey) }
+}

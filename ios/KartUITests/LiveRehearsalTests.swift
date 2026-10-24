@@ -1,8 +1,8 @@
 import XCTest
 
-/// The demo against the live backend (local Supabase): every write goes through the contract's RPCs and every
-/// change comes back over realtime. Run via scripts/rehearse-live.sh, which resets the demo without the parmesan
-/// deal and plays the store owner: it creates the deal when this test drops a `request-parm-deal` file.
+/// The demo against the live backend (hosted or local) on its own cart: every write goes through the contract's
+/// RPCs and every change comes back over realtime. Run via scripts/rehearse-live.sh, which resets only this cart
+/// and never the store's catalog, so the Parmesan card comes from the store's seeded deal.
 final class LiveRehearsalTests: XCTestCase {
     private var app: XCUIApplication!
     private var shots: URL { URL(fileURLWithPath: ProcessInfo.processInfo.environment["SHOT_DIR"] ?? NSTemporaryDirectory()) }
@@ -26,8 +26,8 @@ final class LiveRehearsalTests: XCTestCase {
         expectText("$1.99")
         shot("live-1-before-deal")
 
-        try Data().write(to: shots.appending(path: "request-parm-deal"))   // the owner creates "parmesan $3 off"
-        expectText("Parmesan is $3 off in Aisle 4. Want it?", timeout: 20)
+        let parmesanCard = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Parmesan is")).firstMatch
+        XCTAssertTrue(parmesanCard.waitForExistence(timeout: 20), "no Parmesan deal card (is the store's Parmesan deal active?)")
         shot("live-2-deal-popped")
         app.buttons["card.Yes"].tap()
         XCTAssertTrue(app.buttons["card.No thanks"].waitForNonExistence(timeout: 5))
@@ -52,15 +52,7 @@ final class LiveRehearsalTests: XCTestCase {
 
     @MainActor
     private func debug(_ id: String) {
-        app.buttons["debug.open"].tap()
-        let target = app.descendants(matching: .any)[id]
-        var swipes = 0
-        while !target.exists && swipes < 12 {
-            app.collectionViews.firstMatch.swipeUp()
-            swipes += 1
-        }
-        XCTAssertTrue(target.waitForExistence(timeout: 3), "debug control \(id) not found")
-        target.tap()
+        app.demoControl(id).tap()
         app.buttons["debug.close"].tap()
     }
 
