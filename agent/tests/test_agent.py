@@ -221,5 +221,5 @@ async def test_the_last_question_asked_gets_the_answer():
 async def test_a_tap_on_the_nudge_card_ends_the_spoken_question():
     agent, backend = make([Turn(chunks=["Keep what?"])])
     agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
-    agent.run_filter(UserCustomSent(metadata={"type": "card_response", "card_id": "nudge-ground-beef|over", "action": "got_it"}))
+    agent.run_filter(UserCustomSent(metadata={"type": "card_response", "card_id": "nudge-over:ground-beef", "action": "got_it"}))
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Keep it.")])) == ["Keep what?"]
