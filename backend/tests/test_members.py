@@ -316,19 +316,26 @@ def test_writes_bump_member_rev(member_cart, conn):
 # ── The demo seed ──
 
 def test_seed_member_makes_the_demo_profile(conn, member):
+    """Default (the demo): ten weeks of history and no party; Dylan tells Kart about Leo's party live in Act 1."""
     import members as members_cli
     first = members_cli.seed_member(conn, "it-seed", "Dylan", 4, TODAY)
     prof = profile(conn, "it-seed")
     assert prof["member"]["name"] == "Dylan" and prof["member"]["household"] == 4
     assert prof["member"]["trips"] >= 15
-    by_kind = {p["kind"]: p for p in prof["picks"]}
-    assert (by_kind["event"]["product_id"], by_kind["event"]["reason"]) == \
-        ("barilla-spaghetti", "Leo's soccer party · tomorrow")
-    assert (by_kind["due"]["product_id"], by_kind["due"]["reason"]) == ("whole-milk", "every week · last Sat")
-    assert (by_kind["usual"]["product_id"], by_kind["usual"]["reason"]) == ("mission-tortillas", "your Saturday usual")
-    assert [m["text"] for m in prof["memories"]] == ["Leo's soccer party, pasta for the team", "Likes the Marinara here"]
-    assert first["event_date"] == "2026-10-25"
+    assert picks(prof)[:2] == [("whole-milk", "due", "every week · last Sat"),
+                               ("mission-tortillas", "usual", "your Saturday usual")]
+    assert [m["text"] for m in prof["memories"]] == ["Likes the Marinara here"]
+    assert first["event_date"] is None
     assert members_cli.seed_member(conn, "it-seed", "Dylan", 4, TODAY) == first          # re-runnable
+
+
+def test_seed_with_party_for_rehearsals(conn, member):
+    import members as members_cli
+    made = members_cli.seed_member(conn, "it-seed", "Dylan", 4, TODAY, with_party=True)
+    party = profile(conn, "it-seed")["memories"][0]
+    assert made["event_date"] == "2026-10-31"                 # "next Saturday" from Saturday the 24th
+    assert (party["text"], party["event_date"]) == ("Leo's soccer team party, pasta for 12", "2026-10-31")
+    assert [(i["product_id"], i["qty"]) for i in party["items"]] == [("barilla-spaghetti", 3), ("rao-marinara", 2)]
 
 
 # ── Edge cases (§3.9) ──
@@ -370,11 +377,14 @@ def test_undated_event_expires_after_30_days(conn, member):
         ("Game night sometime", True), ("Likes the Marinara here", False), ("Housewarming someday", False)]
 
 
-def test_seed_prints_party_date(db_url, monkeypatch, capsys):
+def test_seed_prints_what_it_made(db_url, monkeypatch, capsys):
     import sys
     import members as members_cli
     monkeypatch.setenv("KART_ENV_FILE", "/dev/null")
-    monkeypatch.setattr(sys, "argv", ["members.py", "seed", "--member", "it-cli", "--today", "2026-10-24",
-                                      "--db-url", db_url])
+    argv = ["members.py", "seed", "--member", "it-cli", "--today", "2026-10-24", "--db-url", db_url]
+    monkeypatch.setattr(sys, "argv", argv)
     members_cli.main()
-    assert "Leo's soccer party: 2026-10-25 (tomorrow)" in capsys.readouterr().out
+    assert "No party yet: Dylan tells Kart about it in Act 1" in capsys.readouterr().out
+    monkeypatch.setattr(sys, "argv", argv + ["--with-party"])
+    members_cli.main()
+    assert "Leo's soccer team party: 2026-10-31 (next Saturday)" in capsys.readouterr().out

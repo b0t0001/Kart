@@ -128,9 +128,10 @@ so no cart ever has a member and nothing below happens.
   (America/Los_Angeles).
 - **Memory writes:** `member_remember`, `member_save_for_later` and `member_forget` bump
   `carts.member_rev`, so the iPad refetches.
-- **The demo member:** `python backend/members.py seed` (1029, Dylan) builds ten weeks of history plus
-  Leo's soccer party tomorrow with the pasta list. Run it right before judging
-  (`pre_judging.sh --members`). `members.py show 1029 [--cart 7]` prints the profile.
+- **The demo member:** `python backend/members.py seed` (1029, Dylan) builds ten weeks of history and no party:
+  in the demo Dylan tells Kart about Leo's party live. `--with-party` adds it (next Saturday, spaghetti ×3,
+  marinara ×2) for rehearsals that skip that step. Run it right before judging (`pre_judging.sh --members`).
+  `members.py show 1029 [--cart 7]` prints the profile.
 
 ## Tests
 
