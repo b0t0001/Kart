@@ -15,7 +15,7 @@ Buy the **exact brands and sizes in the table if you can**. If you substitute, n
 | # | Buy (suggested) | Qty | Catalog id | Mini-store aisle | Role in the demo |
 |---|---|---|---|---|---|
 | 1 | **Barilla Spaghetti, 1 lb** (blue box) | **3** | `barilla-spaghetti` | A6 Pasta & Sauce | **Meal A:** box 1 = the item that starts the bill; box 2 = the **"too much" nudge** (beta); box 3 = spare, and **counting** clips (2 boxes dropped together) |
-| 2 | **Marinara, 24 oz, plastic jar** (e.g. Prego Traditional) | 1 | `rao-marinara` *(id kept; renamed to the jar you buy)* | A6 Pasta & Sauce | **Meal A:** dropping it **triggers the Parmesan deal card** |
+| 2 | **Marinara, 24 oz, plastic jar** (e.g. Prego Traditional) | 1 | `rao-marinara` *(id kept; renamed to the jar you buy)* | A6 Pasta & Sauce | **Meal A:** on the list (spaghetti or marinara, whichever goes in first, triggers the Parmesan card) |
 | 3 | **Grated Parmesan shaker, 8 oz** (Kraft green can) | 1 | `kirkland-parmesan` *(id kept; becomes the grated shaker)* | A4 Cheese & Deli | **Meal A: the headline deal**, "Parmesan is $1 off in Aisle 4. Want it?" → "yes" → drop it |
 | 4 | **Tortilla chips, party-size bag** (e.g. Tostitos Restaurant Style, 13 oz) | 1 | `tostitos-chips` | A7 Snacks & Chips | **Meal B: the second deal card**, "Chips are $1.50 off". Big, light, safe to drop |
 | 5 | **Salsa, 15–16 oz jar** (plastic if you can find it, e.g. Pace) | 1 | `tostitos-salsa` *(id kept; renamed to the jar you buy)* | A5 Mexican | **Meal B:** dropping it **triggers the chips deal** |
@@ -60,7 +60,7 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 
 **Kart's lists** (the voice agent is tuned to produce exactly these):
 - **A. "Pasta night for 4"** → **spaghetti ×1, marinara ×1, garlic bread ×1**. The Parmesan is left for the deal card. Basis: "1 lb serves 4".
-- **B. "Game-night nachos for 6"** → **chips ×1 (party bag), salsa ×1, queso ×1, black beans ×1, jalapeños ×1, sour cream ×1**.
+- **B. "Game-night nachos for 6"** → **salsa ×1, queso ×1, black beans ×1, jalapeños ×1, sour cream ×1**. The chips are left OFF the list on purpose: cards never show for listed items, so the chips deal card offers them when the salsa or queso goes in.
 
 ---
 
@@ -73,9 +73,9 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 |---|---|---|---|---|---|
 | 1 | Tap start, say *"Pasta night for my family of 4"* | — | — | List: Spaghetti, Marinara, Garlic Bread; next stop A6 | "Pasta night for four… spaghetti, marinara and garlic bread. Head to Aisle 6." |
 | 1b | Kart asks *"By the way, one deal goes with your list. Want to hear it?"* → say **"Not now"** | — | — | — | Skips the deal walk-through. **The deal is still spoken at the shelf** (step 3) — Dylan's rule: "not now" = tell me at the shelf |
-| 2 | Drop **spaghetti box 1** | `barilla-spaghetti` | settle → identify (local match, ~1.5 s) → 1 add | Bill: Spaghetti $x; list row ✓ | "Got the spaghetti." |
-| 3 | Drop **marinara** | `rao-marinara` | 1 add | Bill +marinara; **Parmesan deal card** | **"Parmesan is $1 off in Aisle 4. Want it?"** |
-| 4 | Say *"Yes"*, drop the **Parmesan shaker** | `kirkland-parmesan` | 1 add at the deal price | Bill shows the struck-through price and "saved $1" | "Added the Parmesan." |
+| 2 | Drop **spaghetti box 1** | `barilla-spaghetti` | settle → identify (local match, ~1.5 s) → 1 add | Bill: Spaghetti $x; list row ✓; **Parmesan deal card** | "Got the spaghetti." then **"Parmesan is $1 off in Aisle 4. Want it?"** |
+| 3 | Say *"Yes"*, drop **marinara** | `rao-marinara` | 1 add | Bill +marinara; Parmesan joins the list with $1 off | "Added Parmesan to your list." |
+| 4 | Drop the **Parmesan shaker** | `kirkland-parmesan` | 1 add at the deal price | Bill shows the struck-through price and "saved $1" | "Added the Parmesan." |
 | 5 *(optional)* | Drop any **non-catalog item** you have on hand (e.g. a water bottle) | (unknown) | settle → Claude → "unknown" | **"Is this…?" card**; Pay blocked | "I'm not sure what that is. Can you check the screen?" |
 | 6 *(optional)* | Tap **"Not this"**, take it out | — | removal resolves it | Card clears | — |
 | 7 *(beta)* | Drop **spaghetti box 2** | `barilla-spaghetti` | 1 add (qty 2) | **"Too much" card** | **"That's two boxes of spaghetti, and pasta night for 4 needs one. Keep the extra?"** |
@@ -90,7 +90,7 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 |---|---|---|---|
 | 1 | *"Game-night nachos for 6"* | — | List: chips, salsa, queso, black beans, jalapeños, sour cream |
 | 1b | Deal offer → **"Not now"** | — | The chips deal is spoken when the salsa goes in (step 2) |
-| 2 | Drop **salsa** | `tostitos-salsa` | **"Chips are $1.50 off in Aisle 7. Want it?"** |
+| 2 | Drop **salsa** | `tostitos-salsa` | **"Tortilla Chips are $1.50 off in Aisle 7. Want them?"** |
 | 3 | "Yes", drop **chips** | `tostitos-chips` | Deal price on the bill |
 | 4 | Drop **queso, black beans, jalapeños** one at a time | `queso`, `black-beans`, `jalapenos` | Each one billed and ticked off |
 | 5 *(beta)* | Check out | — | "Before you go: you still need sour cream" |
@@ -110,4 +110,5 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
    - run `tools/gallery_check.py`;
    - record the identical-spaghetti counting clips.
 5. **CV:** replays the clips and reports recognition accuracy for each bought item.
-6. **Whole team:** rehearse Meal A three times on cart 7. Run `reset-demo` once, right before judging.
+6. **Whole team:** rehearse Meal A three times, on cart 7 or a test cart. Rehearsals use placeholder stock (20).
+7. **Right before judging (operator, in this order):** `backend/db.py sync-catalog --with-stock` (real counts) → `backend/db.py reset-demo` → *(if the member beta ships)* `backend/members.py seed`. See the pre-judging section of `backend/docs/DEMO.md`.
