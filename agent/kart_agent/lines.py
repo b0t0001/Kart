@@ -119,9 +119,17 @@ def _nudge_line(event: dict[str, Any], catalog: list[dict[str, Any]], meal: str 
     return f"Before you go: you're {_amount(short, product)} short{f' for {meal}' if meal else ''}.{where}"
 
 
+_ACKS = {"okay", "ok", "alright", "right", "yeah", "yep", "cool", "nice", "sure", "thanks"}
+
+
 def only_filler(text: str) -> bool:
     """"Um." / "Hmm": nothing to answer."""
     return all(word in _FILLERS for word in re.sub(r"[^a-z' ]", " ", text.lower()).split())
+
+
+def only_ack(text: str) -> bool:
+    """"Okay, so." / "Yeah.": nothing to answer when Kart hasn't asked anything."""
+    return all(word in _FILLERS | _ACKS for word in re.sub(r"[^a-z' ]", " ", text.lower()).split())
 
 
 def yes_or_no(text: str) -> str | None:

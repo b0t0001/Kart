@@ -284,3 +284,20 @@ async def test_no_thanks_to_the_checkout_list_skips_it():
     agent.run_filter(UserCustomSent(metadata=combined))
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="No thanks.")])) == ["Got it."]
     assert [p["p_action"] for name, p in backend.calls if name == "dismiss_nudge"] == ["skip"]
+
+
+async def test_a_plain_yes_answers_the_nudges_question():
+    agent, backend = make()
+    agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))             # "Keep the extra?"
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Sure.")])) == ["Okay, keeping it."]
+    combined = {"type": "nudge", "product_id": "rao-marinara", "kind": "under", "have": 0, "need": 1, "text": "x",
+                "items": [{"product_id": "rao-marinara", "have": 0, "need": 1, "aisle": "Aisle 6"},
+                          {"product_id": "kirkland-parmesan", "have": 0, "need": 1, "aisle": "Aisle 4"}]}
+    agent.run_filter(UserCustomSent(metadata=combined))               # "...Want to grab them?"
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Yeah.")])) == ["Okay, start in Aisle 6."]
+    assert [p["p_action"] for name, p in backend.calls if name == "dismiss_nudge"] == ["keep", "shop"]
+
+
+async def test_a_bare_okay_with_nothing_asked_gets_silence():
+    agent, backend = make()                                  # no scripted Claude turns: calling Claude would fail
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Okay, so.")])) == [] and backend.transcript == []

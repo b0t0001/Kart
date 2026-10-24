@@ -8,7 +8,8 @@ from typing import Any, AsyncIterator
 from line.events import AgentSendText, CallEnded, CallStarted, UserCustomSent, UserTurnEnded, UserTurnStarted
 
 from .brain import Brain
-from .lines import DECLINED_LINE, KEEP_LINE, NUDGE_OK_LINE, accepted_line, nudge_answer, only_filler, proactive_line, yes_or_no
+from .lines import (DECLINED_LINE, KEEP_LINE, NUDGE_OK_LINE, accepted_line, nudge_answer, only_ack, only_filler,
+                    proactive_line, yes_or_no)
 from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
@@ -110,9 +111,19 @@ class KartAgent:
             text = " ".join(part.content for part in event.content if hasattr(part, "content") and part.content).strip()
             if not text or only_filler(text):            # "Um." gets no answer and no caption
                 return
+            if not self._offer and not self._nudge and only_ack(text):   # "Okay, so." with nothing asked
+                return
             await self._refresh()
             ctx = {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id}
-            nudge_reply = nudge_answer(text) if self._nudge and (self._last_asked == "nudge" or not self._offer) else None
+            asked_nudge = self._nudge and (self._last_asked == "nudge" or not self._offer)
+            nudge_reply = nudge_answer(text) if asked_nudge else None
+            if asked_nudge and nudge_reply is None:      # a plain yes/no answers the nudge's own question
+                plain = yes_or_no(text)
+                checkout_list = bool(self._nudge.get("items"))
+                if plain == "yes":
+                    nudge_reply = "keep" if self._nudge.get("kind") == "over" else ("shop" if checkout_list else "ok")
+                elif plain == "no":
+                    nudge_reply = "skip" if checkout_list else "ok"
             if nudge_reply:                              # "keep it" / "got it": dismiss_nudge, no Claude round
                 await self._caption("user", text)
                 nudge, self._nudge = self._nudge, None
