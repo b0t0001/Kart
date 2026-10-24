@@ -8,21 +8,21 @@ The single source for **what we buy, how each item is set up in the catalog, and
 
 ---
 
-## 1. The shopping list (~9 items, ~$30–40)
+## 1. The shopping list (~9 items, ~$29 at Target Berkeley Central; all in stock per target.com, 2026-10-24)
 
-Buy the **exact brands and sizes in the table if you can**. If you substitute, note the brand and size: the cameras need an accurate description of each package. Prefer **cans and plastic jars** over glass, because glass breaks when dropped.
+The exact Target products, with their **real Target aisle** (for the demo video) and **mini-store aisle** (for the live table demo). The in-store checklist is in [TARGET_SHOPPING_CHECKLIST.md](TARGET_SHOPPING_CHECKLIST.md). If you substitute, note the brand and size: the cameras need an accurate description of each package.
 
-| # | Buy (suggested) | Qty | Catalog id | Mini-store aisle | Role in the demo |
+| # | Buy at Target | Qty | Catalog id | Target aisle / Mini aisle | Role in the demo |
 |---|---|---|---|---|---|
-| 1 | **Barilla Spaghetti, 1 lb** (blue box) | **3** | `barilla-spaghetti` | A6 Pasta & Sauce | **Meal A:** box 1 = the item that starts the bill; box 2 = the **"too much" nudge** (beta); box 3 = spare, and **counting** clips (2 boxes dropped together) |
-| 2 | **Marinara, 24 oz, plastic jar** (e.g. Prego Traditional) | 1 | `rao-marinara` *(id kept; renamed to the jar you buy)* | A6 Pasta & Sauce | **Meal A:** on the list (spaghetti or marinara, whichever goes in first, triggers the Parmesan card) |
-| 3 | **Grated Parmesan shaker, 8 oz** (Kraft green can) | 1 | `kirkland-parmesan` *(id kept; becomes the grated shaker)* | A4 Cheese & Deli | **Meal A: the headline deal**, "Parmesan is $1 off in Aisle 4. Want it?" → "yes" → drop it |
-| 4 | **Tortilla chips, party-size bag** (e.g. Tostitos Restaurant Style, 13 oz) | 1 | `tostitos-chips` | A7 Snacks & Chips | **Meal B: the second deal card**, "Chips are $1.50 off". Big, light, safe to drop |
-| 5 | **Salsa, 15–16 oz jar** (plastic if you can find it, e.g. Pace) | 1 | `tostitos-salsa` *(id kept; renamed to the jar you buy)* | A5 Mexican | **Meal B:** dropping it **triggers the chips deal** |
-| 6 | **Salsa con queso dip, 15 oz jar** | 1 | `queso` **(new)** | A5 Mexican | **Meal B:** on the list. Also pairs with the chips deal |
-| 7 | **Black beans, 15 oz can** | 1 | `black-beans` **(new)** | A5 Mexican | **Meal B:** on the list. A can: a small, cylindrical, drop-safe item |
-| 8 | **Sliced jalapeños, small can** (e.g. La Costeña 12 oz) | 1 | `jalapenos` **(new)** | A5 Mexican | **Meal B:** on the list. Small-item test |
-| 9 | *(optional)* Taco seasoning packet | 1 | `taco-seasoning` | A5 Mexican | **Smallest-item** camera test only. Skip it to save money |
+| 1 | **Barilla Spaghetti Pasta, 16 oz** ($1.99) | **3** | `barilla-spaghetti` | **A12** / A6 Pasta & Sauce | **Meal A:** box 1 = the item that starts the bill; box 2 = the **"too much" nudge** (beta); box 3 = spare, and **counting** clips (2 boxes dropped together) |
+| 2 | **Good & Gather Marinara Pasta Sauce, 23 oz** ($2.19; glass, so place it) | 1 | `rao-marinara` *(id kept)* | **A12** / A6 Pasta & Sauce | **Meal A:** on the list (spaghetti or marinara, whichever goes in first, triggers the Parmesan card) |
+| 3 | **Market Pantry Grated Parmesan Cheese, 8 oz shaker** ($4.19) | 1 | `kirkland-parmesan` *(id kept)* | **A12** / A4 Cheese & Deli | **Meal A: the headline deal**, "Parmesan is $1 off in Aisle 4. Want it?" → "yes" → drop it |
+| 4 | **Tostitos Original Restaurant Style Tortilla Chips, 12 oz** ($4.59) | 1 | `tostitos-chips` | **A6** / A7 Snacks & Chips | **Meal B: the second deal card**, "Chips are $1.50 off". Big, light, safe to drop |
+| 5 | **Good & Gather Mild Restaurant Style Salsa, 16 oz** ($2.99; only 1 left, backup: G&G Mild Chunky 24 oz) | 1 | `tostitos-salsa` *(id kept)* | **A12** / A5 Mexican | **Meal B:** dropping it **triggers the chips deal** |
+| 6 | **Tostitos Salsa Con Queso Medium Dip, 15 oz** ($5.19) | 1 | `queso` **(new)** | **A6** / A5 Mexican | **Meal B:** on the list. Also pairs with the chips deal |
+| 7 | **Good & Gather Black Beans, 15.5 oz can** ($0.99) | 1 | `black-beans` **(new)** | **A12** / A5 Mexican | **Meal B:** on the list. A can: a small, cylindrical, drop-safe item |
+| 8 | **Market Pantry Hot Sliced Jalapeño, 12 oz** ($2.29) | 1 | `jalapenos` **(new)** | **A12** / A5 Mexican | **Meal B:** on the list. Small-item test |
+| 9 | *(optional)* **Old El Paso Taco Seasoning, Original, 1 oz** ($0.99) | 1 | `taco-seasoning` | **A12** / A5 Mexican | **Smallest-item** camera test only. Skip it to save money |
 
 **Not used in the demo:** the apple and the Tide (Dylan, 2026-10-24). The trust moment (an unknown item → "Is this…?") is optional, using any non-catalog item you have on hand.
 
