@@ -69,3 +69,11 @@ def test_stacked_add_then_revealed_removal(tmp_path):
     assert classify_blob(rs[0].blobs[0], rs[0], w.empties[0], w.cart, w.features, w.cfg) == "removed"
     [d] = step(w, Scene(items=[big, top]), Scene(items=[big]))
     assert (d.kind, d.product_id) == ("removed", "red-box") and w.cart.count("blue-can") == 1
+
+
+def test_camera_without_empty_picture_is_skipped(tmp_path):  # review I1
+    w = world(tmp_path)
+    step(w, Scene(), Scene(items=[RED]))
+    only_cam0 = {0: w.empties[0]}  # cam1 never got an empty-basket picture
+    ds = decide(settle(Scene(items=[RED]), Scene(), w.cfg), only_cam0, w.cart, w.identifier, w.features, w.cfg)
+    assert [(d.kind, d.product_id) for d in ds] == [("removed", "red-box")]

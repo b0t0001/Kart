@@ -9,10 +9,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import logging
+
 import numpy as np
 
 from kartcv.cart import CartMemory, Instance, View
 from kartcv.changes import Blob, ChangeResult, lab_distance, match_gain
+
+log = logging.getLogger(__name__)
 
 IOU_OVERLAP = 0.1
 IOU_WEIGHT = 0.2
@@ -188,8 +192,12 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
         if r.status != "blobs":
             continue
         empty = empties.get(r.cam)
+        if empty is None:
+            # Without an empty-basket picture a removal looks like an addition; let the other camera decide.
+            log.warning("cam%d has no empty-basket picture yet; ignoring its changes (reset with the cart empty)", r.cam)
+            continue
         for b in r.blobs:
-            kind = classify_blob(b, r, empty, cart, features, cfg) if empty is not None else "added"
+            kind = classify_blob(b, r, empty, cart, features, cfg)
             if kind == "added":
                 added.setdefault(r.cam, []).append(b)
             elif kind == "removed":
