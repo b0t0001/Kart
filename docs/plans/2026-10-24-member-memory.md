@@ -37,6 +37,7 @@
 3. **Kart mishears "forget it" (as in "never mind").** The voice `forget` tool needs a memory id and can't wipe everything. Pinned in Task 6: `test_forget_requires_memory_id`.
 4. **Profile RPC slow or failing at the greeting.** The trip must never wait more than 1 s on memory. Pinned in Task 7: `test_profile_timeout_falls_back`.
 5. **Signing in on a cart whose flag is off** (e.g. flipped mid-demo). It must start a guest trip, with no error screen. Pinned in Task 11: `testSignInWithFlagOffStartsGuestTrip`.
+6. **"Forget me" while Kart is mid-trip.** Kart must never mention a forgotten memory afterwards. Pinned in Task 7b: `test_member_forgotten_drops_profile_and_tools`, and Task 12b: `testForgetMemberSendsMemberForgotten`.
 
 ---
 
@@ -245,6 +246,32 @@
   Expected: tests pass, and `show` prints three picks.
 - [ ] **Step 5: Commit** `backend: members.py demo seed (Dylan, 1029) and docs`.
 
+### Task 4b: Backend edge cases (spec §3.9)
+
+**Files:**
+- Modify: `backend/db/07_members.sql`
+- Modify: `backend/members.py` (`seed` prints `Leo's soccer party: YYYY-MM-DD (tomorrow)`; `pre_judging.sh --members` already runs `members.py seed` with no arguments, so the defaults must stay `--member 1029 --name Dylan`)
+- Test: `backend/tests/test_members.py`
+
+**Interfaces:**
+- **Produces:**
+  - `member_lookup(p_member_id text) returns jsonb` (grant anon): `{"exists": bool, "name": text|null}`. It never creates anything.
+  - `member_sensitive(p_category text) returns boolean` (immutable): true for `pharmacy`, `health`, `medicine`, `personal-care`, `baby`, `pregnancy` and `adult`.
+- **Changes:**
+  - The receipt trigger skips lines whose product category is sensitive.
+  - `member_profile` also drops sensitive products from picks, usuals and `last_trip`, in case the seed or old data has them.
+  - An undated event (no `event_date`) counts as upcoming for 30 days after `created_at` (`days_until` stays null). After that it sorts with the older memories.
+
+- [ ] **Step 1: Write failing tests:**
+  - `test_lookup_known_unknown_never_creates`
+  - `test_sensitive_lines_not_stored` (temporarily set a product's category to `pharmacy` in the test, then check out → no purchase row for it)
+  - `test_undated_event_expires_after_30_days`
+  - `test_seed_prints_party_date` (capsys)
+- [ ] **Step 2: Run.** Expected: FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** `pytest backend/tests -q`. Expected: all pass.
+- [ ] **Step 5: Commit** `backend: member lookup, sensitive purchases never remembered, undated events expire`.
+
 ### Task 5: Flag-off proof
 
 **Files:**
@@ -381,6 +408,39 @@ Merge `main` into the branch first. `agent.py`, `brain.py` and the tests change 
 - [ ] **Step 3: Implement** the hooks in `brain.py` and `agent.py`.
 - [ ] **Step 4: Run** the whole agent suite. Expected: every earlier test is unchanged and passes, along with the new ones.
 - [ ] **Step 5: Commit** `agent: members, a personal greeting, one question per trip, lull (beta)`.
+
+### Task 7b: Agent edge cases (spec §3.9)
+
+**Files:**
+- Modify: `agent/kart_agent/memory.py`, `agent/kart_agent/agent.py`
+- Test: `agent/tests/test_agent_member.py`, `agent/tests/test_ipad_contract.py`
+
+**Interfaces:**
+- **New fixed lines in `memory.py`:**
+  - `FORGOTTEN_LINE = "Done. I've forgotten everything about you."`
+  - `still_there_line(profile) -> str`: `"Still shopping, {name}?"`, or `"Still shopping?"` with no name.
+- **New tool in `MEMBER_TOOLS`:** `show_memories()`, "The shopper asked what you know or remember about them: open the memory screen." It sets `ctx["show_memories"] = True`. After the turn, the agent yields `AgentSendCustom(metadata={"type": "show_memories"})`.
+- **Added to `MEMBER_RULES`:**
+  - for "what do you know about me", call `show_memories` and say one short sentence naming at most three things;
+  - never save health, pregnancy, religion, sexuality, finances or details about children beyond the plan; save the event, not the reason.
+- **iPad→agent events:**
+  - **`{"type": "member_forgotten"}`:** `run_filter` returns True when a member is signed in. `process` clears `member_id`, `_profile` and `_question`, calls `brain.set_member(None)`, and says `FORGOTTEN_LINE` with `interruptible=False`.
+  - **`{"type": "member_idle"}`:** `run_filter` returns True for a member while Kart isn't speaking. `process` says `still_there_line(profile)`.
+  - **`trip_context` for the same `trip_id`:**
+    - a different or missing `member_id` → drop or switch the member silently (no new-trip reset);
+    - the same `member_id` → reload the profile on the next turn (set a `_stale` flag; `_load_profile` runs before the next Claude turn).
+
+- [ ] **Step 1: Write failing tests:**
+  - `test_member_forgotten_drops_profile_and_tools` (the next LLM request has no `"About this shopper"` and no `remember` tool; said `[FORGOTTEN_LINE]`)
+  - `test_same_trip_context_without_member_drops_silently`
+  - `test_same_trip_context_same_member_reloads_profile`
+  - `test_member_idle_line`
+  - `test_show_memories_sends_custom_event`
+  - contract cases for `member_forgotten`, `member_idle` and `show_memories`
+- [ ] **Step 2: Run.** Expected: FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the whole agent suite. Expected: all pass.
+- [ ] **Step 5: Commit** `agent: forget-me drops memory at once, still-shopping line, show memories`.
 
 ## Part C: iPad (`ios/`)
 
@@ -573,6 +633,50 @@ Merge `main` into the branch first. Run `cd ios && xcodegen generate` after merg
 - [ ] **Step 2: Take screenshots** with `scripts/shoot.sh welcome,shopping` using a new scenario `member` (add it to `DemoScenario.swift`: flag on, signed in as Dylan, mock). Check the PNGs in `build/shots/`: the sign-in pill, the For you card and the chip are visible, and nothing overlaps.
 - [ ] **Step 3: Commit** `ios: member sign-in, For you card, memory sheet, demo date controls`.
 
+### Task 12b: iPad edge cases (spec §3.9)
+
+**Files:**
+- Modify:
+  - `ios/KartCore/Sources/KartCore/Backend/KartBackend.swift`, `MockKartBackend.swift`, `KartSupabase/SupabaseKartBackend.swift`
+  - `ios/KartCore/Sources/KartCore/Voice/VoiceSession.swift`, `LineVoiceSession.swift`
+  - `ios/KartCore/Sources/KartCore/App/AppModel.swift`
+  - `ios/Kart/Features/Member/MemberSignInView.swift`, `MemoryView.swift`, `ios/Kart/Features/Shopping/TripPanel.swift`
+- Test: `ios/KartCore/Tests/KartCoreTests/MemberTests.swift`, `LineVoiceSessionTests.swift`
+
+**Interfaces:**
+- **`KartBackend`:** `func lookUpMember(_ id: String) async -> MemberLookup?`, where `MemberLookup { exists: Bool; name: String? }` comes from `member_lookup`. The mock knows `1029` → `Dylan`.
+- **`VoiceEvent` gains:** `.memberForgotten` → `{"type":"member_forgotten"}` and `.memberIdle` → `{"type":"member_idle"}`.
+- **Agent→iPad:** a custom `{"type":"show_memories"}` reaches `AppModel` (the same path as the digest `AgentPrompt`s) as `AgentPrompt.showMemories`, which sets `public var showMemories: Bool`. The view presents `MemoryView` and resets it on dismiss.
+- **`AppModel`:**
+  - `forgetMember()` → backend, then `voice.send(.memberForgotten)`.
+  - `forgetMemory(id:)` → backend, then re-send `.tripContext` with the same member.
+  - `signOut()` → backend, then `.tripContext(memberId: nil)`.
+  - `public func memberIdleStage(now: Date) -> MemberIdle` (`.none`, `.ask` or `.signOut`), using `lastActivity`: `.ask` at ≥ 180 s, `.signOut` at ≥ 300 s, for members only.
+  - `public func handleMemberIdle(now: Date) async`:
+    - `.ask` once → `voice.send(.memberIdle)` and `stillThereAsked = true`;
+    - `.signOut` → `signOut()`;
+    - `noteActivity()` clears `stillThereAsked`.
+  - `ShoppingView`'s 5 s loop (Task 12) also calls it.
+- **Views:**
+  - **`MemberSignInView`:** after 4 digits it calls `lookUpMember`.
+    - Known → a confirm state: `"{name}?"` (or `"Member {id}?"`), with **That's me** (`member.confirm`) and **Not me** (`member.notMe`).
+    - Unknown → `"We don't know {id}. Start a new membership?"`, with Yes (`member.create`) and No (`member.notMe`).
+    - Only That's me or Yes starts the trip.
+  - **The still-here banner** (`member.stillHere`): a small banner over the trip panel while `stillThereAsked`, with **Still here** and **Sign out**.
+
+- [ ] **Step 1: Write failing tests:**
+  - `testForgetMemberSendsMemberForgotten`
+  - `testForgetOneMemoryResendsTripContext`
+  - `testSignOutSendsTripContextWithoutMember`
+  - `testMemberIdleAsksAt180SignsOutAt300`
+  - `testIdleRulesIgnoreGuests`
+  - `testShowMemoriesPromptSetsFlag`
+  - `testLookupMock`
+- [ ] **Step 2: Run.** Expected: FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** `swift test` and the Kart build. Expected: pass.
+- [ ] **Step 5: Commit** `ios: confirm the member, forget-me reaches Kart, still-shopping sign-out, show memories`.
+
 ### Task 13: Offline rehearsal (scripted voice) and UI test
 
 **Files:**
@@ -586,7 +690,7 @@ Merge `main` into the branch first. Run `cd ios && xcodegen generate` after merg
 
 - [ ] **Step 1: Write the failing UI test** `testMemberBeatOffline`, using the existing `DemoControls` helpers:
   1. Turn the flag on.
-  2. `welcome.signIn`, then keys 1, 0, 2, 9 → `foryou.card` exists, and `member.chip` shows "Dylan".
+  2. `welcome.signIn`, then keys 1, 0, 2, 9 → the confirm card shows "Dylan?"; tap `member.confirm` → `foryou.card` exists, and `member.chip` shows "Dylan".
   3. You say "hey kart", then the Friendsgiving line; check out and pay.
   4. Demo date → before the event; sign in again → the `foryou.shopIt` label contains "Friendsgiving".
   5. `member.chip` → `memory.sheet` lists "Leo's soccer party" under Earlier.

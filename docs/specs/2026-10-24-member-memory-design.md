@@ -109,6 +109,23 @@ For a member, one extra line: *"Saved to Dylan's history."*
 - **What it never changes.** Store receipts, analytics, deals and trip times stay real.
 - **Past events.** Once its date passes, an event drops out of "coming up". For 7 days it's a *recent past* memory, and Kart may ask how it went. In the memory sheet it shows dimmed under **Earlier**.
 
+### 3.9 Edge cases (manager decision, 2026-10-24; full list in `docs/EDGE_CASES.md`)
+- **Confirm who's signing in.** After the 4th digit the card asks first; Kart greets only after "That's me".
+  - **A known number** shows the first name only: *"Dylan?"* with **That's me** / **Not me**.
+  - **An unknown number** asks *"We don't know 1092. Start a new membership?"*: Yes creates the member, No goes back to the keypad.
+  - Nothing is created by a typo.
+- **"Forget me" mid-trip takes effect at once.** The iPad tells the agent (`member_forgotten`). The agent drops the profile, the member prompt and the memory tools, and says *"Done. I've forgotten everything about you."* Kart can't mention a forgotten memory afterwards.
+- **Forget one memory, or sign out.** Forgetting one memory from the sheet re-sends `trip_context`, so the agent reloads the profile. Signing out re-sends it without `member_id`, and the agent drops the member silently.
+- **Walking away while signed in.** After 3 min with no activity, Kart asks *"Still shopping, Dylan?"*, and a small banner offers **Still here** / **Sign out**. At 5 min the cart signs out; the trip and cart are kept, and only the member is cleared.
+- **Sensitive things are never remembered.**
+  - **Purchases:** products in sensitive categories (`pharmacy`, `health`, `medicine`, `personal-care`, `baby`, `pregnancy`, `adult`) are never copied into member history, so they can't feed picks, usuals or speech.
+  - **Memories:** Kart never saves health, pregnancy, religion, sexuality, finances or details about children beyond what the plan needs. It saves the event, not the reason ("dinner on Saturday", not why).
+- **Stale events.**
+  - An undated event expires from "coming up" 30 days after it was saved.
+  - `members.py seed` prints Leo's party's date.
+  - `backend/pre_judging.sh --members` reseeds right before judging.
+- **"What do you know about me?"** Kart opens the memory sheet on the iPad and gives a one-line summary. Everything is visible, and anything can be forgotten.
+
 ## 4. Recommendations: what "this week" means
 
 The backend computes these deterministically (testable, instant). Claude only phrases them.
@@ -250,6 +267,8 @@ The backend computes these deterministically (testable, instant). Claude only ph
 - **Transparent:** everything Kart remembers is on one screen, and each item can be forgotten in one tap or by voice. "Forget me" wipes it all.
 - **Shopping memory only:** Kart saves future plans and preferences, never small talk. Transcripts are still deleted on every new trip.
 - **Demo-grade honesty:** anyone with the anon key and a member number can read that profile. A real version uses store-issued sign-in tokens (Supabase Auth). Out of scope here, and we say so.
+- **Production sign-in (pitch line):** a QR code or passkey from the shopper's phone, not a typed number.
+- **Never remembered:** sensitive purchases and sensitive personal details (§3.9).
 
 ## 8. Error handling
 - **Profile fetch fails or is slow (> 1 s):** the agent greets with just the fixed member line plus the normal question, and the iPad hides the For you card. The trip itself never waits on memory.
