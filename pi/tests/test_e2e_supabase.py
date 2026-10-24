@@ -146,7 +146,7 @@ def test_thats_mine_round_trip(tmp_path, sb):  # CONTRACT v0.15: iPad/agent mark
     url, key = sb
     status, body = http.get(f"{url}/rest/v1/cart_events?select=resolution&limit=1", http.supabase_headers(key))
     if status != 200:
-        pytest.skip(f"backend has no cart_events.resolution yet: {body[:100]!r}")
+        pytest.skip(f"backend has no cart_events.resolution (\"That's mine\" removed in contract v0.17): {body[:100]!r}")
     cart_id = f"cv-e2e-{uuid.uuid4().hex[:8]}"
     try:
         catalog = fetch_catalog(url, key)
