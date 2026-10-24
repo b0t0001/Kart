@@ -23,6 +23,14 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 late afternoon · demo meals, Target layout, nudge fixes
+- **Demo plan** (`docs/DEMO_PLAN.md`): two shelf-stable meals (pasta night for 4, game-night nachos for 6). Every item is verified in stock at **Target Berkeley Central** (aisles A12 and A6, ~$29; `docs/TARGET_SHOPPING_CHECKLIST.md`). Kart's lists match 3/3 with the real model.
+- **Backend:** the demo catalog is live; switchable store layouts (`db.py layout mini|target-berkeley`; the Target layout is a draft until Dylan confirms); `pre_judging.sh`; mid-trip "short" nudges off (`9f60cd3`).
+- **CV:** the final two-camera layout (Brio + Aoozi wide-angle) is supported, with corrupt frames dropped. 131 tests.
+- **Member memory** beta: spec approved; being built on its own branch.
+- **Waiting on Dylan:** the Target trip (receipt plus aisle-sign photos).
+
+
 ### 2026-10-24 afternoon · real-cart fixes, voice on the iPad, nudges beta
 - **CV on the real cart:** basket-floor ROI; rolling no longer fools it; tall items are billed after a 3 s stillness recheck; a big shift is only believed if it explains the change; light and shadow aren't items; judging runs off the camera loop. James's first 5 real clips pass as regression tests. 123 tests.
 - **Voice on Dylan's iPad works end to end** (iPadOS 26.7.1): ~1.5–2 s to Kart's first words. Hold-to-talk for loud floors, quiet on chatter, quantities with stock caps, and yes/no to deals by voice.
