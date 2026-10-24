@@ -1,0 +1,239 @@
+{
+  "version": 1,
+  "store": { "name": "Kart Demo Warehouse", "width": 20, "height": 12 },
+  "entrance": { "x": 0, "y": 6 },
+  "sections": [
+    { "id": "A1", "name": "Aisle 1 · Produce",          "x": 2,  "y": 1,  "w": 1, "h": 8 },
+    { "id": "A2", "name": "Aisle 2 · Bakery & Tortillas", "x": 4,  "y": 1,  "w": 1, "h": 8 },
+    { "id": "A3", "name": "Aisle 3 · Meat",             "x": 6,  "y": 1,  "w": 1, "h": 8 },
+    { "id": "A4", "name": "Aisle 4 · Cheese & Deli",    "x": 8,  "y": 1,  "w": 1, "h": 8 },
+    { "id": "A5", "name": "Aisle 5 · Mexican & Salsa",  "x": 10, "y": 1,  "w": 1, "h": 8 },
+    { "id": "A6", "name": "Aisle 6 · Pasta & Sauce",    "x": 12, "y": 1,  "w": 1, "h": 8 },
+    { "id": "A7", "name": "Aisle 7 · Snacks & Chips",   "x": 14, "y": 1,  "w": 1, "h": 8 },
+    { "id": "A8", "name": "Aisle 8 · Dairy & Eggs",     "x": 16, "y": 1,  "w": 1, "h": 8 },
+    { "id": "A9", "name": "Aisle 9 · Household",        "x": 18, "y": 1,  "w": 1, "h": 8 },
+    { "id": "CK", "name": "Checkout",                   "x": 6,  "y": 10, "w": 8, "h": 1 }
+  ],
+  "products": [
+    {
+      "id": "kirkland-parmesan",
+      "name": "Kirkland Signature Parmigiano Reggiano, 1.5 lb wedge",
+      "short_name": "Parmesan",
+      "price": 12.99,
+      "section": "A4",
+      "category": "cheese",
+      "tags": ["pasta", "italian"],
+      "stock": 18,
+      "vision_hint": "wedge of hard pale-yellow cheese with a darker rind edge, in clear shrink wrap, red and white Kirkland Signature label"
+    },
+    {
+      "id": "barilla-spaghetti",
+      "name": "Barilla Spaghetti, 1 lb",
+      "short_name": "Spaghetti",
+      "price": 1.99,
+      "section": "A6",
+      "category": "pasta",
+      "tags": ["pasta", "italian", "staple"],
+      "stock": 60,
+      "vision_hint": "long narrow dark-blue cardboard box, red oval Barilla logo with white lettering, the word Spaghetti, dry spaghetti strands pictured"
+    },
+    {
+      "id": "rao-marinara",
+      "name": "Rao's Homemade Marinara Sauce, 24 oz",
+      "short_name": "Rao's Sauce",
+      "price": 8.49,
+      "section": "A6",
+      "category": "sauce",
+      "tags": ["pasta", "italian"],
+      "stock": 24,
+      "vision_hint": "tall glass jar of deep-red tomato sauce with a metal lid, black label with white script reading Rao's Homemade, Marinara"
+    },
+    {
+      "id": "ground-beef",
+      "name": "Ground Beef 85% Lean, 1 lb",
+      "short_name": "Ground Beef",
+      "price": 6.99,
+      "section": "A3",
+      "category": "meat",
+      "tags": ["pasta", "tacos", "protein"],
+      "stock": 30,
+      "vision_hint": "flat package of red ground beef pressed into a tray or chub under clear plastic film, white printed price sticker"
+    },
+    {
+      "id": "caesar-salad-kit",
+      "name": "Taylor Farms Caesar Chopped Salad Kit, 11 oz",
+      "short_name": "Caesar Kit",
+      "price": 4.49,
+      "section": "A1",
+      "category": "produce",
+      "tags": ["pasta", "italian", "side"],
+      "stock": 20,
+      "vision_hint": "puffy clear plastic bag of chopped green romaine lettuce, green and white Taylor Farms label reading Caesar"
+    },
+    {
+      "id": "french-baguette",
+      "name": "French Baguette",
+      "short_name": "Baguette",
+      "price": 2.99,
+      "section": "A2",
+      "category": "bakery",
+      "tags": ["pasta", "italian", "bread"],
+      "stock": 25,
+      "vision_hint": "long thin golden-brown crusty loaf of bread, often in a narrow paper sleeve"
+    },
+    {
+      "id": "mission-tortillas",
+      "name": "Mission Flour Tortillas, Soft Taco, 20 ct",
+      "short_name": "Tortillas",
+      "price": 4.29,
+      "section": "A2",
+      "category": "bakery",
+      "tags": ["tacos", "mexican"],
+      "stock": 40,
+      "vision_hint": "flat round clear plastic bag of stacked white flour tortillas, red Mission banner logo"
+    },
+    {
+      "id": "tillamook-mexican-cheese",
+      "name": "Tillamook Shredded Mexican 4-Cheese Blend, 2 lb",
+      "short_name": "Mex Cheese",
+      "price": 7.99,
+      "section": "A4",
+      "category": "cheese",
+      "tags": ["tacos", "mexican"],
+      "stock": 22,
+      "vision_hint": "resealable plastic bag of shredded orange and white cheese, Tillamook logo across the top"
+    },
+    {
+      "id": "tostitos-salsa",
+      "name": "Tostitos Chunky Salsa, Medium, 15.5 oz",
+      "short_name": "Salsa",
+      "price": 4.49,
+      "section": "A5",
+      "category": "salsa",
+      "tags": ["tacos", "mexican", "snack"],
+      "stock": 35,
+      "vision_hint": "squat glass jar of chunky red salsa with visible tomato and pepper pieces, Tostitos label reading Chunky Salsa"
+    },
+    {
+      "id": "taco-seasoning",
+      "name": "Old El Paso Original Taco Seasoning Mix, 1 oz",
+      "short_name": "Taco Season",
+      "price": 1.29,
+      "section": "A5",
+      "category": "spices",
+      "tags": ["tacos", "mexican"],
+      "stock": 80,
+      "vision_hint": "small flat paper packet, mostly red with the Old El Paso logo and the words Taco Seasoning"
+    },
+    {
+      "id": "tostitos-chips",
+      "name": "Tostitos Restaurant Style Tortilla Chips, 13 oz",
+      "short_name": "Chips",
+      "price": 5.49,
+      "section": "A7",
+      "category": "snacks",
+      "tags": ["tacos", "mexican", "snack", "party"],
+      "stock": 45,
+      "vision_hint": "large shiny crinkly chip bag, Tostitos logo, white triangular tortilla chips pictured on the front"
+    },
+    {
+      "id": "avocados",
+      "name": "Hass Avocados, 5 ct bag",
+      "short_name": "Avocados",
+      "price": 5.99,
+      "section": "A1",
+      "category": "produce",
+      "tags": ["tacos", "mexican"],
+      "stock": 28,
+      "vision_hint": "mesh net bag holding several dark-green bumpy-skinned avocados"
+    },
+    {
+      "id": "daisy-sour-cream",
+      "name": "Daisy Sour Cream, 16 oz",
+      "short_name": "Sour Cream",
+      "price": 2.99,
+      "section": "A8",
+      "category": "dairy",
+      "tags": ["tacos", "mexican"],
+      "stock": 30,
+      "vision_hint": "round white plastic tub with a clear lid, blue and white Daisy label with a daisy flower"
+    },
+    {
+      "id": "bananas",
+      "name": "Bananas, bunch (about 2.5 lb)",
+      "short_name": "Bananas",
+      "price": 1.49,
+      "section": "A1",
+      "category": "produce",
+      "tags": ["staple", "breakfast", "fruit"],
+      "stock": 50,
+      "vision_hint": "bunch of curved yellow bananas joined at the stem, no packaging"
+    },
+    {
+      "id": "whole-milk",
+      "name": "Organic Whole Milk, half gallon",
+      "short_name": "Milk",
+      "price": 5.49,
+      "section": "A8",
+      "category": "dairy",
+      "tags": ["staple", "breakfast"],
+      "stock": 40,
+      "vision_hint": "half-gallon gable-top paper milk carton, mostly white, the words Whole Milk"
+    },
+    {
+      "id": "large-eggs",
+      "name": "Large Brown Eggs, 12 ct",
+      "short_name": "Eggs",
+      "price": 4.99,
+      "section": "A8",
+      "category": "dairy",
+      "tags": ["staple", "breakfast"],
+      "stock": 36,
+      "vision_hint": "rectangular carton of a dozen eggs, cardboard or clear plastic, brown eggs may be visible"
+    },
+    {
+      "id": "kirkland-paper-towels",
+      "name": "Kirkland Signature Paper Towels, 12 rolls",
+      "short_name": "Paper Towel",
+      "price": 23.99,
+      "section": "A9",
+      "category": "household",
+      "tags": ["household", "staple"],
+      "stock": 15,
+      "vision_hint": "large plastic-wrapped bundle of white paper towel rolls, red and white Kirkland Signature label"
+    },
+    {
+      "id": "kirkland-batteries",
+      "name": "Kirkland Signature AA Alkaline Batteries, 48 ct",
+      "short_name": "AA Battery",
+      "price": 15.99,
+      "section": "A9",
+      "category": "household",
+      "tags": ["household"],
+      "stock": 20,
+      "vision_hint": "clear plastic box or blister pack of silver AA batteries, red and black Kirkland Signature label"
+    }
+  ],
+  "deals": [
+    {
+      "id": "d-parm-3off", "product_id": "kirkland-parmesan", "type": "amount_off", "value": 3.00,
+      "label": "$3 off", "pairs_with": ["barilla-spaghetti", "rao-marinara"], "ends_at": null
+    },
+    {
+      "id": "d-baguette-1off", "product_id": "french-baguette", "type": "amount_off", "value": 1.00,
+      "label": "$1 off", "pairs_with": ["rao-marinara", "barilla-spaghetti", "caesar-salad-kit"], "ends_at": null
+    },
+    {
+      "id": "d-chips-150off", "product_id": "tostitos-chips", "type": "amount_off", "value": 1.50,
+      "label": "$1.50 off", "pairs_with": ["tostitos-salsa", "avocados"], "ends_at": null
+    },
+    {
+      "id": "d-sourcream-20pct", "product_id": "daisy-sour-cream", "type": "percent_off", "value": 20,
+      "label": "20% off", "pairs_with": ["mission-tortillas", "taco-seasoning"], "ends_at": null
+    },
+    {
+      "id": "d-batteries-4off", "product_id": "kirkland-batteries", "type": "amount_off", "value": 4.00,
+      "label": "$4 off", "pairs_with": ["kirkland-paper-towels"], "ends_at": null
+    }
+  ]
+}
