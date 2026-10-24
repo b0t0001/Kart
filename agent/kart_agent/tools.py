@@ -110,8 +110,9 @@ async def _nearby_stores(backend: Any) -> list[dict[str, Any]]:
         stores = await backend.get_nearby_stores()
     except Exception:
         return []
-    return [{"name": s["name"], "distance": _distance(s.get("distance")), "kind": s.get("kind"),
-             "good_for": s.get("good_for") or [], "might_have_it": True}
+    return [{"name": s["name"], "distance": _distance(s.get("distance_mi", s.get("distance"))), "kind": s.get("kind"),
+             "good_for": s.get("good_for") or [], **({"address": s["address"]} if s.get("address") else {}),
+             "might_have_it": True}
             for s in stores if isinstance(s, dict) and isinstance(s.get("name"), str)]
 
 

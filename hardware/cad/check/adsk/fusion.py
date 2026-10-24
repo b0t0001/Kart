@@ -1,9 +1,12 @@
 """Minimal mock of adsk.fusion for dry-running the CAD scripts without Fusion.
 
-It evaluates every expression against the user parameters, checks each
-sketch dimension against the geometry it was drawn at, and records every
-extrusion (YZ/XY profile + extent) so check.py can rebuild real solids.
-Bodies get a tiny fake B-rep so the auto-fillet / chamfer code paths run.
+It evaluates every expression against the user parameters with units, the
+way Fusion does: a length can't be added to a plain number, a unitless
+parameter can't be read as mm, trig wants an angle, and so on. It checks
+each sketch dimension against the geometry it was drawn at, and records
+every extrusion (YZ/XY profile + extent) so check.py can rebuild real
+solids. Bodies get a tiny fake B-rep so the auto-fillet / chamfer code
+paths run.
 """
 import math
 import re
@@ -12,24 +15,129 @@ from . import core
 LOG = {'dim_errors': [], 'eval_errors': [], 'prisms': [], 'dims': 0, 'sketches': 0,
        'stl': [], 'params': {}, 'finishing': []}
 
-_FUNCS = {'sin': 'math.sin', 'cos': 'math.cos', 'tan': 'math.tan', 'sqrt': 'math.sqrt',
-          'abs': 'abs', 'max': 'max', 'min': 'min'}
-_UNITS = {'mm': '*0.1', 'cm': '*1.0', 'deg': '*(math.pi/180)', 'rad': '*1.0'}
+
+class UnitError(Exception):
+    pass
 
 
-def evaluate(expr, params):
-    """Fusion-style expression -> internal units (cm, rad)."""
-    def sub(m):
-        w = m.group(0)
+class Q:
+    """A value in internal units (cm, rad) with its dimension: length
+    exponent L and angle exponent A."""
+    __slots__ = ('v', 'L', 'A')
+
+    def __init__(self, v, L=0, A=0):
+        self.v, self.L, self.A = float(v), L, A
+
+    @staticmethod
+    def of(x):
+        return x if isinstance(x, Q) else Q(x)
+
+    def _same(self, o, op):
+        o = Q.of(o)
+        if (self.L, self.A) != (o.L, o.A):
+            raise UnitError('%s mixes %s and %s' % (op, self.dim(), o.dim()))
+        return o
+
+    def dim(self):
+        if (self.L, self.A) == (0, 0):
+            return 'a plain number'
+        return '+'.join(n for n, e in (('length^%g' % self.L, self.L), ('angle^%g' % self.A, self.A)) if e)
+
+    def __add__(self, o):
+        o = self._same(o, '+')
+        return Q(self.v + o.v, self.L, self.A)
+
+    __radd__ = __add__
+
+    def __sub__(self, o):
+        o = self._same(o, '-')
+        return Q(self.v - o.v, self.L, self.A)
+
+    def __rsub__(self, o):
+        return Q.of(o) - self
+
+    def __mul__(self, o):
+        o = Q.of(o)
+        return Q(self.v * o.v, self.L + o.L, self.A + o.A)
+
+    __rmul__ = __mul__
+
+    def __truediv__(self, o):
+        o = Q.of(o)
+        return Q(self.v / o.v, self.L - o.L, self.A - o.A)
+
+    def __rtruediv__(self, o):
+        return Q.of(o) / self
+
+    def __neg__(self):
+        return Q(-self.v, self.L, self.A)
+
+    def __pos__(self):
+        return self
+
+    def __pow__(self, n):
+        n = Q.of(n)
+        if (n.L, n.A) != (0, 0):
+            raise UnitError('exponent must be a plain number')
+        return Q(self.v ** n.v, self.L * n.v, self.A * n.v)
+
+    def _cmp(self, o):
+        return self._same(o, 'comparison').v
+
+    def __lt__(self, o):
+        return self.v < self._cmp(o)
+
+    def __gt__(self, o):
+        return self.v > self._cmp(o)
+
+
+def _trig(f):
+    def g(x):
+        x = Q.of(x)
+        if x.L != 0 or x.A not in (0, 1):
+            raise UnitError('%s() needs an angle, got %s' % (f.__name__, x.dim()))
+        return Q(f(x.v))
+    return g
+
+
+def _sqrt(x):
+    x = Q.of(x)
+    if x.L % 2 or x.A % 2:
+        raise UnitError('sqrt() of %s' % x.dim())
+    return Q(math.sqrt(x.v), x.L / 2, x.A / 2)
+
+
+_FUNCS = {'sin': _trig(math.sin), 'cos': _trig(math.cos), 'tan': _trig(math.tan),
+          'sqrt': _sqrt, 'abs': lambda x: Q(abs(Q.of(x).v), Q.of(x).L, Q.of(x).A)}
+_UNITS = {'mm': Q(0.1, 1), 'cm': Q(1.0, 1), 'deg': Q(math.pi / 180, 0, 1), 'rad': Q(1.0, 0, 1)}
+_WANT = {'mm': (1, 0), 'cm': (1, 0), 'deg': (0, 1), 'rad': (0, 1), '': (0, 0)}
+
+
+def evaluate_q(expr, qparams):
+    """Fusion-style expression -> Q (internal units + dimension)."""
+    # "247.6 mm" -> "247.6*mm" (a unit after a number multiplies it)
+    py = re.sub(r'(\d(?:[\d.]*)(?:[eE][-+]?\d+)?)\s*(mm|cm|deg|rad)\b', r'(\1*\2)', expr)
+    py = py.replace('^', '**')
+    names = {}
+    for w in set(re.findall(r'[A-Za-z_][A-Za-z0-9_]*', py)):
         if w in _UNITS:
-            return _UNITS[w]
-        if w in _FUNCS:
-            return _FUNCS[w]
-        if w in params:
-            return '(%r)' % params[w]
-        raise NameError('unknown identifier %r in %r' % (w, expr))
-    py = re.sub(r'[A-Za-z_][A-Za-z0-9_]*', sub, expr.replace('^', '**'))
-    return eval(py, {'math': math})
+            names[w] = _UNITS[w]
+        elif w in _FUNCS:
+            names[w] = _FUNCS[w]
+        elif w in qparams:
+            names[w] = qparams[w]
+        else:
+            raise NameError('unknown identifier %r in %r' % (w, expr))
+    return Q.of(eval(py, {'__builtins__': {}}, names))
+
+
+def evaluate(expr, qparams, units=None):
+    """Value in internal units; with `units` ('mm', 'deg', '' ...) the
+    expression must have that dimension, as Fusion insists."""
+    q = evaluate_q(expr, qparams)
+    if units is not None and (q.L, q.A) != _WANT[units]:
+        raise UnitError('%r is %s, wanted %r' % (expr, q.dim(), units))
+    return q.v
 
 
 class FeatureOperations:
@@ -100,7 +208,11 @@ class UserParameter:
     def expression(self, e):
         self._expr = e
         try:
-            self.design.params[self.name] = evaluate(e, self.design.params)
+            q = evaluate_q(e, self.design.qparams)
+            if (q.L, q.A) != _WANT[self.units]:
+                raise UnitError('%r is %s but the parameter is in %r' % (e, q.dim(), self.units))
+            self.design.qparams[self.name] = q
+            self.design.params[self.name] = q.v
         except Exception as ex:
             LOG['eval_errors'].append('param %s = %r: %s' % (self.name, e, ex))
             raise
@@ -128,10 +240,10 @@ class UnitsManager:
 
     def evaluateExpression(self, expr, units):
         try:
-            return evaluate(expr, self.design.params)
+            return evaluate(expr, self.design.qparams, units)
         except Exception as ex:
             LOG['eval_errors'].append('%r: %s' % (expr, ex))
-            raise RuntimeError('3 : invalid expression %r' % expr)
+            raise RuntimeError('6 : The expression parameter is not a valid expression')
 
 
 # ----------------------------------------------------------------- sketches
@@ -166,7 +278,7 @@ class _Param:
     def expression(self, e):
         self._e = e
         d = self.dim
-        val = evaluate(e, d.sketch.design.params)
+        val = evaluate(e, d.sketch.design.qparams, 'mm')
         LOG['dims'] += 1
         if d.kind == 'dia':
             actual = 2 * d.ent.radius
@@ -387,9 +499,9 @@ class _Extrudes:
         return ExtrudeInput(profs, op)
 
     def add(self, inp):
-        params = self.comp.design.params
-        x0 = evaluate(inp.startExtent.vi.expr, params) if inp.startExtent else 0.0
-        d = evaluate(inp.dist.expr, params)
+        qp = self.comp.design.qparams
+        x0 = evaluate(inp.startExtent.vi.expr, qp, 'mm') if inp.startExtent else 0.0
+        d = evaluate(inp.dist.expr, qp, 'mm')
         if d <= 0:
             raise RuntimeError('extrude distance %r <= 0' % inp.dist.expr)
         if inp.op == 'NEW':
@@ -417,7 +529,7 @@ class _EdgeSets:
         self.inp = inp
 
     def addConstantRadiusEdgeSet(self, edges, vi, tangent):
-        evaluate(vi.expr, LOG['params'])
+        evaluate(vi.expr, Design.current.qparams, 'mm')
         self.inp.sets.append((edges.count, vi.expr))
         return True
 
@@ -506,8 +618,10 @@ class ExportManager:
 
 class Design:
     def __init__(self):
-        self.params = LOG['params']
+        Design.current = self
+        self.params = LOG['params']      # floats, for check.py
         self.params.clear()
+        self.qparams = {}
         self.userParameters = UserParameters(self)
         self.unitsManager = UnitsManager(self)
         self.rootComponent = Component(self)

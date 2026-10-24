@@ -208,6 +208,8 @@ begin
            'product_id', elem->>'product_id',
            'reason',     elem->>'reason',
            'basis',      elem->>'basis',
+           'meal',       elem->>'meal',
+           'meals',      elem->'meals',
            'qty',        want,
            'done',       coalesce(have, 0) >= want,
            'name',       coalesce(short_name, elem->>'name'),
@@ -413,6 +415,14 @@ begin
   c.nudge := v_nudge;
   c.nudged := v_nudged;
 
+  -- What the rest of the list should cost at today's sale prices (in-stock lines still short), and
+  -- what's left of the shopper's budget, if they set one ("keep it under $30").
+  select coalesce(sum(greatest(l.need - l.have, 0) * pc.sale_price), 0) into c.plan_estimate
+  from nudge_lines(v_items, v_plan) l
+  join product_catalog pc on pc.id = l.pid
+  where l.in_stock;
+  c.budget_left := c.budget - c.total;
+
   -- Human line for the iPad, and line 1 of the LCD (suggestion wins on the LCD).
   if v_next.product_id is not null then
     c.next_step := v_next.aisle || ' → ' || v_next.name
@@ -437,7 +447,8 @@ begin
     items = c.items, total = c.total, savings = c.savings, item_count = c.item_count,
     plan = c.plan, next_step = c.next_step, lcd_line1 = c.lcd_line1,
     suggestion = c.suggestion, suggested_deals = c.suggested_deals,
-    nudge = c.nudge, nudged = c.nudged, updated_at = now()
+    nudge = c.nudge, nudged = c.nudged, plan_estimate = c.plan_estimate, budget_left = c.budget_left,
+    updated_at = now()
   where cart_id = p_cart_id
   returning * into c;
   return c;
@@ -553,8 +564,10 @@ begin
   return recompute_cart(p_cart_id);
 end $$;
 
--- Voice agent writes the trip plan: [{ "product_id", "reason", "qty"? }].
--- The backend orders it by route and fills done / aisle / in_stock / deal_label.
+-- Voice agent writes the trip plan: [{ "product_id", "reason", "qty"?, "basis"?, "meal"? }].
+-- The same product listed for two meals becomes ONE line: qty summed, every meal kept (meal = the
+-- first, meals = all when there's more than one), bases joined with " + ". A line whose qty sums to
+-- 0 or less drops out. The backend orders it by route and fills done / aisle / in_stock / deal_label.
 create or replace function set_plan(p_cart_id text, p_plan jsonb)
 returns carts language plpgsql security definer set search_path = public as $$
 declare v_plan jsonb;
@@ -562,15 +575,37 @@ begin
   if jsonb_typeof(coalesce(p_plan, '[]'::jsonb)) <> 'array' then
     raise exception 'p_plan must be a JSON array';
   end if;
+  with raw as (
+    select elem, ord,
+           coalesce(elem->>'product_id', 'row:' || ord) as k,     -- lines without a product stay separate
+           case when jsonb_typeof(elem->'meals') = 'array' then array(select jsonb_array_elements_text(elem->'meals'))
+                else array[elem->>'meal'] end as meals
+    from jsonb_array_elements(coalesce(p_plan, '[]'::jsonb)) with ordinality as t(elem, ord)
+    where jsonb_typeof(elem) = 'object'
+  ), merged as (
+    select k, min(ord) as first_ord,
+           (array_agg(elem->>'product_id' order by ord))[1] as product_id,
+           (array_agg(elem->>'reason' order by ord) filter (where elem->>'reason' is not null))[1] as reason,
+           (array_agg(elem->>'name' order by ord) filter (where elem->>'name' is not null))[1] as name,
+           sum(coalesce((elem->>'qty')::int, 1)) as qty,
+           bool_or(elem ? 'qty') as qty_given,
+           array(select b from (select elem->>'basis' as b, ord from raw r2 where r2.k = raw.k) x
+                 where b is not null group by b order by min(ord)) as bases,
+           array(select m from (select unnest(r2.meals) as m, r2.ord from raw r2 where r2.k = raw.k) x
+                 where m is not null group by m order by min(ord)) as meals
+    from raw group by k
+  )
   select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
-           'product_id', elem->>'product_id',
-           'reason',     elem->>'reason',
-           'qty',        elem->'qty',
-           'basis',      elem->>'basis',
-           'name',       elem->>'name')) order by ord), '[]'::jsonb)
+           'product_id', product_id,
+           'reason',     reason,
+           'qty',        case when qty_given or qty <> 1 then to_jsonb(qty) end,
+           'basis',      nullif(array_to_string(bases, ' + '), ''),
+           'meal',       meals[1],
+           'meals',      case when cardinality(meals) > 1 then to_jsonb(meals) end,
+           'name',       name)) order by first_ord), '[]'::jsonb)
     into v_plan
-  from jsonb_array_elements(coalesce(p_plan, '[]'::jsonb)) with ordinality as t(elem, ord)
-  where jsonb_typeof(elem) = 'object';
+  from merged
+  where qty > 0;
 
   insert into carts (cart_id) values (p_cart_id) on conflict do nothing;
   update carts set plan = v_plan,
@@ -592,7 +627,7 @@ begin
   delete from transcript where cart_id = p_cart_id;
   update carts set items = '[]', plan = '[]', suggestion = null, suggested_deals = '{}',
                    trip_id = gen_random_uuid(), status = 'shopping', trip_started_at = now(),
-                   location = null, nudge = null, nudged = '{}', plan_joined = '{}'
+                   location = null, nudge = null, nudged = '{}', plan_joined = '{}', budget = null
   where cart_id = p_cart_id;
   return recompute_cart(p_cart_id);
 end $$;
@@ -606,6 +641,46 @@ begin
   where c.cart_id = p_cart_id and o.cart_id = c.cart_id and o.trip_id = c.trip_id
     and o.deal_id = c.suggestion->>'deal_id' and o.dismissed_at is null;
   update carts set suggestion = null where cart_id = p_cart_id;
+  return recompute_cart(p_cart_id);
+end $$;
+
+-- Atomic list edits for voice ("add a bag of chips", "one more", "skip the queso"), so they can't
+-- race a whole-list set_plan from another device. They lock the cart and go through set_plan.
+-- p_qty adds to the line (negative lowers it; at 0 or less the line drops out).
+create or replace function add_to_plan(p_cart_id text, p_product_id text, p_qty int default 1,
+                                       p_basis text default null, p_meal text default null)
+returns carts language plpgsql security definer set search_path = public as $$
+declare c carts;
+begin
+  if not exists (select 1 from products where id = p_product_id and active) then
+    raise exception 'unknown product: %', p_product_id;
+  end if;
+  insert into carts (cart_id) values (p_cart_id) on conflict do nothing;
+  select * into c from carts where cart_id = p_cart_id for update;
+  return set_plan(p_cart_id, c.plan || jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
+    'product_id', p_product_id, 'qty', coalesce(p_qty, 1), 'basis', p_basis, 'meal', p_meal))));
+end $$;
+
+create or replace function remove_from_plan(p_cart_id text, p_product_id text)
+returns carts language plpgsql security definer set search_path = public as $$
+declare c carts;
+begin
+  insert into carts (cart_id) values (p_cart_id) on conflict do nothing;
+  select * into c from carts where cart_id = p_cart_id for update;
+  return set_plan(p_cart_id, coalesce(
+    (select jsonb_agg(e order by o) from jsonb_array_elements(c.plan) with ordinality as t(e, o)
+     where e->>'product_id' is distinct from p_product_id), '[]'::jsonb));
+end $$;
+
+-- "Keep it under $30". p_amount null clears it; reset_cart clears it too (it's per trip).
+create or replace function set_budget(p_cart_id text, p_amount numeric)
+returns carts language plpgsql security definer set search_path = public as $$
+begin
+  if p_amount is not null and p_amount <= 0 then
+    raise exception 'budget must be more than $0, got %', p_amount;
+  end if;
+  insert into carts (cart_id) values (p_cart_id) on conflict do nothing;
+  update carts set budget = round(p_amount, 2) where cart_id = p_cart_id;
   return recompute_cart(p_cart_id);
 end $$;
 
@@ -720,4 +795,7 @@ grant execute on function reset_cart(text)               to anon, authenticated,
 grant execute on function dismiss_suggestion(text)       to anon, authenticated, service_role;
 grant execute on function set_feature(text, text, boolean)  to anon, authenticated, service_role;
 grant execute on function mark_personal(text, uuid)         to anon, authenticated, service_role;
+grant execute on function add_to_plan(text, text, int, text, text) to anon, authenticated, service_role;
+grant execute on function remove_from_plan(text, text)      to anon, authenticated, service_role;
+grant execute on function set_budget(text, numeric)         to anon, authenticated, service_role;
 grant execute on function dismiss_nudge(text, text)         to anon, authenticated, service_role;

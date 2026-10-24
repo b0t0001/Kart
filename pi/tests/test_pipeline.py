@@ -387,7 +387,7 @@ def test_thats_mine_marks_an_unknown_personal_so_its_removal_is_silent(tmp_path)
 
 def test_an_edge_origin_blob_never_goes_to_claude_and_leaves_no_crops(tmp_path):  # a child's hand, held still
     from kartcv.identify.cloud import CloudAnswer
-    p, sink, calls = _cloud_pipeline(tmp_path, CloudAnswer("green-bag", 0.9, "bag"))
+    p, sink, calls = _cloud_pipeline(tmp_path, CloudAnswer("green-bag", 0.9, "bag"), edge_privacy=True)
     run(p, Script(Scene()).still(1.0).hand_rest(5.0))  # arm-like, still past the recheck
     assert calls == []  # nothing reached Claude
     adds = [e for e in sink.events if e.type == "added"]

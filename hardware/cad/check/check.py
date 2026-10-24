@@ -55,7 +55,7 @@ def mock_run(overrides):
     ok = not (failed or L['dim_errors'] or L['eval_errors'])
     # params in mm (lengths) / rad (angles), keyed by name
     units = dict((n, u) for n, _, u, _ in mod.PARAMS)
-    P = dict((k, v if units.get(k) == 'deg' else v * 10) for k, v in L['params'].items())
+    P = dict((k, v * 10 if units.get(k) == 'mm' else v) for k, v in L['params'].items())
     return ok, P
 
 
@@ -119,9 +119,12 @@ def solid_checks(P, results):
 
     ipad, handle, wire = solids['REF_iPad'], solids['REF_Handle'], solids['REF_Wire']
     bars = solids.get('REF_Bars')
+    mesh = solids.get('REF_Mesh')
     refs = [('iPad', ipad), ('handle', handle), ('wire', wire)]
     if bars is not None:
         refs.append(('middle bars', bars))
+    if mesh is not None:
+        refs.append(('mesh wires', mesh))
     print('\noverlaps:')
     for n in ['Bracket_L', 'Bracket_R', 'Spacer']:
         for ref, m in refs:
@@ -144,6 +147,24 @@ def solid_checks(P, results):
 
     handle_path = dogleg(0, 0, hr, 96)
     wire_path = dogleg(wc[0], wc[1], wr, 48)
+    mesh_path = None
+    if mesh is not None:  # each slanted wire is a band in the side view
+        rc, md = P['rim_c'], P['mesh_d']
+        ux, uz = P['rim_dy'] / rc, -P['rim_drop'] / rc        # along the line
+        px, pz = P['rim_drop'] / rc, P['rim_dy'] / rc         # across it
+        L = rc + 20
+        band = CrossSection([np.array([(sa * ux + sw * px, sa * uz + sw * pz)
+                                       for sa, sw in [(0, -md / 2), (L, -md / 2),
+                                                      (L, md / 2), (0, md / 2)]])],
+                            FillRule.NonZero)
+        low = band.translate((0, -lift))
+        band_path = ((low + band.translate((300, -lift))).hull()
+                     + (low + band).hull())
+        mesh_path = Manifold()
+        for k in range(int(round(P['mesh_n']))):
+            xk = P['mesh_x0'] + k * P['mesh_pitch']
+            for sign in (-1, 1):
+                mesh_path = mesh_path + prism(band_path, sign * xk - md / 2, sign * xk + md / 2)
     bar_paths = None
     if bars is not None:  # the upper bar pair is a block, the lower bar round
         def slide(cs, cy, cz):
@@ -172,6 +193,8 @@ def solid_checks(P, results):
         if bar_paths is not None:
             report('%s: clears the middle bars on the way' % n,
                    vol(solids[n], prism(bar_paths, *xs)))
+        if mesh is not None:
+            report('%s: clears the mesh wires on the way' % n, vol(solids[n], mesh_path))
     for n in ['Bracket_L', 'Bracket_R', 'Spacer']:
         report('%s: iPad slides in and out from above' % n, vol(solids[n], ipad_path))
 
@@ -179,7 +202,8 @@ def solid_checks(P, results):
     # and turn it 3 degrees about the handle and about the wire. Everything
     # must hit the handle or the wire except moves with an upward component
     # (gravity holds those; the zip ties back it up).
-    cart = handle + wire + (bars if bars is not None else Manifold())
+    cart = (handle + wire + (bars if bars is not None else Manifold())
+            + (mesh if mesh is not None else Manifold()))
     print('\ncaptured (only upward moves may be free):')
     for n in ['Bracket_L', 'Bracket_R']:
         free = []
@@ -249,7 +273,8 @@ def preview_png(solids, path):
     from manifold3d import Manifold
     clip = Manifold.cube((400, 400, 400)).translate((-200, -200, -200))
     show = [('REF_iPad', '#9aa4ad', 0.55), ('Bracket_L', '#2f7fd8', 1), ('Bracket_R', '#2f7fd8', 1),
-            ('Spacer', '#e8962e', 1), ('REF_Handle', '#444444', 0.5), ('REF_Wire', '#444444', 0.5), ('REF_Bars', '#444444', 0.5)]
+            ('Spacer', '#e8962e', 1), ('REF_Handle', '#444444', 0.5), ('REF_Wire', '#444444', 0.5),
+            ('REF_Bars', '#444444', 0.5), ('REF_Mesh', '#888888', 0.4)]
     light = np.array([-0.4, -0.7, 0.6])
     light /= np.linalg.norm(light)
     fig = plt.figure(figsize=(14, 7))
@@ -257,6 +282,8 @@ def preview_png(solids, path):
                                              (5, 0, 'side view (shopper on the left)')]):
         ax = fig.add_subplot(1, 2, k + 1, projection='3d')
         for n, col, a in show:
+            if n not in solids:
+                continue
             mesh = (solids[n] ^ clip).to_mesh()
             tris = np.asarray(mesh.vert_properties)[:, :3][np.asarray(mesh.tri_verts)]
             nrm = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])

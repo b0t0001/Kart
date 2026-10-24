@@ -133,6 +133,7 @@ RPC_PARAM_TYPES = {
     "p_event_id": "uuid", "p_method": "text", "p_plan": "jsonb", "p_resolves_event_id": "uuid",
     "p_status": "text", "p_section": "text", "p_role": "text", "p_text": "text", "p_provider": "text",
     "p_feature": "text", "p_on": "boolean", "p_action": "text",
+    "p_qty": "int", "p_basis": "text", "p_meal": "text", "p_amount": "numeric",
     "p_member_id": "text", "p_date": "date", "p_today": "date", "p_kind": "text", "p_event_date": "date",
     "p_trip_id": "uuid", "p_memory_id": "bigint", "p_items": "jsonb",
 }

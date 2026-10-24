@@ -40,7 +40,10 @@ Between demo runs: `backend/.venv/bin/python backend/db.py reset-demo` restores 
 | RPC | Who | Notes |
 |---|---|---|
 | `apply_cart_event(p_cart_id, p_type, p_product_id, p_confidence, p_source, p_label, p_camera, p_snapshot_url, p_event_id, p_method, p_resolves_event_id)` | CV, iPad manual fix | Repeated `p_event_id` is a no-op. Unknown/null product: recorded, cart untouched. `p_resolves_event_id` clears a confirm card (P4). |
-| `set_plan(p_cart_id, p_plan)` | voice agent | `[{product_id, reason, qty?}]`; the backend orders it by route. |
+| `set_plan(p_cart_id, p_plan)` | voice agent | `[{product_id, reason?, qty?, basis?, meal?}]`; the same product listed twice becomes one line (qty summed, `meal` + `meals`); the backend orders it by route. |
+| `add_to_plan(p_cart_id, p_product_id, p_qty default 1, p_basis default null, p_meal default null)` | voice agent | Atomic list edit: adds to the line (negative lowers it; 0 drops it). Raises on an unknown product. |
+| `remove_from_plan(p_cart_id, p_product_id)` | voice agent | Atomic: drops that line (no-op if it isn't there). |
+| `set_budget(p_cart_id, p_amount)` | voice agent | "Under $30": recompute fills `budget_left` (budget − total) and `plan_estimate` (what's left on the list at today's sale prices). `null` clears it; reset clears it. |
 | `reset_cart(p_cart_id)` | iPad | New `trip_id`; the Pi watches it and clears its memory. |
 | `dismiss_suggestion(p_cart_id)` | iPad "No thanks" | That deal isn't offered again this trip. |
 | `set_cart_status(p_cart_id, p_status)` | iPad, agent | `idle` / `shopping` / `checkout`; `reset_cart` sets `shopping`, `checkout()` sets `paid`. |

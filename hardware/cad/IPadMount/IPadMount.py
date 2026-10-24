@@ -91,6 +91,10 @@ PARAMS = [
     ('bar2_drop',   '110 mm',   'mm', 'MEASURE (eyeballed): top of handle down to top of the lower middle bar'),
     ('bar2_d',      '3.5 mm',   'mm', 'Lower middle bar diameter'),
     ('bar_clear',   '6 mm',     'mm', 'Gap kept between the bracket and the middle bars (bar numbers are eyeballed)'),
+    ('mesh_x0',     '60 mm',    'mm', 'MEASURE (eyeballed): first slanted mesh wire, distance from the handle centre (same each side)'),
+    ('mesh_pitch',  '43 mm',    'mm', 'MEASURE (eyeballed): mesh wire spacing, centre to centre'),
+    ('mesh_d',      '3.5 mm',   'mm', 'Mesh wire diameter'),
+    ('mesh_n',      '6',        '',   'Mesh wires modelled per side (REF_Mesh only)'),
 
     # Screen placement
     ('tilt',        '0 deg',    'deg', 'Screen lean-back from vertical (top edge toward the cart); 15-20 reads better from standing height'),
@@ -114,8 +118,8 @@ PARAMS = [
 
     # Hanger: arch over the handle, arm, pad on top of the wire
     ('sad_t',       '6 mm',     'mm', 'Arch wall thickness over the handle tube'),
-    ('arm_w',       '24 mm',    'mm', 'Arch and wire pad width along the handle'),
-    ('arm_t',       '10 mm',    'mm', 'Web and leg thickness along the handle'),
+    ('arm_w',       '17 mm',    'mm', 'Arch and wire pad width along the handle (fits between the mesh wires)'),
+    ('arm_t',       '8 mm',     'mm', 'Web and leg thickness along the handle'),
     ('arm_h',       '16 mm',    'mm', 'Height of the leg out to the wire pad'),
     ('pad_wall',    '6 mm',     'mm', 'Wire pad wall around the notch'),
     ('zt_w',        '5.6 mm',   'mm', 'Zip-tie tunnel width (4.8 mm ties)'),
@@ -161,7 +165,7 @@ PARAMS = [
     ('r_pad',       'r_wb + pad_wall', 'mm', 'derived: wire pad half size'),
     ('web_y0',      'ipad_y0 + v_b*sin(tilt) + n_p*cos(tilt)', 'mm', 'derived: web edge Y below the pocket'),
     ('leg_z1',      '-(rim_drop) + r_pad', 'mm', 'derived: top of the leg = top of the wire pad'),
-    ('tie_x',       '(arm_t + arm_w)/2', 'mm', 'derived: tie tunnel centre, in from the outer face (clear of the arm)'),
+    ('tie_x',       'arm_t + 1 mm + zt_w/2', 'mm', 'derived: tie tunnel centre, in from the outer face (clear of the web and leg)'),
     ('sk_v0',       'sp_v - sfit - sk_wall', 'mm', 'derived: socket bottom'),
     ('sk_v1',       'sp_v + sp_h + sfit + sk_wall', 'mm', 'derived: socket top'),
     ('sk_n1',       'n_b + sp_t + 2*sfit + sk_wall', 'mm', 'derived: socket rear'),
@@ -197,6 +201,11 @@ def VI(expr):
 def E(expr):
     """Evaluate an expression (may use user params) -> internal units (cm)."""
     return um.evaluateExpression(expr, 'mm')
+
+
+def N(expr):
+    """Evaluate a unitless expression (counts, signs)."""
+    return um.evaluateExpression(expr, '')
 
 
 def add_params():
@@ -370,6 +379,13 @@ def P(v, n):
 def tq(v0, v1, n0, n1):
     """Screen-frame rectangle v0..v1 x n0..n1, as a polygon shape."""
     return ('poly', [P(v0, n0), P(v1, n0), P(v1, n1), P(v0, n1)])
+
+
+def LP(s, w):
+    """Point s along the handle-to-wire line from the handle centre, w
+    across it (positive toward the basket), as (Y, Z) expressions."""
+    return ('(%s)*rim_dy/rim_c + (%s)*rim_drop/rim_c' % (s, w),
+            '-(%s)*rim_drop/rim_c + (%s)*rim_dy/rim_c' % (s, w))
 
 
 def BL(z):
@@ -729,6 +745,23 @@ def build_reference():
             s.poly(shape[1])
         f = extrude(c, s.profiles(), NEW, dist, start=start, name=name)
         f.bodies.item(0).name = name
+    # Slanted mesh wires in the handle-wire plane, from the handle centre to
+    # just past the wire (square section covering the round wire).
+    step('REF_Mesh')
+    c = new_component('REF_Mesh')
+    s = Sk(c, 'yz', 'REF mesh wire')
+    s.poly([LP('0 mm', '-(mesh_d/2)'), LP('rim_c + 20 mm', '-(mesh_d/2)'),
+            LP('rim_c + 20 mm', 'mesh_d/2'), LP('0 mm', 'mesh_d/2')])
+    body = None
+    for k in range(int(round(N('mesh_n')))):
+        for sign in ('-', '+'):
+            x = '%s(mesh_x0 + %d*mesh_pitch)' % (sign, k)
+            op = NEW if body is None else JOIN
+            f = extrude(c, s.profiles(), op, 'mesh_d', start='%s - mesh_d/2' % x, body=body,
+                        name='REF mesh wire %s%d' % (sign, k + 1))
+            if body is None:
+                body = f.bodies.item(0)
+                body.name = 'REF_Mesh'
 
 
 def build():
@@ -812,8 +845,17 @@ def run(context):
         step('parameters')
         add_params()
         warnings, report, fits = build()
+        step('final checks')
         off = math.degrees(math.atan2(abs(E('rim_dy')), E('rim_drop')))
-        if E('rim_side') < 0:
+        lo, hi = (E('bx_o - arm_w') * 10, E('bx_o') * 10)   # hanger, mm from centre
+        for k in range(int(round(N('mesh_n')))):
+            xk = E('mesh_x0 + %d*mesh_pitch' % k) * 10
+            gap = max(lo - xk, xk - hi, 0) - E('mesh_d/2') * 10
+            if gap < 2:
+                warnings.append('The arch/pad (%.0f-%.0f mm from centre) is %.1f mm from the '
+                                'mesh wire at %.0f mm: change arm_w or check the mesh numbers.'
+                                % (lo, hi, gap, xk))
+        if N('rim_side') < 0:
             warnings.append('rim_side = -1 (wire toward the shopper): the web is laid out '
                             'for bars slanting toward the basket. Check for collisions '
                             '(check/check.py) before printing.')

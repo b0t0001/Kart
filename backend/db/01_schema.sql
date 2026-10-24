@@ -95,6 +95,11 @@ alter table carts add column if not exists nudged text[] not null default '{}';
 -- {product_id: {at, from}}: when each plan item joined and where the shopper was then. Kept only
 -- while quantity_nudges is on for the cart (for the mid-trip sub-option); otherwise stays {}.
 alter table carts add column if not exists plan_joined jsonb not null default '{}';
+-- v0.16: "keep it under $30". budget is per trip (reset clears it); recompute fills budget_left
+-- (budget − total) and plan_estimate (what the rest of the list should cost at today's sale prices).
+alter table carts add column if not exists budget numeric(10,2);
+alter table carts add column if not exists budget_left numeric(10,2);
+alter table carts add column if not exists plan_estimate numeric(10,2) not null default 0;
 
 -- Feature flags (v0.12): a global default per feature; carts.features overrides it per cart.
 create table if not exists feature_flags (
