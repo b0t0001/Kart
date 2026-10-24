@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from typing import Any, AsyncIterator
 
 from line.events import AgentSendCustom, AgentSendText, CallEnded, CallStarted, UserCustomSent, UserTurnEnded, UserTurnStarted
 
 from .brain import Brain
-from .lines import (DECLINED_LINE, KEEP_LINE, NUDGE_OK_LINE, accepted_line, nudge_answer, only_ack, only_filler,
-                    proactive_line, yes_or_no)
+from .lines import (DECLINED_LINE, KEEP_LINE, LIST_KEPT, LIST_TOO, NUDGE_OK_LINE, accepted_line, nudge_answer, only_ack,
+                    only_filler, proactive_line, yes_or_no)
 from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
@@ -62,6 +63,7 @@ class KartAgent:
         self._pending: str | None = None            # a proactive line that arrived while Kart was talking
         self._last_add: tuple[dict[str, Any], float] | None = None   # the latest "added" event, until it's said
         self._undo: list[dict[str, Any]] = []      # earlier lists, newest last: "undo" puts the last one back
+        self._list_too: str | None = None         # the product Kart asked "Take it off the list too?" about
         self._offer: dict[str, Any] | None = None   # the deal Kart just asked about, until it's answered
         self._nudge: dict[str, Any] | None = None   # the quantity nudge Kart just said (v0.12 beta)
         self._last_asked: str | None = None         # "offer" or "nudge": a plain answer goes to the latest question
@@ -138,10 +140,22 @@ class KartAgent:
             text = " ".join(part.content for part in event.content if hasattr(part, "content") and part.content).strip()
             if not text or only_filler(text):            # "Um." gets no answer and no caption
                 return
-            if not self._offer and not self._nudge and not self._digest and only_ack(text):   # nothing asked
+            if not self._offer and not self._nudge and not self._digest and not self._list_too and only_ack(text):
                 return
             await self._refresh()
             ctx = self._ctx()
+            plain = yes_or_no(text) if self._list_too and self._last_asked == "list_too" else None
+            if plain:                                    # "Take it off the list too?" "Yes."
+                await self._caption("user", text)
+                product_id, self._list_too = self._list_too, None
+                line = LIST_KEPT
+                if plain == "yes":
+                    out = json.loads(await run_tool("remove_from_plan", {"product_id": product_id}, ctx))
+                    line = out.get("readback") or line
+                self.brain.remember(text, line)
+                async for out_text in self._say([line], interruptible=False):
+                    yield out_text
+                return
             digest_reply = _digest_answer(text) if self._digest and self._last_asked == "digest" else None
             if digest_reply:                             # "yes" / "not now" to the deals walk-through
                 await self._caption("user", text)
@@ -214,6 +228,8 @@ class KartAgent:
             line = proactive_line(meta, self._catalog, self._plan, self._items, self._meal, self._nudges)
             if meta.get("type") == "cart_changed" and meta.get("change") == "added":
                 self._last_add = None                    # said (or nothing to say): a later deal stands alone
+            if line and line.endswith(LIST_TOO):
+                self._list_too, self._last_asked = meta.get("product_id"), "list_too"
             elif line and meta.get("type") == "suggestion" and self._last_add:
                 add, at = self._last_add
                 self._last_add = None
