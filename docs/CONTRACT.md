@@ -1,4 +1,4 @@
-# KART integration contract — v0.9 (DRAFT)
+# KART integration contract — v0.10 (DRAFT)
 
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
@@ -157,7 +157,12 @@ Writers **only** use these; nobody writes `carts.items` directly.
    "confidence": 0.93, "method": "local|cloud|memory|none", "label": "catalog name or raw model text",
    "cameras": [0, 1], "crops": ["state/crops/<event_id>_cam0.jpg"], "ts": "ISO8601 UTC"}
   ```
-  It maps to `apply_cart_event` as `p_event_id`, `p_type`, `p_product_id`, `p_confidence`, `p_source="vision"`, `p_label`, `p_camera=cameras[0]` and `p_method`. Crops stay on the Pi in v1. Stretch goal, only if the iPad wants "what the AI saw": the Pi uploads to Storage `snapshots/{cart_id}/{event_id}.jpg` and passes `p_snapshot_url`, which the backend already stores.
+  It maps to `apply_cart_event` as `p_event_id`, `p_type`, `p_product_id`, `p_confidence`, `p_source="vision"`, `p_label`, `p_camera=cameras[0]`, `p_method` and `p_resolves_event_id`.
+- **`resolves_event_id` (v0.10, additive):** `null` | `"<uuid>"`. When vision removes a unit it had billed as unknown (`product_id: null`), the removal event carries that add's `event_id`, and the sink passes it as `p_resolves_event_id`. That sets `resolved_at`, so an unknown that leaves the cart (usually a hand) no longer blocks checkout, and its iPad confirm card clears on its own. Every CV call sends `p_resolves_event_id`, which is null unless it's resolving something. This is verified end to end against local Supabase.
+- **As built overnight (CV, 80 tests):**
+  - The default on-device matcher is the colour histogram (`"features": "hist"`). ONNX is opt-in, after `tools/gallery_check.py` runs on the real enrolled props.
+  - The Claude fallback times out after 6 s and sends at most 2 crops.
+  - Arms reaching over the basket edge are ignored, and the cart re-judges once they leave. Crops stay on the Pi in v1. Stretch goal, only if the iPad wants "what the AI saw": the Pi uploads to Storage `snapshots/{cart_id}/{event_id}.jpg` and passes `p_snapshot_url`, which the backend already stores.
 - **Backend's answers to CV §15 (v0.4)**, provisional until Dylan confirms Supabase: events go to the `apply_cart_event` RPC; `product_id` = the `store.json` id, which never changes; reset via `trip_id` as above; no crops in v1.
 - Cart floor needs a solid mat or cardboard, because a wire-mesh bottom breaks the diff.
 - Unrecognized / low confidence → send the event with `product_id: null` and the raw `label`; the phone asks the user to fix it.
@@ -249,3 +254,4 @@ All three feature chats work in the **same main checkout**, so stay inside your 
 - v0.7 — Dylan approved the iPad spec. §3a records the backend as built (`1955f3c`): additive fields, the `product_catalog` view, route-ordered plan, P5/P8-partial/P10 done. Hardware-lane handoff from CV (autostart command, install steps).
 - v0.8 — All of P2–P8 and P10 are built (`4feb9ba`). `checkout` returns the receipt and blocks on unresolved items. Env var name unified to `CARTESIA_AGENT_ID`; added `SUPABASE_PROJECT_REF` and `SUPABASE_ACCESS_TOKEN`.
 - v0.9 — Merchant agent built (`d5d3c2b`): it stages changes, the owner confirms, and every change has an audit log and undo. `suggestion.offered_at`: a newer store deal replaces the current suggestion. CV reads the catalog from Supabase at startup and on each trip change, with `store.json` as the fallback. Live-deal demo option added.
+- v0.10 — CV events gain `resolves_event_id`: a vision removal of an unknown unit resolves it, so checkout isn't blocked by a stray hand. Overnight as-built notes for CV.
