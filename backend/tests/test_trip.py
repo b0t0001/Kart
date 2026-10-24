@@ -7,6 +7,7 @@ import uuid
 import psycopg
 import pytest
 
+import kartdb
 from test_cart import PASTA, add, current
 
 
@@ -169,3 +170,17 @@ def test_analytics_are_not_public(db_url):
                 c.execute(sql)
             c.execute("rollback to savepoint s")
         c.rollback()
+
+
+def test_rehearsal_carts_stay_out_of_the_numbers(cart, conn):
+    conn.execute("delete from receipts; delete from deal_offers")
+    for test_cart in ["ipad-live", "cv-e2e-1234", "ios-it-abc", "agent-it-x", "e2e-99", "smoke-1"]:
+        kartdb.rpc(conn, "apply_cart_event", p_cart_id=test_cart, p_type="added", p_product_id="barilla-spaghetti",
+                   p_confidence=0.9, p_source="vision", p_label="x")
+        kartdb.rpc(conn, "checkout", p_cart_id=test_cart, p_provider="simulated")
+    add(cart, "bananas")
+    cart("checkout", p_provider="simulated")
+    i = conn.execute("select to_jsonb(s) from store_insights s").fetchone()[0]
+    assert (i["trips"], i["avg_basket"], i["deals_offered"]) == (1, 1.49, 0)
+    parm = conn.execute("select offered from deal_performance where deal_id = 'd-parm-3off'").fetchone()[0]
+    assert parm == 0
