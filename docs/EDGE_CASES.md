@@ -29,3 +29,20 @@ Owned by the manager. Status: **handled** · **partly** · **not yet**. Cost: S 
 
 ## Proposed by each workstream
 *(Filled in as replies arrive: CV, voice/iPad, backend, member memory, hardware.)*
+
+### Hardware: physical world (James's chat; "seen" = happened today)
+| # | Scenario | Today | Fix | Cost | Decision |
+|---|---|---|---|---|---|
+| H1 | **The Pi reboots or power blips** (seen) | Nothing runs until someone starts it by hand; cart memory survives | Install `kart-cv.service` (restarts on its own); show camera health / last-frame age on the iPad debug panel | S | **Go** (service now). The health signal needs a Pi→Supabase heartbeat; see cross-team |
+| H2 | **The hotspot drops or the laptop sleeps** (seen) | Events queue and arrive later; trip resets stall; `.local` names fail | A second Wi-Fi profile on the Pi (venue Wi-Fi or a phone hotspot); turn off the hotspot's idle auto-off; use the IP | S | **Go** |
+| H3 | **A camera is bumped or its mount shifts** (seen) | A big shift = "disturbed" (no corruption), but the floor outline is then wrong | Rigid mounts plus printed anti-rotation shells; a pre-demo **aim-check** script (live frame vs reference) | S/M | **Go** (aim check) |
+| H4 | **A USB unplug, port swap, or bandwidth limit** (seen) | 2 cams at 15 fps is clean; a dropped cam reconnects; **swapping ports swaps cam0/cam1** | Strain-relief loops, labelled ports, cables routed along the frame | S | **Go** |
+| H5 | **The power bank sags or dies** (expected) | Shows as camera dropouts, then a reboot | 5 V/3 A bank with a short cable; show power status in `/status`; carry a spare bank | S | **Go** |
+| H6 | **A judge pushes the cart fast** (seen before the fix) | Fixed by the floor ROI; untested on the final layout | Record the "roll" clip now; keep the solid floor liner | S | **Go** |
+| H7 | **Venue lighting, glare, white balance** (seen) | Real clips pass | Test under the venue lights; lock the Brio's white balance if colours drift | S/M | Before judging |
+| H8 | **A judge's phone or bag set INSIDE the basket** (expected) | **It's a real add**, so it gets an "Is this…?" card | Choreography (drop, hand out); the marked drop zone; **cross-team: a "That's mine" action** | S | See cross-team |
+| H9 | **The iPad mount drops on a bump** | Not printed or fit-tested yet | Fit test, a zip-tie backup, a charging cable path | M | Before the video |
+
+### Cross-team candidates (emerging)
+- **Personal items** (a phone, bag or jacket placed in the basket): on the "Is this…?" card, add **"That's mine, ignore it"** → never billed, and the camera ignores that spot until it's removed (CV + iPad + backend).
+- **Cart health on the iPad:** the Pi writes a heartbeat (last frame age, camera status, power status) to Supabase every few seconds, and the iPad debug panel shows it (CV + backend + iPad). A dead camera is then visible without SSH.
