@@ -90,7 +90,9 @@ class ControlServer:
                     img = (srv.frames_fn() or {}).get(int(m.group(1)))
                     if img is None:
                         return self._404()
-                    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                    q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("q", ["70"])[0]
+                    quality = min(95, max(30, int(q))) if q.isdigit() else 70  # remote recording asks for 95
+                    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
                     return self._send(200, buf.tobytes(), "image/jpeg") if ok else self._404()
                 if path.startswith("/crops/") and srv.crops_dir:
                     name = urllib.parse.unquote(path[len("/crops/"):])

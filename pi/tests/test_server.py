@@ -45,3 +45,15 @@ def test_debug_view(tmp_path):
         assert get(s.port, "/crops/..%2Fsecret.jpg")[0] == 404
     finally:
         s.stop()
+
+
+def test_debug_frame_quality_parameter():
+    img = (np.random.default_rng(0).random((200, 300, 3)) * 255).astype(np.uint8)
+    s = ControlServer(0, lambda: {}, lambda: None, frames_fn=lambda: {0: img}, debug_view=True)
+    s.start()
+    try:
+        _, _, low = get(s.port, "/cam/0.jpg?q=50")
+        _, _, high = get(s.port, "/cam/0.jpg?q=95")
+        assert len(high) > len(low) > 0
+    finally:
+        s.stop()
