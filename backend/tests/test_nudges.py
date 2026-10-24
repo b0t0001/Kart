@@ -84,7 +84,13 @@ def test_a_deal_card_goes_first(cart):
 
 # ── Under ──
 
+def midtrip(cart):
+    """The sub-option for one-at-a-time mid-trip 'short' nudges (off by default)."""
+    cart("set_feature", p_feature="quantity_nudges_midtrip", p_on=True)
+
+
 def test_under_when_the_shopper_moves_past_the_aisle(nudges):
+    midtrip(nudges)
     add(nudges, "avocados")                           # Aisle 1
     assert nudges("set_location", p_section="A2")["nudge"] is None        # at the tortillas: not passed yet
     n = nudges("set_location", p_section="A3")["nudge"]
@@ -218,6 +224,7 @@ def test_short_names_fit_and_the_lcd_still_truncates(conn):
 
 
 def test_checkout_upgrades_a_mid_trip_nudge_to_the_full_list(at_checkout):
+    midtrip(at_checkout)
     row = at_checkout("set_location", p_section="A9")          # walked past everything
     assert row["nudge"]["kind"] == "under" and "items" not in row["nudge"]   # mid-trip: one at a time
     n = at_checkout("set_cart_status", p_status="checkout")["nudge"]
@@ -257,9 +264,64 @@ def test_loop_guard_after_two_promises(at_checkout):
 
 
 def test_ok_on_a_mid_trip_nudge_is_final_for_checkout_too(nudges):
+    midtrip(nudges)
     add(nudges, "avocados")
     assert nudges("set_location", p_section="A3")["nudge"]["product_id"] == "mission-tortillas"
     nudges("dismiss_nudge", p_action="ok")
     for pid in ["tostitos-salsa", "tostitos-chips"]:
         add(nudges, pid)
     assert nudges("set_cart_status", p_status="checkout")["nudge"] is None    # tortillas: answered already
+
+
+
+# ── Mid-trip "short" nudges are off by default (voice-call review, DEMO_PLAN §3) ──
+
+PASTA_FOR_4 = [{"product_id": "barilla-spaghetti", "qty": 1, "basis": "1 lb serves 4"},
+               {"product_id": "rao-marinara", "qty": 1},
+               {"product_id": "french-baguette", "qty": 1}]
+
+
+@pytest.fixture
+def pasta(cart):
+    cart("set_feature", p_feature="quantity_nudges", p_on=True)
+    cart("set_plan", p_plan=PASTA_FOR_4)
+    return cart
+
+
+def say_yes_to_the_parmesan(cart):
+    row = add(cart, "barilla-spaghetti")              # Aisle 6, already past the Parmesan's Aisle 4
+    assert row["suggestion"]["product_id"] == "kirkland-parmesan"
+    return cart("set_plan", p_plan=PASTA_FOR_4 + [{"product_id": "kirkland-parmesan", "qty": 1}])
+
+
+def test_a_yes_behind_the_shopper_stays_silent(pasta):
+    """(a) the Parmesan joins the plan while the shopper stands in Aisle 6: no 'one Parmesan short'."""
+    assert say_yes_to_the_parmesan(pasta)["nudge"] is None
+    assert add(pasta, "rao-marinara")["nudge"] is None
+
+
+def test_items_behind_the_shopper_wait_for_checkout(pasta):
+    """(b) the garlic bread (Aisle 2) is behind the shopper, who went straight to the pasta."""
+    add(pasta, "barilla-spaghetti")
+    assert pasta("dismiss_suggestion")["nudge"] is None
+    assert add(pasta, "rao-marinara")["nudge"] is None
+    assert pasta("set_location", p_section="A9")["nudge"] is None
+    n = pasta("set_cart_status", p_status="checkout")["nudge"]
+    assert n["text"] == "Before you go: you still need Garlic Bread."
+
+
+def test_with_the_sub_option_an_item_must_be_passed_after_it_joined(pasta):
+    midtrip(pasta)
+    pasta("set_plan", p_plan=PASTA_FOR_4[:2])                           # no bread: only the Parmesan matters here
+    add(pasta, "barilla-spaghetti")
+    row = pasta("set_plan", p_plan=PASTA_FOR_4[:2] + [{"product_id": "kirkland-parmesan", "qty": 1}])
+    assert row["nudge"] is None                                          # joined while already past it
+    assert add(pasta, "rao-marinara")["nudge"] is None                  # same aisle: hasn't moved on
+    pasta("dismiss_suggestion")                                          # the Garlic Bread card goes first
+    n = pasta("set_location", p_section="A9")["nudge"]                  # moved on past it since joining
+    assert (n["kind"], n["product_id"]) == ("under", "kirkland-parmesan")
+
+
+def test_join_times_are_only_kept_with_nudges_on(cart):
+    row = cart("set_plan", p_plan=PASTA_FOR_4)
+    assert row["plan_joined"] == {}

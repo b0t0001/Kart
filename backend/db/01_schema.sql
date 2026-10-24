@@ -89,6 +89,9 @@ alter table store_info add column if not exists layout text not null default 'mi
 alter table carts add column if not exists features jsonb not null default '{}';
 alter table carts add column if not exists nudge jsonb;
 alter table carts add column if not exists nudged text[] not null default '{}';
+-- {product_id: {at, from}}: when each plan item joined and where the shopper was then. Kept only
+-- while quantity_nudges is on for the cart (for the mid-trip sub-option); otherwise stays {}.
+alter table carts add column if not exists plan_joined jsonb not null default '{}';
 
 -- Feature flags (v0.12): a global default per feature; carts.features overrides it per cart.
 create table if not exists feature_flags (
@@ -98,7 +101,9 @@ create table if not exists feature_flags (
 );
 -- on conflict do nothing: re-running migrations never flips a default someone already changed
 insert into feature_flags (name, enabled_default, description)
-values ('quantity_nudges', false, 'BETA: "right amount for the meal" nudges (CONTRACT: Quantity nudges)')
+values ('quantity_nudges', false, 'BETA: "right amount for the meal" nudges (CONTRACT: Quantity nudges)'),
+       ('quantity_nudges_midtrip', false, 'BETA sub-option: one-at-a-time "short" nudges mid-trip, as the '
+                                         'shopper moves past an aisle. Off: only over nudges + the checkout list')
 on conflict (name) do nothing;
 
 create table if not exists cart_events (

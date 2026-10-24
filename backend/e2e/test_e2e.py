@@ -193,7 +193,7 @@ def test_yes_moves_on_to_the_next_deal(rest, cart_id):
 
 
 def test_quantity_nudges_beta_on_a_throwaway_cart(rest, cart_id):
-    """CONTRACT v0.12: tacos for 4 → 3 bags of avocados → over nudge → keep → move past the tortillas → under."""
+    """CONTRACT v0.12: tacos for 4 → 3 bags of avocados → over nudge → keep → walk on (silent) → checkout list."""
     watch = Watch(URL, ANON, "carts", f"cart_id=eq.{cart_id}")
     try:
         rest.rpc("reset_cart", p_cart_id=cart_id)
@@ -217,25 +217,24 @@ def test_quantity_nudges_beta_on_a_throwaway_cart(rest, cart_id):
         assert c["nudge"] is None
         assert next(p for p in c["plan"] if p["product_id"] == "avocados")["qty"] == 3
 
-        c = rest.rpc("set_location", p_cart_id=cart_id, p_section="aisle 3")   # past the tortillas (Aisle 2)
-        n = c["nudge"]
-        assert (n["kind"], n["product_id"], n["have"], n["need"], n["aisle"]) == ("under", "mission-tortillas", 0, 1, "Aisle 2")
-        assert c["nudged"] == ["over:avocados", "under:mission-tortillas"]
-        c = rest.rpc("dismiss_nudge", p_cart_id=cart_id, p_action="ok")
+        # Mid-trip "short" nudges are off (sub-option quantity_nudges_midtrip): walking past the
+        # tortillas stays silent; they're on the checkout list instead
+        c = rest.rpc("set_location", p_cart_id=cart_id, p_section="aisle 3")
         assert c["nudge"] is None
 
         # Checkout: everything still short arrives as ONE nudge, answered once
         c = rest.rpc("set_cart_status", p_cart_id=cart_id, p_status="checkout")
         n = c["nudge"]
-        assert n["kind"] == "under" and {i["product_id"] for i in n["items"]} == {"tostitos-salsa", "tostitos-chips"}
+        assert n["kind"] == "under"
+        assert {i["product_id"] for i in n["items"]} == {"mission-tortillas", "tostitos-salsa", "tostitos-chips"}
         assert n["text"].startswith("Before you go: you still need ") and n["product_id"] == n["items"][0]["product_id"]
         c = rest.rpc("dismiss_nudge", p_cart_id=cart_id, p_action="shop")       # "go get them"
         assert c["nudge"] is None and c["status"] == "shopping"
 
-        # Back at checkout with one still short: a 1-item list; "skip" is final for the trip
-        rest.rpc("apply_cart_event", **cv_to_rpc(cv_event(cart_id, "added", "tostitos-salsa", "Tostitos Salsa")))
+        # Back at checkout with two still short: a shorter list; "skip" is final for the trip
+        rest.rpc("apply_cart_event", **cv_to_rpc(cv_event(cart_id, "added", "tostitos-salsa", "Salsa")))
         c = rest.rpc("set_cart_status", p_cart_id=cart_id, p_status="checkout")
-        assert [i["product_id"] for i in c["nudge"]["items"]] == ["tostitos-chips"]
+        assert {i["product_id"] for i in c["nudge"]["items"]} == {"mission-tortillas", "tostitos-chips"}
         c = rest.rpc("dismiss_nudge", p_cart_id=cart_id, p_action="skip")
         rest.rpc("set_cart_status", p_cart_id=cart_id, p_status="shopping")
         c = rest.rpc("set_cart_status", p_cart_id=cart_id, p_status="checkout")

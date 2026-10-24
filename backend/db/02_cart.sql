@@ -360,14 +360,19 @@ begin
           where l.have < l.need and not nudge_listable(c.nudged, l.pid)
             and not ('done:' || l.pid = any(c.nudged)));
       else
-        -- under mid-trip: short, and the shopper has moved past its aisle (one at a time)
-        select * into v_line from nudge_lines(v_items, v_plan) l
-        where l.have < l.need and l.in_stock and not ('under:' || l.pid = any(c.nudged))
-          and not ('shop:' || l.pid = any(c.nudged)) and not ('done:' || l.pid = any(c.nudged))
-          and v_pos is not null and v_pos > l.section_x
-        order by l.ord limit 1;
-        if found then
-          v_kind := 'under';
+        -- under mid-trip (sub-option quantity_nudges_midtrip, off by default): short, and since the
+        -- item joined the plan the shopper has moved to another aisle past it (one at a time)
+        if feature_enabled(c.features, 'quantity_nudges_midtrip') then
+          select * into v_line from nudge_lines(v_items, v_plan) l
+          where l.have < l.need and l.in_stock and not ('under:' || l.pid = any(c.nudged))
+            and not ('shop:' || l.pid = any(c.nudged)) and not ('done:' || l.pid = any(c.nudged))
+            and v_pos is not null and v_pos > l.section_x
+            and (c.location->>'at')::timestamptz > coalesce((c.plan_joined->l.pid->>'at')::timestamptz, '-infinity')
+            and (c.location->>'section') is distinct from (c.plan_joined->l.pid->>'from')
+          order by l.ord limit 1;
+          if found then
+            v_kind := 'under';
+          end if;
         end if;
       end if;
       if v_kind = 'checkout' then
@@ -565,7 +570,13 @@ begin
   where jsonb_typeof(elem) = 'object';
 
   insert into carts (cart_id) values (p_cart_id) on conflict do nothing;
-  update carts set plan = v_plan where cart_id = p_cart_id;
+  update carts set plan = v_plan,
+    plan_joined = case when not feature_enabled(features, 'quantity_nudges') then plan_joined else
+      (select coalesce(jsonb_object_agg(pid, coalesce(plan_joined->pid,
+                 jsonb_strip_nulls(jsonb_build_object('at', now(), 'from', location->>'section')))), '{}')
+       from (select distinct elem->>'product_id' as pid from jsonb_array_elements(v_plan) elem
+             where elem->>'product_id' is not null) x) end
+  where cart_id = p_cart_id;
   return recompute_cart(p_cart_id);
 end $$;
 
@@ -578,7 +589,7 @@ begin
   delete from transcript where cart_id = p_cart_id;
   update carts set items = '[]', plan = '[]', suggestion = null, suggested_deals = '{}',
                    trip_id = gen_random_uuid(), status = 'shopping', trip_started_at = now(),
-                   location = null, nudge = null, nudged = '{}'
+                   location = null, nudge = null, nudged = '{}', plan_joined = '{}'
   where cart_id = p_cart_id;
   return recompute_cart(p_cart_id);
 end $$;

@@ -90,8 +90,11 @@ Feature `quantity_nudges` (CONTRACT v0.12). The global default lives in `feature
 **false**; `carts.features` overrides it per cart. With it off, cart outputs are identical to tag
 `stable-pre-nudges` (checked snapshot by snapshot). With it on, `carts.nudge` works like this:
 - It only nudges plan items. It's `over` when the cart has more than the plan's qty (with `savings`
-  = price × extra), and `under` when the shopper is short and has walked past the item's aisle or
-  gone to checkout.
+  = price × extra), and `under` at checkout (one combined list).
+- Mid-trip `under` nudges, which fire one at a time as the shopper walks past an aisle, sit behind the
+  sub-option `quantity_nudges_midtrip`, seeded **false**. When it's on, an item counts as passed only
+  once the shopper has moved to another aisle beyond it **after** it joined the plan
+  (`carts.plan_joined`, kept only while nudges are on).
 - At checkout, every short item goes into **one** nudge with an `items` list, in walking order from
   the shopper; the first item's fields fill `product_id`/`have`/`need` for compatibility. The list
   shrinks as items are fixed. Going to checkout upgrades a mid-trip under nudge to the full list.

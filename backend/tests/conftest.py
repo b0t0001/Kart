@@ -43,6 +43,7 @@ def conn(db_url):
     """A connection with the catalog restored from store.json and cart 7 reset."""
     with kartdb.connect(db_url) as c:
         kartdb.seed(c)
+        c.execute("update carts set features = '{}' where cart_id = '7'")   # reset_cart keeps switches on purpose
         kartdb.rpc(c, "reset_cart", p_cart_id="7")
         yield c
 
