@@ -97,6 +97,8 @@ public enum LineCodec {
             return ["type": "card_response", "card_id": cardId, "action": name(of: action)]
         case .uiAction(let action):
             return ["type": "ui_action", "action": action]
+        case .reconnected(let unanswered):
+            return ["type": "reconnected", "unanswered": unanswered]
         case .nudge(let nudge):
             var meta: [String: Any] = ["type": "nudge", "product_id": nudge.productId, "kind": nudge.kind.rawValue,
                                        "text": nudge.text, "have": nudge.have, "need": nudge.need]
@@ -161,8 +163,12 @@ public final class LineVoiceSession: VoiceSession {
     public var holdToTalk = false
     public private(set) var isHeld = false
     public private(set) var agentPrompt: AgentPrompt?
+    public private(set) var lastActiveAt: Date?
 
     public func clearAgentPrompt() { agentPrompt = nil }
+
+    /// How loud a mic chunk must be (0–1, `LineAudio.level`) to count as the shopper talking.
+    public static let speechLevel = 0.15
 
     @ObservationIgnored private let tokens: any VoiceTokenProviding
     @ObservationIgnored private let transport: any LineTransport
@@ -175,9 +181,18 @@ public final class LineVoiceSession: VoiceSession {
     @ObservationIgnored private var ackWaiter: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var trip: (cartId: String, tripId: UUID)?
     @ObservationIgnored private var reconnecting = false
+    @ObservationIgnored private let wakeAfter: Duration
+    @ObservationIgnored private var paused = false
+    @ObservationIgnored private var loudSince: Date?             // paused: when the current stretch of talking began
+    @ObservationIgnored private var lastSpeechAt: Date?
+    @ObservationIgnored private var lastKartAudioAt: Date?
+    @ObservationIgnored private var announce: Bool?              // after the next connect: reconnected(unanswered:)
+    @ObservationIgnored private var pending: [VoiceEvent] = []   // said while there was no call: sent once there is
 
     public init(tokens: any VoiceTokenProviding, transport: any LineTransport, audio: any LineAudio,
-                ackTimeout: Duration = .seconds(10), backoff: [Duration] = [.seconds(1), .seconds(2), .seconds(4)]) {
+                ackTimeout: Duration = .seconds(10), backoff: [Duration] = [.seconds(1), .seconds(2), .seconds(4)],
+                wakeAfter: Duration = .milliseconds(300)) {
+        self.wakeAfter = wakeAfter
         self.tokens = tokens
         self.transport = transport
         self.audio = audio
@@ -186,16 +201,47 @@ public final class LineVoiceSession: VoiceSession {
     }
 
     public func start(cartId: String, tripId: UUID) async {
+        let carried = announce                                 // a retry after going offline still owes the question
         stop()
+        announce = carried
         trip = (cartId, tripId)
         _ = await connectWithRetries()
     }
 
     public func stop() {
         trip = nil
+        paused = false
+        pending = []
+        announce = nil
         disconnect()
         outputLevel = 0
         state = .idle
+    }
+
+    /// Closes the call (no Cartesia minutes) but keeps the mic running here, so talking wakes it.
+    public func pause() {
+        guard trip != nil, !paused, state == .listening else { return }
+        paused = true
+        loudSince = nil
+        receiver?.cancel()
+        receiver = nil
+        streamId = nil                                         // the receiver's end is now a deliberate one
+        transport.close()
+        resumeAck(false)
+        audio.flush()
+        outputLevel = 0
+        state = .paused
+    }
+
+    public func resume() async {
+        await wake(spoke: false)
+    }
+
+    private func wake(spoke: Bool) async {
+        guard paused, trip != nil else { return }
+        paused = false
+        announce = spoke
+        _ = await connectWithRetries()
     }
 
     public func setHeld(_ held: Bool) {
@@ -207,7 +253,15 @@ public final class LineVoiceSession: VoiceSession {
     }
 
     public func send(_ event: VoiceEvent) {
-        guard let streamId, state != .offline else { return }
+        if case .tripContext = event {} else { lastActiveAt = Date() }
+        guard let streamId, state != .offline else {
+            if case .tripContext = event { return }            // every new call sends its own
+            if trip != nil, paused || state == .connecting {   // no call right now: keep it for the next one
+                pending = Array((pending + [event]).suffix(8))
+                if paused { Task { await wake(spoke: false) } }   // the cameras saw something: Kart has things to say
+            }
+            return
+        }
         let text = LineCodec.custom(streamId: streamId, event: event)
         Task { try? await transport.send(text) }
     }
@@ -259,6 +313,13 @@ public final class LineVoiceSession: VoiceSession {
         }
         state = .listening
         send(.tripContext(cartId: trip.cartId, tripId: trip.tripId))   // a fresh call knows nothing yet
+        if let unanswered = announce {
+            announce = nil
+            send(.reconnected(unanswered: unanswered))
+        }
+        let queued = pending
+        pending = []
+        queued.forEach(send)
         return true
     }
 
@@ -285,6 +346,16 @@ public final class LineVoiceSession: VoiceSession {
     // MARK: Traffic
 
     private func sendMic(_ pcm: Data) {
+        let talking = !isMuted && !(holdToTalk && !isHeld) && audio.level(of: pcm) >= Self.speechLevel
+        if paused {                                            // nothing leaves the iPad; sustained talking wakes Kart
+            guard talking else { loudSince = nil; return }
+            let now = Date()
+            let since = loudSince ?? now
+            loudSince = since
+            if now.timeIntervalSince(since) >= wakeAfter.seconds { loudSince = nil; Task { await wake(spoke: true) } }
+            return
+        }
+        if talking { lastSpeechAt = Date(); lastActiveAt = lastSpeechAt }
         guard let streamId, !isMuted, state != .offline else { return }
         // Hold-to-talk: silence of the same length while not held, so store chatter never leaves the iPad, the stream
         // stays alive, and Line ends the shopper's turn on its own when they let go (Line has no end-of-turn message).
@@ -300,6 +371,8 @@ public final class LineVoiceSession: VoiceSession {
             acked = true
             resumeAck(true)
         case .media(let pcm):
+            lastKartAudioAt = Date()
+            lastActiveAt = lastKartAudioAt
             audio.play(pcm)
             outputLevel = audio.level(of: pcm)
             state = .agentSpeaking
@@ -323,6 +396,11 @@ public final class LineVoiceSession: VoiceSession {
         resumeAck(false)
         guard acked, !reconnecting, trip != nil else { return } // still connecting: connectOnce handles it
         reconnecting = true
+        if let spoke = lastSpeechAt {                          // did the shopper's last words get an answer?
+            announce = spoke > (lastKartAudioAt ?? .distantPast) && Date().timeIntervalSince(spoke) < 20
+        } else {
+            announce = false
+        }
         audio.stop()
         outputLevel = 0
         state = .connecting
@@ -336,4 +414,9 @@ public final class LineVoiceSession: VoiceSession {
         ackWaiter?.resume(returning: value)
         ackWaiter = nil
     }
+}
+
+
+private extension Duration {
+    var seconds: Double { Double(components.seconds) + Double(components.attoseconds) / 1e18 }
 }

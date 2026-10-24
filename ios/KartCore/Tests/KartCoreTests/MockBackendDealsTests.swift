@@ -32,7 +32,7 @@ import Testing
         #expect(b.cart.suggestion == nil)
         await b.simulateVision(.added, productId: "rao-marinara", confidence: 0.9, label: "r")
         #expect(b.cart.suggestion?.dealId == "d-baguette-1off")
-        #expect(b.cart.suggestion?.text == "Garlic Bread is $1 off in Aisle 2. Want it?")
+        #expect(b.cart.suggestion?.text == "Garlic Bread is $1 off in Aisle 8. Want it?")
     }
     @Test func planningTheSuggestedProductConsumesItAndOffersTheNextPairing() async throws {
         let b = try await started()

@@ -10,6 +10,7 @@ public final class MockVoiceSession: VoiceSession {
     public var holdToTalk = false
     public private(set) var isHeld = false
     public let agentPrompt: AgentPrompt? = nil                  // the scripted Kart doesn't walk deals
+    public private(set) var lastActiveAt: Date?
 
     public func clearAgentPrompt() {}
 
@@ -48,6 +49,11 @@ public final class MockVoiceSession: VoiceSession {
         state = .listening
     }
 
+    public func pause() {
+        guard started, !forcedOffline else { return }
+        state = .paused
+    }
+
     public func stop() {
         started = false
         tail = nil
@@ -65,6 +71,8 @@ public final class MockVoiceSession: VoiceSession {
     }
 
     public func send(_ event: VoiceEvent) {
+        lastActiveAt = Date()
+        if state == .paused { state = .listening }
         guard started, !forcedOffline, let line = brain.react(to: event) else { return }
         Task { await speak(line) }
     }

@@ -44,7 +44,8 @@ import Testing
     func stop() { running = false }
     func play(_ pcm: Data) { played.append(pcm) }
     func flush() { flushes += 1 }
-    func level(of pcm: Data) -> Double { 0.5 }
+    var loudness = 0.5                                       // what every mic chunk measures
+    func level(of pcm: Data) -> Double { loudness }
 }
 
 struct FakeTokens: VoiceTokenProviding {
@@ -183,4 +184,77 @@ private let fast: [Duration] = [.milliseconds(10), .milliseconds(10), .milliseco
     audio.onMicChunk?(speech)
     await settle()
     #expect(lastPayload() == Data(count: speech.count).base64EncodedString())
+}
+
+
+// MARK: Reconnects and pauses
+
+@MainActor private func customs(_ transport: FakeTransport) -> [[String: Any]] {
+    transport.events("custom").compactMap { $0["metadata"] as? [String: Any] }
+}
+
+@MainActor @Test func aDropRightAfterTheShopperSpokeTellsKartOnReconnect() async throws {
+    let transport = FakeTransport(autoAck: true), audio = FakeAudio()
+    let voice = LineVoiceSession(tokens: FakeTokens(), transport: transport, audio: audio, ackTimeout: .milliseconds(200), backoff: fast)
+    await voice.start(cartId: "7", tripId: UUID())
+    audio.onMicChunk?(Data(count: 640))                       // the shopper says something...
+    transport.drop()                                           // ...and the Wi-Fi drops before Kart answers
+    try await Task.sleep(for: .milliseconds(150))
+    let reconnected = customs(transport).filter { $0["type"] as? String == "reconnected" }
+    #expect(reconnected.count == 1 && reconnected.first?["unanswered"] as? Bool == true)
+}
+
+@MainActor @Test func aDropAfterKartAnsweredIsNotUnanswered() async throws {
+    let transport = FakeTransport(autoAck: true), audio = FakeAudio()
+    let voice = LineVoiceSession(tokens: FakeTokens(), transport: transport, audio: audio, ackTimeout: .milliseconds(200), backoff: fast)
+    await voice.start(cartId: "7", tripId: UUID())
+    audio.onMicChunk?(Data(count: 640))
+    let streamId = try #require(transport.events("start").last?["stream_id"] as? String)
+    transport.receive(#"{"event":"media_output","stream_id":"\#(streamId)","media":{"payload":"AQID"}}"#)   // Kart answered
+    await settle()
+    transport.drop()
+    try await Task.sleep(for: .milliseconds(150))
+    #expect(customs(transport).last { $0["type"] as? String == "reconnected" }?["unanswered"] as? Bool == false)
+}
+
+@MainActor @Test func pauseEndsTheCallAndSpeechWakesIt() async throws {
+    let transport = FakeTransport(autoAck: true), audio = FakeAudio()
+    let voice = LineVoiceSession(tokens: FakeTokens(), transport: transport, audio: audio, ackTimeout: .milliseconds(200),
+                                 backoff: fast, wakeAfter: .milliseconds(30))
+    await voice.start(cartId: "7", tripId: UUID())
+    voice.pause()
+    #expect(voice.state == .paused && audio.running)          // the call is closed; the mic only listens on the iPad
+    let streamed = transport.events("media_input").count
+    audio.onMicChunk?(Data(count: 640))
+    try await Task.sleep(for: .milliseconds(40))
+    audio.onMicChunk?(Data(count: 640))                       // still talking 40 ms later: wake up
+    try await Task.sleep(for: .milliseconds(100))
+    #expect(voice.state == .listening && transport.connectCount == 2)
+    #expect(transport.events("media_input").count == streamed)   // nothing from the pause went to Cartesia
+    #expect(customs(transport).last?["type"] as? String == "reconnected" && customs(transport).last?["unanswered"] as? Bool == true)
+}
+
+@MainActor @Test func aShortNoiseDoesNotWakeAPausedCall() async throws {
+    let transport = FakeTransport(autoAck: true), audio = FakeAudio()
+    let voice = LineVoiceSession(tokens: FakeTokens(), transport: transport, audio: audio, ackTimeout: .milliseconds(200),
+                                 backoff: fast, wakeAfter: .milliseconds(30))
+    await voice.start(cartId: "7", tripId: UUID())
+    voice.pause()
+    audio.onMicChunk?(Data(count: 640))                       // a clang
+    audio.loudness = 0
+    try await Task.sleep(for: .milliseconds(40))
+    audio.onMicChunk?(Data(count: 640))                       // then quiet again
+    try await Task.sleep(for: .milliseconds(60))
+    #expect(voice.state == .paused && transport.connectCount == 1)
+}
+
+@MainActor @Test func aCartEventWhilePausedWakesTheCallAndArrivesAfterTheTripContext() async throws {
+    let transport = FakeTransport(autoAck: true), audio = FakeAudio()
+    let voice = LineVoiceSession(tokens: FakeTokens(), transport: transport, audio: audio, ackTimeout: .milliseconds(200), backoff: fast)
+    await voice.start(cartId: "7", tripId: UUID())
+    voice.pause()
+    voice.send(.cartChanged(.added(productId: "barilla-spaghetti")))   // the cameras saw something
+    try await Task.sleep(for: .milliseconds(100))
+    #expect(voice.state == .listening)
+    #expect(Array(customs(transport).compactMap { $0["type"] as? String }.suffix(3)) == ["trip_context", "reconnected", "cart_changed"])
 }

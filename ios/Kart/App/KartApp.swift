@@ -71,6 +71,7 @@ final class KartWorld {
     let payment = SimulatedPaymentProvider()
     let model: AppModel
     @ObservationIgnored private var started = false
+    @ObservationIgnored private let network = NetworkWatch()
 
     init() {
         let url = Bundle.main.url(forResource: "store", withExtension: "json")!
@@ -120,12 +121,14 @@ final class KartWorld {
     func start() async {
         guard !started else { return }
         started = true
-        Task { @MainActor [clock] in
+        Task { @MainActor [clock, model] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 if clock.now < .now { clock.now = .now }
+                model.pauseVoiceIfQuiet(now: clock.now)       // a quiet cart closes Kart's call; talking reopens it
             }
         }
+        network.start { [model] in await model.networkRestored() }
         if let scenario, let demo = DemoScenario(rawValue: scenario), let mock {
             try? await demo.apply(to: mock, clock: clock)
         }

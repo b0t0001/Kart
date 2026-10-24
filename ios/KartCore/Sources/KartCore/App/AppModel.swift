@@ -336,6 +336,23 @@ public final class AppModel {
 
     public func noteActivity() {
         lastActivity = clock()
+        if voice.state == .paused { Task { await voice.resume() } }   // a tap wakes Kart
+    }
+
+    /// Kart's call closes after this long with no taps, cart changes or talk (it wakes on any of them).
+    public static let voicePauseAfter: TimeInterval = 180
+
+    /// Called every few seconds while shopping: closes a quiet call so it stops costing call minutes.
+    public func pauseVoiceIfQuiet(now: Date) {
+        guard backend.cart.status == .shopping, voice.state == .listening else { return }
+        let last = max(lastActivity, voice.lastActiveAt ?? .distantPast)
+        if now.timeIntervalSince(last) >= Self.voicePauseAfter { voice.pause() }
+    }
+
+    /// The network came back: a voice that gave up while it was gone tries again on its own.
+    public func networkRestored() async {
+        guard voice.state == .offline, backend.cart.status == .shopping || backend.cart.status == .checkout else { return }
+        await retryVoice()
     }
 
     // MARK: Helpers

@@ -68,11 +68,12 @@ struct VoicePill: View {
         case (true, _): ("Muted", "mic.slash.fill", Theme.inkSecondary, Theme.hairline)
         case (_, .offline): ("Voice offline", "exclamationmark.triangle.fill", Theme.amberInk, Theme.amberSoft)
         case (_, .connecting): ("Connecting…", "ellipsis", Theme.inkSecondary, Theme.surface)
+        case (_, .paused): ("Resting · tap or talk", "zzz", Theme.inkSecondary, Theme.surface)
         case (_, .idle): ("Voice off", "mic.slash", Theme.inkSecondary, Theme.surface)
         default: ("Listening", "mic.fill", Theme.greenInk, Theme.greenSoft)
         }
         Button {
-            voice.setMuted(!voice.isMuted)
+            if voice.state == .paused { Task { await voice.resume() } } else { voice.setMuted(!voice.isMuted) }
         } label: {
             Label(text, systemImage: symbol)
                 .font(Theme.headline)
@@ -84,7 +85,7 @@ struct VoicePill: View {
         }
         .buttonStyle(.plain)
         .animation(Theme.spring, value: text)
-        .accessibilityHint("Tap to mute or unmute Kart")
+        .accessibilityHint(voice.state == .paused ? "Tap to wake Kart" : "Tap to mute or unmute Kart")
     }
 }
 

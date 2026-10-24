@@ -5,7 +5,7 @@ public enum AvatarMood: Sendable, Equatable {
 
     public init(_ voice: VoiceState) {
         switch voice {
-        case .idle, .connecting, .offline: self = .idle
+        case .idle, .connecting, .offline, .paused: self = .idle
         case .listening, .userSpeaking: self = .listening
         case .thinking: self = .thinking
         case .agentSpeaking: self = .speaking

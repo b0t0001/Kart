@@ -17,6 +17,7 @@ struct ShoppingView: View {
         .padding(Theme.xxl)
         .overlay(alignment: .top) { ReconnectingBanner(connection: model.backend.connection) }
         .overlay { StillShoppingPrompt(model: model) }
+        .simultaneousGesture(TapGesture().onEnded { model.noteActivity() })   // any tap counts (and wakes Kart)
     }
 }
 
