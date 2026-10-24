@@ -157,13 +157,26 @@ async def test_adding_what_is_already_on_the_list_says_so(backend):
     assert out["readback"] == "Salsa's already on your list." and planned(backend) == {"tostitos-salsa": 1}
 
 
-async def test_a_sold_out_product_is_not_added_and_comes_with_in_stock_substitutes(backend):
+VERDE = {"id": "salsa-verde", "name": "Salsa Verde, 16 oz jar", "short_name": "Salsa Verde", "price": 3.99,
+         "sale_price": 3.99, "deal_label": None, "aisle": "Aisle 5", "section": "A5", "in_stock": True, "stock": 12,
+         "category": "salsa", "tags": ["tacos", "mexican"]}
+
+
+async def test_a_sold_out_product_is_not_added_and_comes_with_a_real_stand_in(backend):
+    backend.catalog.append(dict(VERDE))
     salsa = next(p for p in backend.catalog if p["id"] == "tostitos-salsa")
     salsa["stock"], salsa["in_stock"] = 0, False
     out = json.loads(await run_tool("add_to_plan", {"product_id": "tostitos-salsa", "reason": "nachos"}, ctx(backend)))
     assert out["readback"] == "Sorry, salsa is sold out today." and planned(backend) == {}
-    assert [s["id"] for s in out["substitutes"]] == ["queso", "daisy-sour-cream"]      # most shared tags first
-    assert all(s["in_stock"] for s in out["substitutes"]) and out["substitutes"][0]["aisle"] == "Aisle 5"
+    assert [s["id"] for s in out["substitutes"]] == ["salsa-verde"]   # the same kind only: no queso for salsa
+    assert out["substitutes"][0]["aisle"] == "Aisle 5"
+
+
+async def test_a_sold_out_product_with_nothing_of_its_kind_gets_no_substitutes(backend):
+    salsa = next(p for p in backend.catalog if p["id"] == "tostitos-salsa")
+    salsa["stock"], salsa["in_stock"] = 0, False
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "tostitos-salsa", "reason": "nachos"}, ctx(backend)))
+    assert out["substitutes"] == []
 
 
 async def test_swap_replaces_one_product_with_another_in_one_update(backend):
@@ -211,11 +224,12 @@ async def test_an_amount_without_a_package_unit_still_reads_naturally(backend):
 
 
 async def test_substitutes_skip_what_is_already_on_the_list(backend):
-    backend.cart["plan"] = [{"product_id": "queso", "reason": "nachos", "qty": 1}]
+    backend.catalog.append(dict(VERDE))
+    backend.cart["plan"] = [{"product_id": "salsa-verde", "reason": "nachos", "qty": 1}]
     salsa = next(p for p in backend.catalog if p["id"] == "tostitos-salsa")
     salsa["stock"], salsa["in_stock"] = 0, False
     out = json.loads(await run_tool("add_to_plan", {"product_id": "tostitos-salsa", "reason": "nachos"}, ctx(backend)))
-    assert [s["id"] for s in out["substitutes"]] == ["daisy-sour-cream"]
+    assert out["substitutes"] == []
 
 
 async def test_nearby_stores_read_the_backends_shape(backend):

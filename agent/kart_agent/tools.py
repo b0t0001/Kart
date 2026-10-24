@@ -85,17 +85,13 @@ def _sold_out(p: dict[str, Any]) -> bool:
 
 
 def _substitutes(product: dict[str, Any], catalog: list[dict[str, Any]], listed: set[str] = frozenset()) -> list[dict[str, Any]]:
-    """In-stock stand-ins for a sold-out product, not already on the list: the same kind first, then the most shared
-    tags (at least two)."""
+    """In-stock stand-ins for a sold-out product: the same kind only (one salsa for another), never one already on the
+    list; the most shared tags first."""
     tags = set(product.get("tags") or [])
-    scored = []
-    for index, p in enumerate(catalog):
-        if p["id"] == product["id"] or p["id"] in listed or _sold_out(p):
-            continue
-        same, shared = p.get("category") == product.get("category"), len(tags & set(p.get("tags") or []))
-        if same or shared >= 2:
-            scored.append((not same, -shared, index, p))
-    return [_product_view(p) for *_, p in sorted(scored, key=lambda s: s[:3])[:3]]
+    scored = [(-len(tags & set(p.get("tags") or [])), index, p) for index, p in enumerate(catalog)
+              if p["id"] != product["id"] and p["id"] not in listed and not _sold_out(p)
+              and p.get("category") == product.get("category")]
+    return [_product_view(p) for *_, p in sorted(scored, key=lambda s: s[:2])[:3]]
 
 
 def _distance(value: Any) -> Any:
