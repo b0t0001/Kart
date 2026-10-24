@@ -77,10 +77,15 @@ def classify_blob(blob: Blob, result: ChangeResult, empty: np.ndarray, cart: Car
         return "removed"
     if before_empty:
         return "added"
-    # Something on something: if what's visible now is an item we remembered under this spot, the top one left.
-    fp_after = features(blob.after_core)
+    # Something on something: if what's visible now looks like an item we remembered under this spot,
+    # and clearly MORE like it than what was there before, the top one left. Relative, so features
+    # that find everything similar (pooled CNN embeddings on look-alike packs) can't fake a reveal.
+    fp_after, fp_before = features(blob.after_core), features(blob.before_core)
     for _, view in cart.views_in(blob.cam):
-        if _iou(view.box, blob.box) > IOU_OVERLAP and _sim(fp_after, view.fingerprint) >= cfg.local_min_score:
+        if _iou(view.box, blob.box) <= IOU_OVERLAP:
+            continue
+        s_after, s_before = _sim(fp_after, view.fingerprint), _sim(fp_before, view.fingerprint)
+        if s_after >= cfg.local_min_score and s_after - s_before >= cfg.local_min_margin:
             return "removed"
     return "added"
 

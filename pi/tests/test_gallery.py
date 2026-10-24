@@ -47,3 +47,14 @@ def test_load_features_fallback(tmp_path):
 def test_onnx_features_dim():
     v = OnnxFeatures(MODEL)(crop_item(0, RED))
     assert v.shape == (1280,) and abs(np.linalg.norm(v) - 1) < 1e-4
+
+
+def test_leave_one_out_report(tmp_path):  # review C3: decide hist vs ONNX on real enrolled props
+    g = Gallery(tmp_path, HistogramFeatures())
+    g.load()
+    for it in (RED, BLUE, GREEN):
+        for x, y in [(300, 200), (520, 300), (120, 80)]:
+            for cam in (0, 1):
+                g.add(it.item_id, crop_item(cam, Item(it.item_id, x, y, seed=it.seed), pad=0.0))
+    r = g.leave_one_out()
+    assert r["images"] == 18 and r["products"] == 3 and r["top1"] == 1.0 and r["median_margin"] > 0.1

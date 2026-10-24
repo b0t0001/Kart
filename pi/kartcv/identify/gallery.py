@@ -75,6 +75,34 @@ class Gallery:
     def products(self) -> set[str]:
         return set(self._pids)
 
+    def leave_one_out(self) -> dict:
+        """How well the enrolled photos identify each other (each photo scored against all the others).
+
+        top1 = share of photos whose best product is their own; median_margin = median lead of the true
+        product over the runner-up (negative when wrong). Use it to compare feature extractors on the real
+        props before switching `features` (local_min_margin is the lead the matcher demands).
+        """
+        pids = np.array(self._pids)
+        products = sorted(set(self._pids))
+        correct, margins = 0, []
+        for i, pid in enumerate(self._pids):
+            if (pids == pid).sum() < 2:
+                continue  # nothing left to match against
+            sims = self._vecs @ self._vecs[i]
+            sims[i] = -np.inf
+            scores = {}
+            for p in products:
+                col = np.sort(sims[(pids == p) & np.isfinite(sims)])[::-1][:TOP_K]
+                if col.size:
+                    scores[p] = float(col.mean())
+            ranked = sorted(scores, key=lambda p: -scores[p])
+            others = [scores[p] for p in ranked if p != pid]
+            margins.append(scores[pid] - (others[0] if others else 0.0))
+            correct += ranked[0] == pid
+        n = len(margins)
+        return {"images": len(self._pids), "products": len(products),
+                "top1": correct / n if n else 0.0, "median_margin": float(np.median(margins)) if n else 0.0}
+
     def score(self, crops: list[np.ndarray]) -> list[tuple[str, float]]:
         """Per product: mean of the top-3 cosine similarities, averaged over crops. Best first."""
         if not self._pids or not crops:

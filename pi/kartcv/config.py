@@ -42,7 +42,7 @@ class Config:
     crop_pad: float = 0.10
 
     # identification (spec §6)
-    features: str = "auto"
+    features: str = "hist"  # "auto" = ONNX if downloaded; switch only after tools/gallery_check.py says it separates the props better
     local_min_score: float = 0.70
     local_min_margin: float = 0.08
     cloud_model: str = "claude-haiku-5-5"

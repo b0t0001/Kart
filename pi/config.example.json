@@ -25,7 +25,7 @@
   "max_shift_px": 4.0,
   "empty_thresh": 18.0,
   "crop_pad": 0.1,
-  "features": "auto",
+  "features": "hist",
   "local_min_score": 0.7,
   "local_min_margin": 0.08,
   "cloud_model": "claude-haiku-5-5",

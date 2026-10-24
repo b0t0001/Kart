@@ -7,6 +7,7 @@ def test_defaults_match_spec():
     assert (c.diff_size, c.change_thresh, c.min_blob_frac, c.disturbed_frac) == ((640, 360), 30.0, 0.004, 0.60)
     assert (c.empty_thresh, c.crop_pad, c.local_min_score, c.local_min_margin) == (18.0, 0.10, 0.70, 0.08)
     assert (c.cloud_model, c.cloud_min_conf, c.cloud_timeout_s, c.server_port) == ("claude-haiku-5-5", 0.6, 6.0, 8080)
+    assert c.features == "hist"  # review C3: the validated path; switch to "auto" after tools/gallery_check.py
 
 
 def test_json_file_then_overrides(tmp_path):

@@ -105,3 +105,24 @@ def test_every_unit_whose_spot_emptied_is_removed(tmp_path):  # review C1(c)
     ds = step(w, Scene(items=[RED]), Scene())
     assert sorted((d.kind, d.product_id or "") for d in ds) == [("removed", ""), ("removed", "red-box")]
     assert len(w.cart.instances) == 0
+
+
+class FlatFeatures:
+    """An extractor that can't tell items apart (like pooled CNN features on look-alike packaging)."""
+    name = "flat"
+
+    def __call__(self, crop):
+        import numpy as np
+        v = np.ones(8, np.float32) + crop.mean() / 1e4
+        return v / np.linalg.norm(v)
+
+
+def test_stacked_add_is_not_mistaken_for_a_reveal_when_features_cant_discriminate(tmp_path):  # review C3
+    w = world(tmp_path)
+    big = Item("blue-can", 250, 150, w=300, h=220, seed=2)
+    top = Item("red-box", 330, 210, seed=1)
+    flat = FlatFeatures()
+    for d in decide(settle(Scene(), Scene(items=[big]), w.cfg), w.empties, w.cart, w.identifier, flat, w.cfg):
+        apply_decision(w.cart, d)
+    rs = settle(Scene(items=[big]), Scene(items=[big, top]), w.cfg)
+    assert classify_blob(rs[0].blobs[0], rs[0], w.empties[0], w.cart, flat, w.cfg) == "added"
