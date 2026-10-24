@@ -16,7 +16,7 @@ STORE_JSON = REPO / "data" / "store.json"
 SHIM = DB_DIR / "local_supabase_shim.sql"
 
 # Tables we own; --fresh drops these (never the whole schema: Supabase owns public's grants).
-OUR_TABLES = ["receipts", "transcript", "cart_events", "carts", "deals", "products", "sections", "store_info"]
+OUR_TABLES = ["merchant_changes", "receipts", "transcript", "cart_events", "carts", "deals", "products", "sections", "store_info"]
 
 
 def load_env() -> None:

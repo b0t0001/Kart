@@ -293,3 +293,16 @@ def test_anon_reads_and_calls_rpcs_but_cannot_write_tables(db_url):
                 c.execute(sql)
             c.execute("rollback to savepoint s")
         c.rollback()
+
+
+def test_a_deal_created_after_the_suggestion_takes_its_place(cart, conn):
+    """Merchant demo: the cart shows Baguette; the owner creates a Parmesan deal; the cart switches."""
+    conn.execute("update deals set active = false where id = 'd-parm-3off'")
+    row = add(cart, "barilla-spaghetti")
+    assert row["suggestion"]["product_id"] == "french-baguette"
+    conn.execute("insert into deals (id, product_id, type, value, label, pairs_with) "
+                 "values ('d-parm-live', 'kirkland-parmesan', 'amount_off', 3, '$3 off', '{barilla-spaghetti}')")
+    s = current(conn)["suggestion"]
+    assert (s["deal_id"], s["text"]) == ("d-parm-live", "Parmesan is $3 off in Aisle 4. Want it?")
+    row = add(cart, "rao-marinara")                   # an older deal doesn't push it out
+    assert row["suggestion"]["deal_id"] == "d-parm-live"

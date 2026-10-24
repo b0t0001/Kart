@@ -9,6 +9,7 @@ db/01_schema.sql   tables, realtime, row-level security (read for everyone, writ
 db/02_cart.sql     pricing, recompute_cart, apply_cart_event / set_plan / reset_cart / dismiss_suggestion
 db/03_seed.sql     seed_catalog(store.json)
 db/04_trip.sql     iPad trip RPCs: set_cart_status, set_location, append_transcript, checkout
+db/05_merchant.sql merchant change log: merchant_apply / merchant_undo / merchant_cancel (service role only)
 supabase/functions/voice-token   P7 Edge Function: short-lived Cartesia token for the iPad
 db.py              apply migrations, seed, reset the demo
 deploy_functions.sh  deploy the Edge Function and push its Cartesia secrets
@@ -26,7 +27,8 @@ backend/deploy_functions.sh                           # needs the Supabase CLI (
 ```
 
 Between demo runs: `backend/.venv/bin/python backend/db.py reset-demo` restores the catalog from
-`data/store.json` (undoing merchant edits) and resets cart 7.
+`data/store.json` (undoing merchant edits), clears the merchant change log and resets cart 7 to idle.
+`--without-deal d-parm-3off` leaves that deal off, so the owner can create it live in the pitch.
 
 ## What the clients call
 
@@ -53,7 +55,8 @@ Read with the anon key (realtime on `carts`, `cart_events`, `products`, `deals`,
 - **Route:** plan items in walking order from the shopper's last aisle (ahead first, then back);
   `next_step` is the first one not yet in the cart and in stock.
 - **Suggestion:** a live deal whose `pairs_with` matches something in the cart, product in stock and
-  not in the cart, offered once per trip; the most recently added pairing wins.
+  not in the cart, offered once per trip; the most recently added pairing wins. A deal the store
+  creates after the current suggestion was offered replaces it, so new deals reach shoppers at once.
 
 ## Tests
 

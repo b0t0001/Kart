@@ -2,7 +2,9 @@
 
   python backend/db.py apply [--fresh] [--local]   run backend/db/NN_*.sql in order
   python backend/db.py seed                        load data/store.json into the catalog
-  python backend/db.py reset-demo [--cart 7]       re-seed the catalog + reset_cart (between demo runs)
+  python backend/db.py reset-demo [--cart 7] [--without-deal d-parm-3off]
+                                                   re-seed the catalog, clear the merchant change log,
+                                                   reset_cart, status idle (between demo runs)
   python backend/db.py show [--cart 7]             print the cart row
 
 Connects with SUPABASE_DB_URL from the repo .env (or --db-url).
@@ -24,6 +26,8 @@ def main() -> None:
     ap.add_argument("--fresh", action="store_true", help="drop our tables first (loses carts and history)")
     ap.add_argument("--local", action="store_true", help="plain Postgres: create Supabase's roles/publication first")
     ap.add_argument("--cart", default="7")
+    ap.add_argument("--without-deal", action="append", default=[], metavar="DEAL_ID",
+                    help="reset-demo: end this seeded deal, e.g. so the owner can create it live in the pitch")
     args = ap.parse_args()
 
     kartdb.load_env()
@@ -37,6 +41,10 @@ def main() -> None:
             print("seeded", kartdb.seed(conn))
         elif args.command == "reset-demo":
             print("seeded", kartdb.seed(conn))
+            conn.execute("delete from merchant_changes")  # the log described the catalog we just replaced
+            for deal in args.without_deal:
+                conn.execute("update deals set active = false where id = %s", [deal])
+                print("ended deal", deal)
             conn.execute("select reset_cart(%s)", [args.cart])
             conn.execute("select set_cart_status(%s, 'idle')", [args.cart])  # iPad back on Welcome
             print(f"cart {args.cart} reset (status idle)")

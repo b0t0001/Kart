@@ -82,6 +82,9 @@ declare
   v_next   record;
   v_sugg   jsonb;
   v_cand   record;
+  v_cur    record;
+  v_keep   boolean;
+  v_offered timestamptz;
   v_suggested text[];
 begin
   select * into c from carts where cart_id = p_cart_id for update;
@@ -177,40 +180,46 @@ begin
   where not (e->>'done')::boolean and (e->>'in_stock')::boolean
   limit 1;
 
-  -- Suggestion: keep the current one while it is still valid (deal live, product in
-  -- stock and not in the cart); otherwise offer the best new pairing, once per trip.
+  -- Suggestion: a live deal on something not in the cart whose pairs_with is, product in
+  -- stock, each deal offered once per trip. The current one stays while it is still valid,
+  -- unless the store created a deal after it was offered: fresh deals reach shoppers now.
   v_suggested := c.suggested_deals;
   v_sugg := null;
+  v_keep := false;
   if c.suggestion is not null then
-    select pc.* into v_cand from product_catalog pc
+    select pc.* into v_cur from product_catalog pc
     where pc.id = c.suggestion->>'product_id'
       and pc.deal_id = c.suggestion->>'deal_id'
       and pc.in_stock
       and not exists (select 1 from jsonb_array_elements(v_items) e where e->>'product_id' = pc.id);
-    if found then
-      v_sugg := jsonb_build_object('product_id', v_cand.id, 'deal_id', v_cand.deal_id);
-    end if;
+    v_keep := found;
   end if;
-  if v_sugg is null then
-    select pc.* into v_cand
-    from product_catalog pc
-    join deals d on d.id = pc.deal_id
-    where pc.deal_id is not null
-      and pc.in_stock
-      and not (pc.deal_id = any(c.suggested_deals))
-      and not exists (select 1 from jsonb_array_elements(v_items) e where e->>'product_id' = pc.id)
-      and exists (select 1 from jsonb_array_elements(v_items) e where e->>'product_id' = any(d.pairs_with))
-    order by (select max((e->>'last_added_at')::timestamptz) from jsonb_array_elements(v_items) e
-               where e->>'product_id' = any(d.pairs_with)) desc,
-             d.created_at desc, d.sort
-    limit 1;
-    if found then
-      v_sugg := jsonb_build_object('product_id', v_cand.id, 'deal_id', v_cand.deal_id);
-      v_suggested := array_append(v_suggested, v_cand.deal_id);
-    end if;
+  select pc.*, d.created_at as deal_created_at into v_cand
+  from product_catalog pc
+  join deals d on d.id = pc.deal_id
+  where pc.deal_id is not null
+    and pc.in_stock
+    and not (pc.deal_id = any(c.suggested_deals))
+    and not exists (select 1 from jsonb_array_elements(v_items) e where e->>'product_id' = pc.id)
+    and exists (select 1 from jsonb_array_elements(v_items) e where e->>'product_id' = any(d.pairs_with))
+  order by (select max((e->>'last_added_at')::timestamptz) from jsonb_array_elements(v_items) e
+             where e->>'product_id' = any(d.pairs_with)) desc,
+           d.created_at desc, d.sort
+  limit 1;
+  -- >= because now() is fixed per transaction: merchant_apply ends the old deal (which can
+  -- re-offer another one) and creates the new deal in the same instant; the new deal wins.
+  if found and (not v_keep or v_cand.deal_created_at
+                >= coalesce((c.suggestion->>'offered_at')::timestamptz, '-infinity')) then
+    v_suggested := array_append(v_suggested, v_cand.deal_id);
+    v_offered := now();
+    v_sugg := jsonb_build_object('product_id', v_cand.id, 'deal_id', v_cand.deal_id);
+  elsif v_keep then
+    v_cand := v_cur;
+    v_offered := coalesce((c.suggestion->>'offered_at')::timestamptz, now());
+    v_sugg := jsonb_build_object('product_id', v_cand.id, 'deal_id', v_cand.deal_id);
   end if;
   if v_sugg is not null then
-    -- v_cand holds the suggested product's catalog row in both branches
+    -- v_cand now holds the suggested product's catalog row
     v_sugg := v_sugg || jsonb_build_object(
       'text',       format('%s is %s in %s. Want it?', v_cand.short_name, v_cand.deal_label, v_cand.aisle),
       'deal_label', v_cand.deal_label,
@@ -218,7 +227,8 @@ begin
       'section',    v_cand.section,
       'name',       v_cand.short_name,
       'price',      v_cand.price,
-      'sale_price', v_cand.sale_price);
+      'sale_price', v_cand.sale_price,
+      'offered_at', v_offered);
   end if;
   c.suggestion := v_sugg;
   c.suggested_deals := v_suggested;
