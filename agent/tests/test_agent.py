@@ -1,4 +1,5 @@
 import asyncio
+import re
 
 from line.events import AgentSendCustom, AgentSendText, CallStarted, UserCustomSent, UserTextSent, UserTurnEnded, UserTurnStarted
 
@@ -10,6 +11,11 @@ from fakes import FakeBackend, FakeLLM, ToolUse, Turn
 
 async def run(agent, event):
     return [out.text for out in [o async for o in agent.process(None, event)] if isinstance(out, AgentSendText)]
+
+
+def after_live_note(content):
+    """What the shopper said (and any other bracketed context), without the "(Right now: ...)" cart note."""
+    return re.sub(r"^\(Right now: .*?\.\) ", "", content)
 
 
 def make(turns=()):
@@ -487,7 +493,7 @@ async def test_this_means_the_last_item_into_the_cart():
     agent.run_filter(UserCustomSent(metadata={"type": "cart_changed", "change": "added", "product_id": "barilla-spaghetti"}))
     await run(agent, UserTurnEnded(content=[UserTextSent(content="How much is this?")]))
     heard = agent.brain.llm.requests[-1]["messages"][-1]["content"]
-    assert heard == "(The last item into the cart: Spaghetti.) How much is this?"
+    assert after_live_note(heard) == "(The last item into the cart: Spaghetti.) How much is this?"
 
 
 async def test_this_means_the_card_on_screen_when_one_is_open():
@@ -530,9 +536,10 @@ async def test_a_rejoined_call_remembers_the_meal_and_the_conversation():
     assert await run(agent, CallStarted()) == []                     # a trip in progress: no greeting
     assert await run(agent, UserCustomSent(metadata={"type": "ui_action", "action": "paid"})) == ["Paid. Enjoy pasta night!"]
     await run(agent, UserTurnEnded(content=[UserTextSent(content="Where's the spaghetti?")]))
-    assert agent.brain.llm.requests[-1]["messages"][:3] == [
-        {"role": "user", "content": "Pasta night for 4."}, {"role": "assistant", "content": "You're set with spaghetti."},
-        {"role": "user", "content": "Where's the spaghetti?"}]
+    messages = agent.brain.llm.requests[-1]["messages"]
+    assert messages[:2] == [{"role": "user", "content": "Pasta night for 4."},
+                            {"role": "assistant", "content": "You're set with spaghetti."}]
+    assert messages[2]["role"] == "user" and after_live_note(messages[2]["content"]) == "Where's the spaghetti?"
 
 
 async def test_the_deals_question_waits_while_kart_has_asked_its_own():
@@ -574,7 +581,7 @@ async def test_kart_remembers_which_deals_it_offered():
     await outputs(agent, UserTurnEnded(content=[UserTextSent(content="Not now.")]))
     await run(agent, UserTurnEnded(content=[UserTextSent(content="What was that deal again?")]))
     heard = agent.brain.llm.requests[-1]["messages"][-1]["content"]
-    assert heard == "(Deals Kart offered this trip: Parmesan is $3 off in Aisle 4.) What was that deal again?"
+    assert after_live_note(heard) == "(Deals Kart offered this trip: Parmesan is $3 off in Aisle 4.) What was that deal again?"
 
 
 async def test_kart_says_once_when_the_bill_gets_close_to_the_budget():
@@ -620,3 +627,17 @@ async def test_a_deal_on_something_taken_off_the_list_is_not_offered():
     assert agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
     assert await run(agent, UserCustomSent(metadata=PARM_OFFER)) == []     # "we have some at home": no deal on it
     assert ("dismiss_suggestion", {"p_cart_id": "7"}) in backend.calls
+
+
+async def test_each_turn_carries_the_live_cart_so_simple_questions_need_no_tool():
+    agent, backend = make([Turn(chunks=["You're at $1.99."])])
+    backend.cart.update({"total": 1.99, "savings": 0, "next_step": "Aisle 6 → Rao's Sauce"})
+    backend.cart["plan"] = [
+        {"product_id": "barilla-spaghetti", "name": "Spaghetti", "qty": 1, "done": True, "aisle": "Aisle 6"},
+        {"product_id": "rao-marinara", "name": "Rao's Sauce", "qty": 1, "done": False, "aisle": "Aisle 6"},
+        {"product_id": "kirkland-parmesan", "name": "Parmesan", "qty": 2, "done": False, "aisle": "Aisle 4", "deal_label": "$3 off"}]
+    backend.cart["items"] = [{"product_id": "barilla-spaghetti", "short_name": "Spaghetti", "qty": 1, "price": 1.99}]
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="What's my total?")]))
+    assert agent.brain.llm.requests[-1]["messages"][-1]["content"] == (
+        "(Right now: list: Spaghetti ✓ (Aisle 6); Rao's Sauce (Aisle 6); 2× Parmesan (Aisle 4, $3 off). "
+        "Cart: Spaghetti ×1 $1.99. Total $1.99, saved $0.00. Next: Aisle 6 → Rao's Sauce.) What's my total?")
