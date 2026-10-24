@@ -120,6 +120,7 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
             items = args.get("items")
             if not isinstance(items, list):
                 raise ValueError("'items' must be a list")
+            ctx["planned"] = True                            # the agent offers the deals that go with a new list
             if isinstance(args.get("meal"), str) and args["meal"].strip():
                 ctx["meal"] = args["meal"].strip()           # Kart names the trip's meal in nudges
         planned, missing, sold_out, lines, notes = [], [], [], [], []

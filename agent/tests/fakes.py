@@ -21,12 +21,17 @@ CATALOG = [
 ]
 
 
+DEALS = [{"id": "d-parm-3off", "product_id": "kirkland-parmesan", "label": "$3 off",
+          "pairs_with": ["barilla-spaghetti", "rao-marinara"], "ends_at": None}]
+
+
 @dataclass
 class FakeBackend:
     cart: dict[str, Any] = field(default_factory=lambda: {
         "cart_id": "7", "trip_id": "trip-1", "status": "shopping", "items": [], "plan": [], "total": 0, "savings": 0,
         "next_step": None, "suggestion": None})
     unresolved: list[dict[str, Any]] = field(default_factory=list)
+    deals: list[dict[str, Any]] = field(default_factory=lambda: copy.deepcopy(DEALS))
     transcript: list[tuple[str, str]] = field(default_factory=list)
     calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
@@ -35,6 +40,9 @@ class FakeBackend:
 
     async def get_catalog(self) -> list[dict[str, Any]]:
         return copy.deepcopy(CATALOG)
+
+    async def get_live_deals(self) -> list[dict[str, Any]]:
+        return copy.deepcopy(self.deals)
 
     async def unresolved_events(self, cart_id: str, trip_id: str) -> list[dict[str, Any]]:
         return copy.deepcopy(self.unresolved)

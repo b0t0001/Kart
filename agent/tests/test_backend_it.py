@@ -39,11 +39,13 @@ async def test_agent_turn_writes_plan_and_captions(backend):
             {"product_id": "barilla-spaghetti", "reason": "pasta dinner"}, {"product_id": "rao-marinara", "reason": "pasta dinner"}]})]),
         Turn(chunks=["Pasta's in aisle 6."]),
     ])
-    agent = KartAgent(backend=backend, brain=Brain(llm=llm), cart_id=cart_id)
-    said = [o.text async for o in agent.process(None, UserTurnEnded(content=[UserTextSent(content="pasta dinner")]))]
-    assert said == ["Love it. ", "Pasta's in aisle 6."]
+    agent = KartAgent(backend=backend, brain=Brain(llm=llm), cart_id=cart_id, digest_delay_seconds=0)
+    outs = [o async for o in agent.process(None, UserTurnEnded(content=[UserTextSent(content="pasta dinner")]))]
+    said = [o.text for o in outs if hasattr(o, "text")]
+    assert said[:2] == ["Love it. ", "Pasta's in aisle 6."]
+    assert all(line.startswith("By the way") for line in said[2:])     # live deals that go with the list, if any
     cart = await backend.get_cart(cart_id)
     assert {p["product_id"] for p in cart["plan"]} == {"barilla-spaghetti", "rao-marinara"}
     lines = await backend._get("transcript", {"cart_id": f"eq.{cart_id}", "order": "id"})
-    assert [(line["role"], line["text"]) for line in lines] == [("user", "pasta dinner"), ("agent", "Love it. Pasta's in aisle 6.")]
+    assert [(line["role"], line["text"]) for line in lines][:2] == [("user", "pasta dinner"), ("agent", "Love it. Pasta's in aisle 6.")]
     await backend.rpc("set_cart_status", p_cart_id=cart_id, p_status="idle")

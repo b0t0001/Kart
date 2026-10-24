@@ -20,6 +20,10 @@ class SupabaseBackend:
         """Live products with their best deal (`product_catalog` view: sale_price, deal_label, aisle, in_stock)."""
         return await self._get("product_catalog", {"select": "*"})
 
+    async def get_live_deals(self) -> list[dict[str, Any]]:
+        """Active deals with what they pair with (for "deals that go with your list")."""
+        return await self._get("deals", {"select": "id,product_id,label,pairs_with,ends_at", "active": "eq.true"})
+
     async def unresolved_events(self, cart_id: str, trip_id: str | None) -> list[dict[str, Any]]:
         params = {"cart_id": f"eq.{cart_id}", "type": "eq.added", "source": "eq.vision", "applied": "is.false",
                   "resolved_at": "is.null", "order": "id"}

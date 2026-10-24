@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, AsyncIterator
 
-from line.events import AgentSendText, CallEnded, CallStarted, UserCustomSent, UserTurnEnded, UserTurnStarted
+from line.events import AgentSendCustom, AgentSendText, CallEnded, CallStarted, UserCustomSent, UserTurnEnded, UserTurnStarted
 
 from .brain import Brain
 from .lines import (DECLINED_LINE, KEEP_LINE, NUDGE_OK_LINE, accepted_line, nudge_answer, only_ack, only_filler,
@@ -14,6 +14,18 @@ from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
 SPEAKING_EVENTS = {"suggestion", "nudge", "deal_changed", "cart_changed"}
+
+
+def _count_word(n: int) -> str:
+    return ["zero", "one", "two", "three"][n] if 0 <= n <= 3 else str(n)
+
+
+def _digest_answer(text: str) -> str | None:
+    """"Yes" / "not now" to the deals question or to one deal; None for anything else (Claude hears it)."""
+    lowered = text.lower()
+    if "not now" in lowered or "later" in lowered:
+        return "no"
+    return yes_or_no(text)
 
 
 def _said_key(meta: dict[str, Any]) -> str | None:
@@ -29,7 +41,7 @@ class KartAgent:
     """One per call. `run_filter` decides which events start a turn (a new turn cuts off the current one)."""
 
     def __init__(self, backend: Any, brain: Brain, cart_id: str = "7", coalesce_seconds: float = 0.6,
-                 context_wait_seconds: float = 1.0, barge_in: bool = True):
+                 context_wait_seconds: float = 1.0, barge_in: bool = True, digest_delay_seconds: float = 2.5):
         self.backend = backend
         self.brain = brain
         self.cart_id = cart_id                      # the default; the iPad's trip_context names the real one
@@ -37,6 +49,10 @@ class KartAgent:
         self.coalesce_seconds = coalesce_seconds    # an "added" line waits this long for a paired suggestion
         self.context_wait_seconds = context_wait_seconds   # how long the greeting waits for the iPad's trip_context
         self.barge_in = barge_in                    # off (KART_BARGE_IN=off) for a loud floor: nothing cuts Kart off
+        self.digest_delay_seconds = digest_delay_seconds   # the pause after reading the list before asking about deals
+        self._digest: dict[str, Any] | None = None  # "N deals go with your list": asked, then walked one at a time
+        self._digest_offered = False
+        self._deals_quiet = False                   # the shopper said "not now": deals show as cards, Kart stays quiet
         self._context = asyncio.Event()
         self._plan: list[dict[str, Any]] = []
         self._items: list[dict[str, Any]] = []
@@ -61,6 +77,7 @@ class KartAgent:
                 self.cart_id = str(meta.get("cart_id") or self.cart_id)
                 if meta.get("trip_id") and meta.get("trip_id") != self.trip_id:   # a new trip starts fresh
                     self._said, self._meal, self._offer, self._nudge = set(), None, None, None
+                    self._digest, self._digest_offered, self._deals_quiet = None, False, False
                 self.trip_id = meta.get("trip_id") or self.trip_id
                 self._context.set()
                 return False
@@ -69,6 +86,10 @@ class KartAgent:
                 return False
             if key:
                 self._said.add(key)
+            if meta.get("type") == "suggestion" and (self._digest or self._deals_quiet):
+                if not self._digest:                     # "not now": the card shows; a spoken yes to it still works
+                    self._offer, self._last_asked = meta, "offer"
+                return False
             if meta.get("type") == "suggestion":
                 self._offer = meta                       # "Want it?" can now be answered with a plain yes or no
                 self._last_asked = "offer"
@@ -76,6 +97,8 @@ class KartAgent:
                 self._nudge = meta                       # "Keep it?" / "Before you go…" can be answered by voice
                 self._last_asked = "nudge"
             elif meta.get("type") == "card_response":    # answered on the screen
+                if str(meta.get("card_id", "")).startswith("digest"):
+                    return self._digest is not None      # the deals walk-through: Kart says the next one
                 if str(meta.get("card_id", "")).startswith("nudge-"):
                     self._nudge = None
                 else:
@@ -111,10 +134,16 @@ class KartAgent:
             text = " ".join(part.content for part in event.content if hasattr(part, "content") and part.content).strip()
             if not text or only_filler(text):            # "Um." gets no answer and no caption
                 return
-            if not self._offer and not self._nudge and only_ack(text):   # "Okay, so." with nothing asked
+            if not self._offer and not self._nudge and not self._digest and only_ack(text):   # nothing asked
                 return
             await self._refresh()
             ctx = {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id}
+            digest_reply = _digest_answer(text) if self._digest and self._last_asked == "digest" else None
+            if digest_reply:                             # "yes" / "not now" to the deals walk-through
+                await self._caption("user", text)
+                async for out in self._digest_step(digest_reply, ctx):
+                    yield out
+                return
             asked_nudge = self._nudge and (self._last_asked == "nudge" or not self._offer)
             nudge_reply = nudge_answer(text) if asked_nudge else None
             if asked_nudge and nudge_reply is None:      # a plain yes/no answers the nudge's own question
@@ -162,8 +191,17 @@ class KartAgent:
             async for out in self._say(self._caption_first(text, self.brain.respond(heard, ctx)), interruptible=self.barge_in):
                 yield out
             self._meal = ctx.get("meal") or self._meal
+            if ctx.get("planned") and not self._digest_offered:     # a new list: ask about the deals, after a beat
+                async for out in self._offer_digest():
+                    yield out
         elif isinstance(event, UserCustomSent):
             meta = event.metadata or {}
+            if meta.get("type") == "card_response" and str(meta.get("card_id", "")).startswith("digest"):
+                answer = "yes" if meta.get("action") == "yes" else "no"
+                ctx = {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id}
+                async for out in self._digest_step(answer, ctx):
+                    yield out
+                return
             if meta.get("type") == "cart_changed" and meta.get("change") == "added":
                 await asyncio.sleep(self.coalesce_seconds)   # a paired deal suggestion arriving now replaces this line
             await self._refresh()
@@ -171,6 +209,80 @@ class KartAgent:
             if line:
                 async for out in self._say([line], interruptible=False):
                     yield out
+
+    # Deals: ask first, then one at a time --------------------------------------------------------------------
+
+    async def _relevant_deals(self) -> list[dict[str, Any]]:
+        """Live deals on something not on the list or in the cart that pair with the list, in route order (max 3)."""
+        try:
+            deals = await self.backend.get_live_deals()
+        except Exception:
+            return []
+        catalog = {p["id"]: p for p in self._catalog}
+        plan = [line.get("product_id") for line in self._plan]
+        taken = set(plan) | {i.get("product_id") for i in self._items}
+        found = []
+        for deal in deals:
+            product = catalog.get(deal.get("product_id"))
+            pairs = [plan.index(p) for p in deal.get("pairs_with") or [] if p in plan]
+            if product is None or product.get("in_stock") is False or deal["product_id"] in taken or not pairs:
+                continue
+            found.append((min(pairs), deal, product))
+        return [{"deal": d, "product": p} for _, d, p in sorted(found, key=lambda x: x[0])][:3]
+
+    async def _offer_digest(self) -> AsyncIterator[Any]:
+        await self._refresh()
+        deals = await self._relevant_deals()
+        if not deals:
+            return
+        self._digest_offered = True
+        await asyncio.sleep(self.digest_delay_seconds)
+        self._digest, self._last_asked = {"deals": deals, "i": -1}, "digest"
+        n = len(deals)
+        question = (f"By the way, one deal goes with your list. Want to hear it?" if n == 1
+                    else f"By the way, {_count_word(n)} deals go with your list. Want to hear them?")
+        yield AgentSendCustom(metadata={"type": "deal_digest", "count": n})
+        async for out in self._say([question], interruptible=False):
+            yield out
+
+    def _deal_line(self, entry: dict[str, Any]) -> str:
+        product, deal = entry["product"], entry["deal"]
+        return f"{product.get('short_name') or product['name']} is {deal['label']} in {product.get('aisle')}. Want it?"
+
+    async def _digest_step(self, answer: str, ctx: dict[str, Any]) -> AsyncIterator[Any]:
+        digest = self._digest
+        if digest is None:
+            return
+        if digest["i"] < 0 and answer != "yes":                     # "not now": quiet about deals this trip
+            self._digest, self._deals_quiet = None, True
+            yield AgentSendCustom(metadata={"type": "digest_done"})
+            async for out in self._say(["No problem."], interruptible=False):
+                yield out
+            return
+        prefix = ""
+        if digest["i"] >= 0:                                         # the answer to the deal just read out
+            entry = digest["deals"][digest["i"]]
+            name = entry["product"].get("short_name") or entry["product"]["name"]
+            if answer == "yes":
+                await run_tool("add_to_plan", {"product_id": entry["product"]["id"], "reason": "deal"}, ctx)
+                prefix = f"Added {name} to your list. "
+            else:
+                prefix = "Okay. "
+        digest["i"] += 1
+        if digest["i"] < len(digest["deals"]):
+            entry = digest["deals"][digest["i"]]
+            self._said.add(f"suggestion|{entry['deal']['id']}")    # walked here: never read out again this trip
+            line = self._deal_line(entry)
+            yield AgentSendCustom(metadata={"type": "digest_deal", "deal_id": entry["deal"]["id"],
+                                            "product_id": entry["product"]["id"], "text": line,
+                                            "index": digest["i"] + 1, "count": len(digest["deals"])})
+            async for out in self._say([prefix + line], interruptible=False):
+                yield out
+            return
+        self._digest = None
+        yield AgentSendCustom(metadata={"type": "digest_done"})
+        async for out in self._say([prefix + "That's all the deals."], interruptible=False):
+            yield out
 
     async def _caption_first(self, user_text: str, chunks: AsyncIterator[str]) -> AsyncIterator[str]:
         """The shopper's words reach the thread only once Kart answers, so chatter Kart stays quiet on never shows."""

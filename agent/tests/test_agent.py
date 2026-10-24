@@ -1,6 +1,6 @@
 import asyncio
 
-from line.events import AgentSendText, CallStarted, UserCustomSent, UserTextSent, UserTurnEnded, UserTurnStarted
+from line.events import AgentSendCustom, AgentSendText, CallStarted, UserCustomSent, UserTextSent, UserTurnEnded, UserTurnStarted
 
 from kart_agent.agent import GREETING, KartAgent
 from kart_agent.brain import Brain
@@ -14,7 +14,8 @@ async def run(agent, event):
 
 def make(turns=()):
     backend = FakeBackend()
-    agent = KartAgent(backend=backend, brain=Brain(llm=FakeLLM(list(turns))), cart_id="7", context_wait_seconds=0.01)
+    agent = KartAgent(backend=backend, brain=Brain(llm=FakeLLM(list(turns))), cart_id="7", context_wait_seconds=0.01,
+                      digest_delay_seconds=0)
     return agent, backend
 
 
@@ -301,3 +302,76 @@ async def test_a_plain_yes_answers_the_nudges_question():
 async def test_a_bare_okay_with_nothing_asked_gets_silence():
     agent, backend = make()                                  # no scripted Claude turns: calling Claude would fail
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Okay, so.")])) == [] and backend.transcript == []
+
+
+
+# Deals: ask first, then one at a time (Dylan's choice). The agent drives it and tells the iPad which card to show.
+
+async def outputs(agent, event):
+    return [o for o in [o async for o in agent.process(None, event)] if isinstance(o, (AgentSendText, AgentSendCustom))]
+
+
+def planned_agent():
+    plan_call = ToolUse("t1", "set_plan", {"meal": "pasta night for 4",
+                                           "items": [{"product_id": "barilla-spaghetti", "reason": "pasta"}]})
+    agent, backend = make([Turn(chunks=["One sec."], tools=[plan_call]), Turn(chunks=["Spaghetti's on your list."])])
+    agent.digest_delay_seconds = 0
+    return agent, backend
+
+
+def spoken(outs):
+    return [o.text for o in outs if isinstance(o, AgentSendText)]
+
+
+def cards(outs):
+    return [o.metadata for o in outs if isinstance(o, AgentSendCustom)]
+
+
+async def test_after_the_list_kart_asks_about_the_deals_once():
+    agent, backend = planned_agent()
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    assert spoken(outs)[-1] == "By the way, one deal goes with your list. Want to hear it?"
+    assert cards(outs) == [{"type": "deal_digest", "count": 1}]
+
+
+async def test_yes_walks_the_deals_one_at_a_time():
+    agent, backend = planned_agent()
+    await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="Yeah, sure.")]))
+    assert spoken(outs) == ["Parmesan is $3 off in Aisle 4. Want it?"]
+    assert cards(outs) == [{"type": "digest_deal", "deal_id": "d-parm-3off", "product_id": "kirkland-parmesan",
+                            "text": "Parmesan is $3 off in Aisle 4. Want it?", "index": 1, "count": 1}]
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="Yes.")]))
+    assert spoken(outs) == ["Added Parmesan to your list. That's all the deals."]
+    assert cards(outs) == [{"type": "digest_done"}]
+    assert any(name == "set_plan" and any(l["product_id"] == "kirkland-parmesan" for l in p["p_plan"])
+               for name, p in backend.calls)
+    assert not agent.run_filter(UserCustomSent(metadata=PARM_OFFER))   # walked already: never read out again
+
+
+async def test_not_now_keeps_deals_quiet_for_the_trip_but_a_yes_to_a_card_still_works():
+    agent, backend = planned_agent()
+    await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="Not now.")]))
+    assert spoken(outs) == ["No problem."] and cards(outs) == [{"type": "digest_done"}]
+    assert not agent.run_filter(UserCustomSent(metadata=PARM_OFFER))   # the card shows on the iPad; Kart stays quiet
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Yes.")])) == ["Added Parmesan to your list."]
+
+
+async def test_a_tap_on_the_digest_cards_works_like_saying_it():
+    agent, backend = planned_agent()
+    await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    tap = UserCustomSent(metadata={"type": "card_response", "card_id": "digest", "action": "yes"})
+    assert agent.run_filter(tap)
+    assert spoken(await outputs(agent, tap)) == ["Parmesan is $3 off in Aisle 4. Want it?"]
+    no = UserCustomSent(metadata={"type": "card_response", "card_id": "digest-deal-d-parm-3off", "action": "no"})
+    assert agent.run_filter(no)
+    outs = await outputs(agent, no)
+    assert spoken(outs) == ["Okay. That's all the deals."] and cards(outs) == [{"type": "digest_done"}]
+
+
+async def test_no_question_when_no_deal_goes_with_the_list():
+    agent, backend = planned_agent()
+    backend.deals = []
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    assert spoken(outs) == ["One sec.", " Spaghetti's on your list."] and cards(outs) == []
