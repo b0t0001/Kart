@@ -54,6 +54,9 @@ The voice chat is running each scenario against the real model and recording Kar
 | Loud demo floor | Hold-to-talk; Kart stays quiet on chatter; deal and nudge lines can't be cut off | On-device test |
 | Deals said too often | Ask first; "not now" = tell me at the shelf; each deal at most once per trip | Rehearsal |
 | A store owner's mistake | Every console change is previewed, confirmed, logged and undoable | Merchant smoke test |
+| A soft bag slumps after it's dropped | Counts as the same item settling in place, not billed again | Real four-corners clip |
+| Identical boxes side by side, overlapping, or pushed together | Each one is counted | CV tests |
+| A box stacked exactly on an identical box | **Known limit:** reads as settling, so it isn't counted (never a double charge). In the demo, lay boxes side by side. Revisit with the deliberate-stack clip | CV tests; stack clip pending |
 
 ## In progress
 | Scenario | Plan | Owner |
