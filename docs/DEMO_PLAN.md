@@ -10,21 +10,22 @@
 > | 1 | "Pasta night for my family of 4." → "Not now." | Lists spaghetti, marinara, garlic bread; "First stop is Aisle 6 for the spaghetti." → "One deal goes with your list. Want to hear it?" → "I'll tell you at the shelf." | Voice planning |
 > | 2 | "We've got garlic bread at home, take it off." | "Took garlic bread off your list." | Remove by voice |
 > | 3 | "Oh, and Leo needs kids' scissors for school." | "Added kids' scissors, Aisle 9." (across the store, routed after the pasta) | Add by voice, a non-food item, **navigation across the store** |
-> | 4 | Drop **spaghetti** → "Yes" → drop the **Parmesan** | "Got the Spaghetti. Parmesan is $1 off in Aisle 4. Want it?" → bill shows "saved $1" | Live bill + deal at the moment of decision |
+> | 4 | Drop **spaghetti** → "Yes" | "Got the Spaghetti. Parmesan is $1 off in Aisle 4. Want it?" → Parmesan joins the list. The screen keeps you in Aisle 6 for the marinara first (route 6 → 4 → 9, no backtracking) | Deal at the moment of decision |
 > | 5 | Drop the **marinara**. "Add olive oil too." | "Got the Marinara." → "We don't carry olive oil here. Trader Joe's, about a mile away, might have it." (exact store per Kart) | Honest "not sold here" |
-> | 5b | *(member beta)* "Oh, next Saturday is Leo's soccer team party, we'll need pasta for 12." → "Yes." | "Got it, I'll remember Leo's party on Saturday. Want me to save a list for it?" → "Saved: three boxes of spaghetti and two jars of marinara for Leo's party." | **Memory created by conversation** |
-> | 5c | Drop a **second spaghetti box** → "No" → put it back | **"That's two boxes of spaghetti in the cart, and pasta night for 4 needs one. Keep the extra?"** → "Took the Spaghetti off your bill." | **Right amount for your meal** (less food waste and overspending) |
+> | 5b | Still in Aisle 6: drop a **second spaghetti box** → "No" → put it back | **"That's two boxes of spaghetti in the cart, and pasta night for 4 needs one. Keep the extra?"** → "Took the Spaghetti off your bill." | **Right amount for your meal** (less food waste and overspending) |
+> | 5c | *(member beta)* "Oh, next Saturday is Leo's soccer team party, we'll need pasta for 12." → "Yes." | "Got it, I'll remember Leo's soccer team party on Saturday. Want me to save a list for it?" → "Saved: three boxes of spaghetti and two jars of marinara for Leo's soccer team party." (no "what are we getting today?" mid-trip) | **Memory created by conversation**: one box today, three saved for the party |
+> | 5d | Walk to Aisle 4, drop the **Parmesan** | "Got the Parmesan." → bill shows "saved $1" | Live bill + savings |
 > | 6 | Walk to Aisle 9, drop the **scissors** → "Actually, the school has some" → **take them back out** | "Got the Kids' Scissors." → "Took the Kids' Scissors off your bill. Take them off the list too?" → "Yes." | Changing your mind |
 > | 7 | Tap **Check out** → **Pay** | Receipt with savings and time in store → "Paid. Enjoy pasta night!" | Uniqlo-style checkout |
 >
 > **ACT 2: fast-forward (member beta, ~30 s, no extra props)**
 > | # | Shopper | Kart / cart | Shows |
 > |---|---|---|---|
-> | 8 | Demo controls → **"Fast-forward to Friday"** (new trip, the date jumps ahead) → sign in as **Dylan** | **"Welcome back, Dylan! Leo's soccer party is tomorrow. Want the list you saved?"** | Memory kept across trips |
-> | 9 | "Yes." | The saved list goes on today's plan with the first stop | A ready-made list from memory |
+> | 8 | Demo controls → **"Fast-forward to Friday"** (new trip, the date jumps ahead) → sign in as **Dylan** | **"Welcome back, Dylan!" / "Leo's soccer team party is tomorrow. Want the list you saved?"** (fixed line, instant) | Memory kept across trips |
+> | 9 | "Yes." → drop **all 3 spaghetti boxes** | "Done, it's on your list. First stop: Aisle 6 → Spaghetti." → three boxes, **no nudge** (the party needs three) | A ready-made list from memory; the nudge knows the meal, not a fixed number |
 > | 10 *(optional)* | "What do you know about me?" | The memory sheet opens on the iPad, with **Forget** buttons | Privacy and control |
 >
-> Leo's party is **not** pre-seeded: it's created live in step 5b. Only the background purchase history is seeded.
+> Leo's party is **not** pre-seeded: it's created live in step 5c. Only the background purchase history is seeded.
 >
 > **Q&A only:** drop a water bottle → the "Is this…?" card (what happens if the camera is unsure).
 

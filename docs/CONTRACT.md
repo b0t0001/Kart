@@ -1,4 +1,4 @@
-# KART integration contract — v0.18 (DRAFT)
+# KART integration contract — v0.19 (DRAFT)
 
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
@@ -145,11 +145,11 @@ Writers **only** use these; nobody writes `carts.items` directly.
   - A blob much bigger than the product's enrolled crops goes to Claude for the count.
   - The event shape is unchanged.
 
-### Member memory (v0.14): BETA, OFF BY DEFAULT, built by the member chat on branch `member-memory`
+### Member memory (v0.14): BETA, OFF BY DEFAULT. **Merged to `main` in v0.19** (rollback tag `stable-pre-memory`)
 
 Spec: `docs/specs/2026-10-24-member-memory-design.md`. Flag: `member_memory`. Rollback tag: `stable-pre-memory`, created by the manager on `main` right before the merge.
 
-**Stability rule:** with the flag off, every RPC below raises `feature_off: member_memory`, and the agent, iPad and backend behave byte-for-byte as before.
+**Stability rule:** with the flag off, `set_member` and `set_demo_date` raise `feature_off: member_memory`, so no cart ever has a member or a demo date, and the agent, iPad and backend behave byte-for-byte as before (snapshot-checked at merge). The read/write RPCs take a member id directly (demo-grade, no auth). Known gap: `set_member(cart, null)` also refuses with the flag off, so turning the flag off mid-trip doesn't sign the member out.
 
 - **DB** (`backend/db/07_members.sql`, additive):
   - Tables `members`, `member_purchases` (filled from paid receipts by a trigger) and `member_memories` (`event` | `preference` | `note`). RLS is on, with **no anon read and no realtime**; access is only through security-definer RPCs.
@@ -162,8 +162,7 @@ Spec: `docs/specs/2026-10-24-member-memory-design.md`. Flag: `member_memory`. Ro
   - `member_remember(...)`
   - `member_save_for_later(...)`
   - `member_forget(p_member_id, p_memory_id?)`: null forgets everything.
-- **Seed (CLI):** `backend/members.py seed --member 1029 --name Dylan` rebuilds only that member: ten weeks of history relative to today, plus Leo's soccer party. Run it right before judging, through `backend/pre_judging.sh --members`.
-  - Leo's party saved list = Meal B **without the chips** (`tostitos-salsa`, `queso`, `black-beans`, `jalapenos`, `daisy-sour-cream`, qty 1 each), so the chips deal card still fires.
+- **Seed (CLI):** `backend/members.py seed --member 1029 --name Dylan` rebuilds only that member: ten weeks of history relative to today, **no party** (in the demo Dylan tells Kart about Leo's party live, in Act 1). `--with-party` adds "Leo's soccer team party, pasta for 12" (next Saturday; Spaghetti ×3, Marinara ×2) for rehearsals that skip Act 1. Run it right before judging, through `backend/pre_judging.sh --members`.
   - Preference seeded on `rao-marinara` as "Likes the {short_name} here".
   - The seed looks everything up by product id.
 - **Picks** never include a product with a live deal, so deals stay with the deal cards. Kinds are `event` | `due` | `usual`.
@@ -178,7 +177,7 @@ Spec: `docs/specs/2026-10-24-member-memory-design.md`. Flag: `member_memory`. Ro
     - New agent tool `sign_out`, which calls `set_member(cart, null)`, for "that's not me".
     - "Don't remember that" → forget the memory just saved.
     - "What did I buy last time?" → answered from `last_trip`.
-- **Agent tool `shop_saved_list(memory_id)`:** puts a saved list on today's plan in one `set_plan`, keeping what's already there. Greeting example: *"Welcome back, Dylan! Leo's soccer party is tomorrow. Want the nachos list?"*
+- **Agent tool `shop_saved_list(memory_id)`:** puts a saved list on today's plan in one `set_plan`, keeping what's already there. Greeting example (Act 2): *"Welcome back, Dylan!" / "Leo's soccer team party is tomorrow. Want the list you saved?"* → "Yes." → *"Done, it's on your list. First stop: Aisle 6 → Spaghetti."* (fixed lines, no Claude round). Known gap: it passes meal = the list's title, so existing plan lines get relabelled.
 - **Agent:**
   - `trip_context.member_id` (additive). When it's present, Kart fetches the profile before greeting ("Welcome back, Dylan!").
   - The tools `remember` / `save_for_later` / `forget` are offered only to signed-in members.
@@ -366,3 +365,4 @@ All three feature chats work in the **same main checkout**, so stay inside your 
 - v0.16 — "That's mine" DROPPED (out of scope per Dylan). `edge_privacy` goes back to off by default.
 - v0.17 — The backend fully removed the personal-items pieces. Shopper-interaction RPCs are live: `add_to_plan`, `remove_from_plan`, `set_budget`, `plan.meal`, duplicate merging. Nearby stores are on hosted. The mini store puts bakery last.
 - v0.18 — Quantity nudges ON by default (over + checkout list). Demo props: one each, plus 3 spaghetti boxes; kids' scissors replace the chocolate. cam1 moves to USB port 1.3.
+- v0.19 — Member memory MERGED to main (flag still off by default; tag `stable-pre-memory`). Seed has no party by default (Act 1 captures it live). The stability-rule wording is corrected: only `set_member`/`set_demo_date` check the flag. With both betas together, a saved list's quantities count as the plan, so 3 spaghetti for a party of 12 isn't "too much".
