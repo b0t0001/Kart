@@ -106,3 +106,9 @@ async def test_without_trip_context_it_greets_on_its_own_cart_after_a_short_wait
     agent, backend = make()
     assert await run(agent, CallStarted()) == [GREETING]
     assert captioned_carts(backend) == ["7"]
+
+
+async def test_the_brain_knows_the_store_products_from_the_first_turn():
+    agent, backend = make([Turn(chunks=["Love it."])])
+    await run(agent, UserTurnEnded(content=[UserTextSent(content="pasta dinner for four")]))
+    assert "- rao-marinara: Rao's Sauce (sauce)" in agent.brain.llm.requests[0]["system"]

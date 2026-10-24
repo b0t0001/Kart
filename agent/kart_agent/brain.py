@@ -15,8 +15,11 @@ What you do: turn what they're shopping for into a list (set_plan / add_to_plan)
 deal only when it's relevant, answer questions about the cart, and start checkout when they're done.
 
 Rules:
-- Never invent products, prices, deals, aisles or stock. Every fact comes from a tool result in this conversation; \
-look it up first (search_catalog, get_cart, get_deals).
+- Never invent products, prices, deals, aisles or stock. The store's products are listed at the end by id: plan \
+with those ids directly (search_catalog only when you're unsure). Every price, deal, aisle and stock fact comes from a \
+tool result in this conversation (set_plan, get_cart, get_deals, search_catalog).
+- Before you call a tool, say a few words that state no facts, like "Pasta night, nice. One sec.", so the shopper \
+hears you right away.
 - If something isn't in the store, say so plainly ("I don't see cilantro here").
 - Don't plan products that are out of stock; offer the closest in-stock alternative instead.
 - For a meal, plan the basics (for a pasta dinner: the pasta, the sauce, bread). Leave extras like cheese, sides and \
@@ -48,20 +51,31 @@ class Brain:
     MAX_TOOL_ROUNDS = 6
 
     def __init__(self, llm: LLM, system: str = SYSTEM_PROMPT):
+        self.base_system = system
         self.llm = llm
         self.system = system
         self.messages: list[dict[str, Any]] = []
 
+    def set_catalog(self, products: list[dict[str, Any]]) -> None:
+        """Product ids and names only (no prices, deals or stock: those change), so a plan needs no search round."""
+        lines = [f"- {p['id']}: {p.get('short_name') or p['name']} ({p.get('category') or 'other'})" for p in products]
+        self.system = self.base_system + "\n\nStore products (id: name (kind)):\n" + "\n".join(lines)
+
     async def respond(self, user_text: str, ctx: dict[str, Any]) -> AsyncIterator[str]:
         self.messages.append({"role": "user", "content": user_text})
+        last_said = ""                                   # across tool rounds, so "One sec." and the answer don't run together
         for _ in range(self.MAX_TOOL_ROUNDS):
             content: list[Any] = []
             stop_reason = "end_turn"
             streamed: list[str] = []
             async for item in self.llm.stream(system=self.system, messages=self.messages, tools=TOOLS):
                 if item[0] == "text":
+                    text = item[1]
+                    if not streamed and last_said and not last_said[-1].isspace() and text[:1] and not text[0].isspace():
+                        text = " " + text
                     streamed.append(item[1])
-                    yield item[1]
+                    last_said = text or last_said
+                    yield text
                 elif item[0] == "final":
                     content, stop_reason = item[1], item[2]
             if not content:                              # a refusal or an empty turn: never store an empty message

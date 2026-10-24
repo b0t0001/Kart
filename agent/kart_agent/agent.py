@@ -131,5 +131,6 @@ class KartAgent:
             self._plan = cart.get("plan", [])
             self._items = cart.get("items", [])
             self._catalog = self._catalog or await self.backend.get_catalog()
+            self.brain.set_catalog(self._catalog)
         except Exception:
             pass

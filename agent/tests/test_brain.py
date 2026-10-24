@@ -1,6 +1,6 @@
 from kart_agent.brain import Brain
 
-from fakes import FakeBackend, FakeLLM, ToolUse, Turn
+from fakes import CATALOG, FakeBackend, FakeLLM, ToolUse, Turn
 
 
 async def collect(stream):
@@ -76,3 +76,29 @@ async def test_a_refusal_is_said_once_and_stored_as_said():
     said = await collect(brain.respond("hmm", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
     assert said == ["Sorry, I can't help with that one."]
     assert brain.messages[-1] == {"role": "assistant", "content": [{"type": "text", "text": "Sorry, I can't help with that one."}]}
+
+
+async def test_the_store_products_are_in_the_prompt_so_planning_skips_the_search():
+    # Each Claude round costs about 1.5 s of voice latency; ids in the prompt let set_plan go first.
+    llm = FakeLLM([Turn(chunks=["ok"])])
+    brain = Brain(llm=llm)
+    brain.set_catalog(CATALOG)
+    await collect(brain.respond("hi", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
+    system = llm.requests[0]["system"]
+    assert "- barilla-spaghetti: Spaghetti (pasta)" in system
+    assert "8.49" not in system                           # prices, deals, stock and aisles change: tools only
+
+
+async def test_system_prompt_speaks_before_it_looks_things_up():
+    llm = FakeLLM([Turn(chunks=["ok"])])
+    await collect(Brain(llm=llm).respond("hi", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
+    assert "One sec" in llm.requests[0]["system"]
+
+
+async def test_text_from_two_rounds_is_spoken_with_a_space_between():
+    llm = FakeLLM([
+        Turn(chunks=["Pasta night, nice. One sec."], tools=[ToolUse("t1", "set_plan", {"items": [{"product_id": "barilla-spaghetti", "reason": "pasta"}]})]),
+        Turn(chunks=["Your list is ready."]),
+    ])
+    chunks = await collect(Brain(llm=llm).respond("pasta dinner", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
+    assert "".join(chunks) == "Pasta night, nice. One sec. Your list is ready."
