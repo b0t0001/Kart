@@ -1,4 +1,4 @@
-# KART integration contract — v0.7 (DRAFT)
+# KART integration contract — v0.8 (DRAFT)
 
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
@@ -117,7 +117,19 @@ Writers **only** use these; nobody writes `carts.items` directly.
 - `cart_events`: `trip_id` (filter to the current trip) and `applied` (false for a null or unknown `product_id`).
 - **View `product_catalog`:** each active product with its best live deal (`sale_price`, `deal_label`, `aisle`, `in_stock`). The iPad and agent query it instead of joining. Views don't fire realtime, so subscribe to `products` / `deals` and refetch it.
 - Built early: P5 `dismiss_suggestion`; P8 partially (`savings`, `list_price`); P10 (every write to products, deals or sections recomputes all open carts).
-- Current position for routing = the aisle of the most recently added item. It switches to `carts.location` once P3 is built.
+- Routing starts from `carts.location` (P3).
+
+**All of P2–P8 and P10 are built (backend `4feb9ba`, v0.8):** 46 pytest and 5 deno tests pass. Not deployed yet.
+- **P2:** `reset_cart` sets status `shopping` and `trip_started_at = now()`. `set_cart_status` accepts `idle` \| `shopping` \| `checkout`; `paid` is rejected because only `checkout()` sets it, so a paid cart always has a receipt. `db.py reset-demo` leaves the cart `idle` (the iPad shows Welcome).
+- **P3:** every applied add sets `location`. `set_location` accepts `"A5"`, `"5"`, `"aisle 5"` or a section name, and raises on an unknown aisle. Reset clears it.
+- **P4:** the old `apply_cart_event` overload is dropped (no PostgREST ambiguity), and CV's calls are unchanged. Every event gets an `event_id`; manual events get a generated one. **Confirm-card "Remove"** = `apply_cart_event(type 'removed', product_id null, source 'manual', p_resolves_event_id)`.
+- **P6:** `append_transcript` returns the row tagged with the current `trip_id`; `reset_cart` deletes the cart's lines.
+- **P8:** `checkout(p_cart_id, p_provider default 'simulated')` **returns the `receipts` row, not the carts row.**
+  - Idempotent per trip (unique `cart_id` + `trip_id`); sets status `paid`; realtime is on for `receipts`.
+  - Additive fields: `receipts.items` (the bill as paid) and `receipts.status` (`paid` \| `failed`).
+  - It takes the units off `products.stock`, so the merchant sees the sale live; `reset-demo` restores stock.
+  - It raises **`unresolved_items: N …`** (PostgREST 400) while an added unknown item is unresolved. That's the server-side half of the iPad's checkout block.
+- **P7:** `backend/supabase/functions/voice-token`, in exactly the iPad's shape; deployed with `backend/deploy_functions.sh`.
 
 **New trip / reset (v0.3; accepted by the backend in v0.4):** the iPad calls `reset_cart`. The Pi watches `carts.trip_id` (polling every ~2 s or over realtime) and clears its in-cart memory when the value changes. That way the iPad never has to reach the Pi over the network. The Pi's `POST :8080/reset` stays as a local fallback.
 
@@ -186,7 +198,10 @@ One shared env file: **`/Users/dylan/Documents/GitHub/kart/.env`** (gitignored, 
 | `ANTHROPIC_API_KEY` | pi (vision), web server routes (agent) |
 | `CARTESIA_API_KEY` | web server routes |
 | `CART_ID` (= `7`) | pi, iPad |
-| `CARTESIA_LINE_AGENT_ID` | iPad / `agent/` (v0.5) |
+| `CARTESIA_AGENT_ID` | iPad / `agent/` / `voice-token` function (`"pending"` until the Line agent exists). The one name for it (v0.8 replaces `CARTESIA_LINE_AGENT_ID`) |
+| `SUPABASE_PROJECT_REF`, `SUPABASE_ACCESS_TOKEN` | backend deploy only (Edge Functions and their secrets). The access token is a Supabase **personal access token**, which is account-wide, so revoke it after the hackathon |
+
+`CARTESIA_API_KEY` reaches the `voice-token` function as a Supabase function secret. The backend sets it from `.env` through `deploy_functions.sh`, so nobody pastes it anywhere.
 
 Note (v0.5): the Line agent runs on Cartesia's hosting, so `ANTHROPIC_API_KEY` and the Supabase values are also entered in the Line agent's own env settings. Dylan does that; no chat enters keys anywhere.
 
@@ -221,3 +236,4 @@ All three feature chats work in the **same main checkout**, so stay inside your 
 - v0.5 — §5 rewritten for the native iPad app and the Cartesia Line agent. Catalog rule: names, prices, deals and stock come live from Supabase; the bundled `store.json` covers only the map and offline fallback. LCD deferred. iPad proposals P1–P9 recorded in §5a, pending Dylan's approval of the iPad spec. Added P10 (open carts get recomputed on merchant changes), the iPad read/write summary, and the `hardware/` lane plus GitHub sync rules for the teammate's machine.
 - v0.6 — P1–P10 accepted (P9 stays v2). P10's rule, agreed with the iPad: the price you saw is the price you pay, which covers ended deals too. The manager now pushes and pulls `main` at each check-in.
 - v0.7 — Dylan approved the iPad spec. §3a records the backend as built (`1955f3c`): additive fields, the `product_catalog` view, route-ordered plan, P5/P8-partial/P10 done. Hardware-lane handoff from CV (autostart command, install steps).
+- v0.8 — All of P2–P8 and P10 are built (`4feb9ba`). `checkout` returns the receipt and blocks on unresolved items. Env var name unified to `CARTESIA_AGENT_ID`; added `SUPABASE_PROJECT_REF` and `SUPABASE_ACCESS_TOKEN`.
