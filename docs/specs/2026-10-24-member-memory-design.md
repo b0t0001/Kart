@@ -1,6 +1,6 @@
 # Kart remembers you: member memory (design)
 
-**Status:** draft for Dylan's review · 2026-10-24
+**Status:** approved by Dylan with changes (the member is Dylan; demo fast-forward added) · 2026-10-24
 **Built by:** the "member memory" chat, which reports to the manager (contract §8)
 **Flag:** `member_memory`, **off by default**. With it off, nothing changes. The rollback tag is `stable-pre-memory`.
 
@@ -13,27 +13,35 @@
 - As they shop, Kart asks the occasional question about what's coming up ("any fun events coming up?") and remembers the answer. Next visit it greets them with that memory ("Thanksgiving's Thursday, want to shop for it?") and can plan for it ahead of time.
 - The demo uses one member, but the design remembers every member, so it scales to many stores and many people.
 - It should feel intimate.
+- **In the pitch** Dylan schedules a future event with Kart, then fast-forwards the cart's clock and shows that Kart brings it up when that day comes. The demo member is Dylan himself. Leo's soccer party stays as a memory he already has.
 
 **Success means:**
 1. In the demo, a member signs in and within ~3 s Kart says something clearly about *them* and about *this week*.
-2. Something the shopper says in one trip comes back on the next trip, in the same demo, minutes later.
+2. Something the shopper says in one trip comes back on a later trip in the same demo, minutes later: after a fast-forward, on the day it matters.
 3. It's warm, not creepy: one or two memories per greeting at most, everything Kart remembers is visible on screen, and one tap forgets it.
 4. With the flag off, the stable demo is byte-for-byte unchanged.
 
-## 2. The demo beat (adds ~60 s to the pitch)
+## 2. The demo beat (adds ~75 s to the pitch)
 
-Before judging, `backend/members.py seed` loads member **1029, "Maya"**: a household of 4 with ten weeks of believable trips. The seed is relative to the day it runs, so the demo day is always one of her usual shopping days.
+Before judging, `backend/members.py seed` loads member **1029, "Dylan"**: a household of 4 with ten weeks of believable trips, plus Leo's soccer party tomorrow. The seed is relative to the day it runs, so the demo day is always one of his usual shopping days.
 
-1. Welcome screen → **"Member? Sign in"** → type `1029` on the member card. Kart waves: *"Welcome back, Maya!"* and then, from memory: *"Leo's soccer party is tomorrow. Want chips and salsa for twelve? Chips are $1.50 off."*
+1. Welcome screen → **"Member? Sign in"** → type `1029` on the member card. Kart waves: *"Welcome back, Dylan!"* and then, from memory: *"Leo's soccer party is tomorrow. Want chips and salsa for twelve? Chips are $1.50 off."*
 2. The **For you** card shows three picks, each with its reason:
    - Chips: *Leo's party · $1.50 off*
    - Milk: *every week · last Sat*
    - Tortillas: *your Saturday usual*
    One tap adds a pick to the list.
-3. Mid-trip the shopper says *"Hey Kart."* Kart: *"Hey Maya! Any fun plans coming up I can help you shop for?"* Shopper: *"I'm hosting Friendsgiving next Saturday, ten people."* Kart: *"Ooh, fun. I'll remember that. Want me to start a list for it?"* "Sure." The list is saved for next time, and Kart says plainly what the store doesn't carry.
-4. Check out → the receipt says *"Saved to Maya's history."*
-5. Start again and sign in as 1029 → *"Welcome back, Maya! Friendsgiving's next Saturday. I saved your list: want to shop it today or closer to the day?"*
-6. The member chip → **What Kart remembers**: the party, Friendsgiving, "likes Rao's", her usuals. Tap **Forget** on any row; **Forget me** wipes everything.
+3. Mid-trip the shopper says *"Hey Kart."* Kart: *"Hey Dylan! Any fun plans coming up I can help you shop for?"* Shopper: *"I'm hosting Friendsgiving next Saturday, ten people."* Kart: *"Ooh, fun. I'll remember that. Want me to start a list for it?"* "Sure." The list is saved for next time, and Kart says plainly what the store doesn't carry.
+4. Check out → the receipt says *"Saved to Dylan's history."*
+5. **Fast-forward.** In the demo controls (three-finger long press), tap **Jump to the day before Friendsgiving**.
+   - The Welcome screen's date chip flips to *"Friday, Oct 30 · demo date"*.
+   - From then on the cart's "today" is that date for everything memory touches: picks, how many days until an event, Kart's date math, and the purchase dates of a member checkout.
+6. Sign in again as 1029 → *"Welcome back, Dylan! Friendsgiving's tomorrow, and your list is ready. Want to shop it now?"*
+   - The For you card leads with the Friendsgiving list.
+   - Milk is due again: it was last bought in step 4, "a week ago".
+   - Kart may ask how Leo's party went.
+7. The member chip → **What Kart remembers**: Friendsgiving, Leo's party (past), "likes Rao's", his usuals. Tap **Forget** on any row; **Forget me** wipes everything.
+8. After the pitch: demo controls → **Back to today**.
 
 ## 3. Experience
 
@@ -49,7 +57,7 @@ Principles from the iPad spec §3.1 still hold: glanceable, one primary action, 
 ### 3.2 Greeting
 - **Guest:** unchanged ("Hi, I'm Kart. What are we shopping for today?").
 - **Member:**
-  1. An instant fixed line, *"Welcome back, Maya!"* (or *"Nice to meet you!"*), so there's no wait.
+  1. An instant fixed line, *"Welcome back, Dylan!"* (or *"Nice to meet you!"*), so there's no wait.
   2. Then Claude, with the member's profile in its prompt, adds at most two short sentences that use the most relevant memory (an upcoming event, a saved list, something due) and asks what they're shopping for.
   3. The fixed line covers Claude's ~1.5 s.
 
@@ -76,7 +84,7 @@ Principles from the iPad spec §3.1 still hold: glanceable, one primary action, 
 - **Next trip.** The greeting and the For you card offer the saved list. "Shop it" puts it on the plan.
 
 ### 3.6 What Kart remembers (the trust story)
-- A small **member chip** ("Maya", with an initial avatar) sits in the shopping screen's corner. Tapping it opens a sheet with:
+- A small **member chip** ("Dylan", with an initial avatar) sits in the shopping screen's corner. Tapping it opens a sheet with:
   - **Coming up:** events with dates, and saved lists;
   - **Likes:** preferences;
   - **Usually buys:** the top items with their rhythm ("Milk · every 7 days").
@@ -84,7 +92,22 @@ Principles from the iPad spec §3.1 still hold: glanceable, one primary action, 
 - **Forgetting by voice:** "Kart, forget that" or "forget about Friendsgiving" uses the `forget` tool, one memory at a time. Wiping everything is touch-only and asks for confirmation, so a stray "forget it" can never erase a member.
 
 ### 3.7 Receipt
-For a member, one extra line: *"Saved to Maya's history."*
+For a member, one extra line: *"Saved to Dylan's history."*
+
+### 3.8 Demo date (fast-forward)
+- **The controls.** The demo controls get a **Demo date** row:
+  - **Today**
+  - **+1 day**
+  - **+1 week**
+  - **Day before the next event**: the member's nearest upcoming event. It's hidden when there's none.
+- **Where it's stored.** The date belongs to the cart (`carts.demo_date`). It survives new trips, so you can fast-forward between trips.
+- **Showing it honestly.** While it's set, a small calendar chip shows the date ("Fri, Oct 30 · demo date") on Welcome and in the shopping screen's corner. Changing it plays a quick page-flip on that chip.
+- **What it changes.** Only the member features:
+  - the profile's "today";
+  - the date Kart uses for "tomorrow" and "next Saturday";
+  - the date stamped on a member checkout's purchase history.
+- **What it never changes.** Store receipts, analytics, deals and trip times stay real.
+- **Past events.** Once its date passes, an event drops out of "coming up". For 7 days it's a *recent past* memory, and Kart may ask how it went. In the memory sheet it shows dimmed under **Earlier**.
 
 ## 4. Recommendations: what "this week" means
 
@@ -120,7 +143,7 @@ The backend computes these deterministically (testable, instant). Claude only ph
     - Real trips still come from `receipts`: the receipt trigger below copies each paid bill's lines in.
     - It's a separate table only so the ten-week demo seed never shows up as store trips or revenue in `store_insights`, which counts `receipts`.
   - `member_memories(id bigserial, member_id, kind 'event'|'preference'|'note', text, event_date date null, items jsonb null [{product_id, qty}], trip_id null, created_at)`. Forgetting deletes the row.
-- **`carts` gains** `member_id text null` and `member_rev int default 0`.
+- **`carts` gains** `member_id text null`, `member_rev int default 0`, and `demo_date date null` (null means real today; §3.8).
 - **`receipts` gains** `member_id text null`.
 - **Flag:** a `feature_flags` row `member_memory`, seeded **false**. It uses the existing per-cart `set_feature`.
 - **RPCs:**
@@ -128,7 +151,13 @@ The backend computes these deterministically (testable, instant). Claude only ph
     - null signs out;
     - an unknown id creates the member;
     - it raises `feature_off: member_memory` if the cart's flag is off.
-  - `member_profile(p_member_id, p_today date default current_date) → jsonb`:
+  - `set_demo_date(p_cart_id, p_date date) → carts row`
+    - null goes back to real today.
+    - It raises `feature_off: member_memory` when the cart's flag is off.
+    - `reset_cart` leaves it alone.
+  - `member_profile(p_member_id, p_cart_id default null, p_today date default null) → jsonb`:
+    - "today" is `p_today`, else that cart's `demo_date`, else `current_date`.
+    - Tests pass `p_today`. The iPad and the agent pass their cart.
     ```jsonc
     { "member": {"member_id","name","household","since","trips"},
       "today": "2026-10-24", "weekday": "Saturday",
@@ -148,8 +177,10 @@ The backend computes these deterministically (testable, instant). Claude only ph
     - null means forget everything: purchases, memories and name. Any cart signed in as that member is signed out.
 - **Triggers:**
   - **On a paid receipt:** if the cart has a `member_id`, set `receipts.member_id` and copy the bill's lines into `member_purchases`.
+    - `bought_at` is the cart's `demo_date`, at the current time of day, when one is set; otherwise `now()`.
+    - The receipt's own `created_at` stays real.
   - **On a new trip:** when `carts.trip_id` changes, `member_id` goes back to null. Every trip starts as a guest, and `reset_cart` is unchanged.
-- **Seed:** `backend/members.py seed [--member 1029 --name Maya]` rebuilds that member relative to today and touches nothing else:
+- **Seed:** `backend/members.py seed [--member 1029 --name Dylan]` rebuilds that member relative to today and touches nothing else:
   - **Trips:** ten weeks, on today's weekday plus a midweek top-up, using today's catalog ids. The usual-day basket is taco night; milk and bananas weekly, eggs every ~10 days, pasta and Rao's every other week, paper towels every ~5 weeks; chips and salsa are the favorite snack.
   - **Memories:**
     - "Leo's soccer party, bringing snacks for 12", dated tomorrow, with a saved list (chips ×3, salsa ×2);
@@ -160,7 +191,7 @@ The backend computes these deterministically (testable, instant). Claude only ph
 
 ### 5.2 Agent (`agent/`)
 - **New `kart_agent/memory.py`:**
-  - turns the profile into a prompt section ("About this shopper, from Kart's memory"), with today's date and weekday;
+  - turns the profile into a prompt section ("About this shopper, from Kart's memory"), with the profile's today and weekday. With a demo date set, that is the demo date. Claude works out "tomorrow" and "next Saturday" from it. The section lists upcoming events, recent past events ("you may ask how it went") and preferences;
   - holds the fixed greeting line and the question rotation;
   - has `only_greeting(text)` for a bare "Hey Kart".
 - **`trip_context` gains `member_id`** (additive). With it, the agent fetches `member_profile` before greeting and adds the member section to Claude's system prompt; without it, everything behaves exactly as today.
@@ -183,8 +214,9 @@ The backend computes these deterministically (testable, instant). Claude only ph
   - `KartBackend` gains:
     - `signIn(memberId:)` and `signOut()`;
     - `memberProfile` (observable, refetched when `cart.memberRev` changes);
-    - `forgetMemory(id:)` and `forgetMember()`.
-  - **Mock:** `MockKartBackend` implements all of it with Maya's fixture, so the offline demo mode rehearses the whole beat.
+    - `forgetMemory(id:)` and `forgetMember()`;
+    - `setDemoDate(_:)`, with `cart.demoDate` decoded from the carts row.
+  - **Mock:** `MockKartBackend` implements all of it with Dylan's fixture, so the offline demo mode rehearses the whole beat.
   - **Supabase:** `SupabaseKartBackend` implements it over REST.
 - **AppModel:**
   - `startTrip(memberId:)`: reset, then `set_member`, then `trip_context` with `member_id`.
@@ -196,14 +228,15 @@ The backend computes these deterministically (testable, instant). Claude only ph
   - `MemberChip`
   - `MemoryView` (the sheet)
 - **Small hooks:**
-  - `WelcomeView`: the secondary pill
-  - `TripPanel`: the card and the chip
+  - `WelcomeView`: the secondary pill and the demo-date chip
+  - `TripPanel`: the card, the member chip and the demo-date chip
   - `ReceiptView`: one line
+  - the demo controls: the **Demo date** row (§3.8)
 - **Flag:** everything is shown only when `carts.features.member_memory` is on.
 
 ## 6. Stability
 - **When the flag is off:**
-  - `set_member` refuses, so `carts.member_id` stays null;
+  - `set_member` and `set_demo_date` refuse, so `carts.member_id` and `carts.demo_date` stay null;
   - the iPad shows no member UI;
   - `trip_context` has no `member_id`, so the agent is unchanged;
   - the receipts trigger does nothing.
@@ -230,6 +263,7 @@ The backend computes these deterministically (testable, instant). Claude only ph
   - the receipt trigger copies lines once (idempotent checkout);
   - a trip change clears the member;
   - forget one / forget all;
+  - the demo date: it moves the profile's today, survives `reset_cart`, makes an event "tomorrow" and then "recent past", and stamps member purchases while receipts stay real;
   - flag-off snapshots unchanged.
 - **Agent (fakes):**
   - the member prompt section;
@@ -240,13 +274,15 @@ The backend computes these deterministically (testable, instant). Claude only ph
   - no member tools for guests.
 - **iPad:**
   - KartCore unit tests for profile decoding, sign-in → trip start order, the lull rule (once, not while a card is open), and the For you card hiding rules;
-  - a UI test of the full beat on the mock backend.
+  - a UI test of the full beat on the mock backend, including the fast-forward and the second sign-in.
 - **End to end:** local Supabase, then hosted on a throwaway cart and `it-` member: sign in → remember an event → checkout → new trip → the profile shows the event and the new purchases.
 
 ## 10. Ownership and coordination
-- **Recommendation for the manager's call:** this chat builds the whole slice in its **own git worktree** (branch `member-memory`), so it never collides with the iPad and backend chats' live edits in the main checkout.
+- **Decided by the manager:** this chat builds the whole slice in its **own git worktree** (branch `member-memory`), so it never collides with the iPad and backend chats' live edits in the main checkout.
   - Almost everything is new files. The hooks into shared files are small and listed in §5.
-  - Once all tests pass, the manager merges it, bumps the contract to v0.14 (§5 is the proposal), and tells the owners.
+  - Merge `main` into the branch often, never rebase. Expect churn in `data/store.json` (demo-meal products) and the agent's prompt.
+  - On hosted, apply additive migrations only, never run `reset-demo`, and test only on throwaway carts and `it-` members.
+  - Once everything is green, send the manager the branch, a summary and the test results. The manager tags `stable-pre-memory`, merges, bumps the contract to v0.14 (§5 is the proposal), and tells the owners.
   - After the merge, the backend and iPad chats own their parts as usual.
 - **Optional catalog ask, routed through the manager to the backend chat:**
   - **Products:** a drink or two (e.g. sparkling water) plus a few seasonal products (turkey, stuffing mix, cranberry sauce, pumpkin pie), so "favorite drink" and event lists have real items.
