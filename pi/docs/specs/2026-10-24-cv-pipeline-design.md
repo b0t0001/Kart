@@ -1,6 +1,6 @@
 # KART computer vision pipeline: design (v1, "version B")
 
-Status: approved in chat 2026-10-24, awaiting written-spec review · Owner: CV workstream (`pi/`, `tools/`)
+Status: approved 2026-10-24; built overnight (see `pi/docs/OVERNIGHT.md` for what changed during the build) · Owner: CV workstream (`pi/`, `tools/`)
 
 ## 1. Goal
 
@@ -96,27 +96,29 @@ tools/
 ## 5. Spotting changes
 
 ### 5.1 Motion and settle (`motion.py`)
-- Each camera frame is shrunk to **320×180 grayscale**, blurred, and compared with that camera's previous small frame.
+- Each camera frame is shrunk to **320×180**, blurred, and compared with that camera's previous small frame, using the largest per-channel difference. (Built: not grayscale, because skin over a tan mat can have the same brightness.)
 - A camera is **in motion** if more than `motion_frac` (default **0.5 %**) of pixels changed by more than `motion_thresh` (default **25**/255).
 - **SETTLED** fires once, after motion has happened and **both** cameras have been still for `settle_s` (default **1.0 s**). A camera that is down doesn't block settling.
 - The loop runs at ~10 Hz. CPU stays low because only small frames are compared.
 
 ### 5.2 Change detection (`changes.py`), on each SETTLED
 For each camera, compare the new settled frame (downscaled to **640×360**) with that camera's **reference** (its previous settled frame):
-1. Blur both, convert to LAB, and compute per-pixel color distance. Normalize overall brightness first, so a global lighting shift doesn't light up everything.
+1. Check for a camera bump first (phase correlation, shift > `max_shift_px` → disturbed; the empty picture and cart memory are shifted to match). Then normalize each color channel's median to the reference (cancels brightness and auto-white-balance shifts), blur, convert to LAB, and compute per-pixel color distance.
 2. Threshold at `change_thresh` (default **30**), then clean up the mask (open 5 px, close 15 px).
 3. Keep connected blobs bigger than `min_blob_frac` (default **0.4 %** of the frame).
 
 Outcomes per camera:
 - **No blobs:** the reference becomes the new frame (absorbs slow lighting drift). No events.
 - **Disturbed:** more than `disturbed_frac` (default **60 %**) of the frame changed (the cart rolled, a camera got bumped, a big lighting change). The reference becomes the new frame, a warning is logged, and **no events**.
-- **Blobs:** passed to `decide.py` with before/after crops cut from the full-resolution frames (box padded 10 %).
+- **Blobs:** passed to `decide.py` with before/after crops cut from the full-resolution frames (box padded 10 %; fingerprints use the unpadded core).
+- **A blob touching the frame edge** is an arm over the rim (or a strap), not an item: it is ignored, and the old reference is kept under it, so once it leaves, whatever it placed, took or covered is judged against the true before-picture.
+- **Cart empty and nothing changed:** the frame becomes the new empty-basket picture (absorbs slow light drift).
 
 ### 5.3 Added or removed? (`decide.py`)
 Each camera keeps an **empty-basket picture**, taken on reset. For each blob:
 1. **After ≈ empty basket** in that box → **removed**. The mat reappeared.
 2. **Before ≈ empty basket** → **added**. New stuff on the mat.
-3. **Neither** (something on top of something): if the *after* crop matches an item cart memory already has in that camera at an overlapping box, the top item was **removed** (it revealed what was under). Otherwise a new item was **added** on top.
+3. **Neither** (something on top of something): if the *after* crop matches an item cart memory already has in that camera at an overlapping box, and clearly better than the *before* crop did, the top item was **removed** (it revealed what was under). Otherwise a new item was **added** on top.
 
 "≈ empty" means the brightness-normalized mean color distance inside the blob is below `empty_thresh` (start at **18**; tuned on the real mat).
 
@@ -133,21 +135,20 @@ Known limit: two identical items dropped touching each other in the same second 
 
 ### 6.1 Added items
 1. **Local matcher.**
-   - A small ImageNet-pretrained CNN (MobileNetV3-Small or MobileNetV2, ONNX, run with `onnxruntime`) turns each crop into an embedding (fingerprint). About 50 ms per crop on a Pi 4.
-   - If the model file is missing, an HSV color histogram is used instead, so the pipeline still runs.
+   - Built: the default fingerprint is an HSV color histogram (`features: "hist"`), the path the test suite validates. A MobileNetV2 ONNX embedding is available (`features: "auto"`); switch to it only after `tools/gallery_check.py` shows it separates the real enrolled props better, because its similarities between unrelated items run high (0.6–0.9).
    - Each product's score is the mean of its top-3 cosine similarities against that product's gallery examples. Multi-crop calls average across crops.
    - **Accept** if the best score ≥ `local_min_score` (start **0.70**) **and** best − runner-up ≥ `local_min_margin` (start **0.08**). Both get tuned on the real enrollments. Confidence = best score.
 2. **Cloud (Claude).**
-   - If the local matcher doesn't accept, the crops (both cameras, max 2 per camera, JPEG ≤ 512 px) and the catalog list (`id`, `name`, `vision_hint`) go to `claude-haiku-5-5` (configurable).
+   - If the local matcher doesn't accept, the crops (at most 2, one per camera, JPEG ≤ 512 px) and the catalog list (`id`, `name`, `vision_hint`) go to `claude-haiku-5-5` (configurable).
    - Claude must return JSON `{"product_id": "<id>|unknown", "confidence": 0–1, "label": "<short description>"}`. A `product_id` outside the catalog is treated as unknown.
-   - Accepted if confidence ≥ `cloud_min_conf` (default **0.6**). Timeout: **3 s**.
+   - Accepted if confidence ≥ `cloud_min_conf` (default **0.6**). Timeout: **6 s** (built: 3 s was too tight for vision over a phone hotspot).
 3. **Unknown.** The event has `product_id: null`, `method: "none"`, and `label` = the best text we have. The iPad asks the shopper to pick.
 
 ### 6.1a Where the catalog comes from (CONTRACT v0.9 §3a)
 The store owner can add products live, and those exist only in Supabase. So the Pi reads `id`, `name`, `short_name`, and `vision_hint` from Supabase `products` (anon key) at startup and on every `trip_id` change, falling back to `data/store.json` when offline. A live-added product has no gallery photos, so it always takes the Claude path using its `vision_hint`. Gallery products no longer in the catalog are ignored.
 
 ### 6.2 Removed items
-Matched **only against cart memory**: the before-crop's fingerprint is compared against each in-cart item's stored fingerprints, boosted by box overlap in the same camera. No cloud call. `method: "memory"`.
+Matched **only against cart memory**, by place first: a remembered unit qualifies only if its box in that camera overlaps the emptied spot (a unit that camera never saw needs a strong look-alike match). Every unit whose spot emptied is removed. If nothing qualifies, nothing is removed. No cloud call. `method: "memory"`.
 
 ### 6.3 Enrollment (`tools/enroll.py`)
 "Put the Parmesan in → wait for the terminal to print `captured` → take it out", about 5 rounds, with the item in different poses each time. It reuses the real pipeline to capture settled crops from both cameras, then saves `pi/gallery/<product_id>/<n>_cam<k>.jpg` and refreshes the fingerprint cache (`pi/gallery/index.npz`, rebuilt automatically if it's stale). Enrollment should be done on the real cart, because angles and lighting matter.
@@ -173,13 +174,14 @@ One event = one unit added or removed (comments are explanation only; the real p
   "label": "Kirkland Parmigiano Reggiano", // catalog name, or raw model text when unknown
   "cameras": [0, 1],              // which cameras saw it
   "crops": ["state/crops/5f0c…_cam0.jpg"], // local paths, for "what the AI saw"
-  "ts": "2026-10-24T14:02:11Z"
+  "ts": "2026-10-24T14:02:11Z",
+  "resolves_event_id": null       // removal of an unrecognized unit: the add's event_id, clears its iPad card
 }
 ```
 
 **Sinks** (`sinks.py`):
 - `JsonlSink`: always on, appends to `pi/state/events.jsonl`.
-- `HttpSink`: on when backend settings exist. It calls the Supabase RPC `apply_cart_event(p_cart_id, p_type, p_product_id, p_confidence, p_source="vision", p_label, p_camera=<first camera>, p_event_id, p_method)` per CONTRACT §3. The RPC is idempotent on `p_event_id`, so outbox retries can't double-bill.
+- `HttpSink`: on when backend settings exist. It calls the Supabase RPC `apply_cart_event(p_cart_id, p_type, p_product_id, p_confidence, p_source="vision", p_label, p_camera=<first camera>, p_event_id, p_method)` per CONTRACT §3. The RPC is idempotent on `p_event_id`, so outbox retries can't double-bill. A removal of an unrecognized unit also sends `p_resolves_event_id` (its add's event id), so its "Is this…?" card clears and checkout isn't blocked.
   - Failed sends go to `pi/state/outbox.jsonl` and are retried in order (backoff up to 30 s), so no event is lost or reordered.
 - Crops stay local in v1. Uploading them for the iPad is a later, separate change.
 
@@ -194,9 +196,10 @@ A small HTTP server on port **8080** (stdlib, one thread):
 
 | Failure | Behavior |
 |---|---|
-| A camera fails to open or stops returning frames | Log it, keep going on the other camera, retry opening every 5 s |
+| A camera fails to open or stops returning frames | Log it, keep going on the other camera, retry opening every 5 s. When it comes back it sits out one settle and takes that still frame as its new reference, so nothing is billed twice |
+| A camera has no empty-basket picture yet | Its changes are ignored until the next reset with the cart empty |
 | Both cameras down | Keep retrying; `/status` reports it; no events |
-| No internet / Claude error / Claude slow (> 3 s) | Local result if accepted, otherwise an `unknown` event |
+| No internet / Claude error / Claude slow (> 6 s) | Local result if accepted, otherwise an `unknown` event |
 | Backend unreachable | Outbox + retry (section 8) |
 | Scene disturbed (> 60 % changed) | New reference, warning, no events |
 | Process crash | Cart memory persisted; autostart (systemd) restarts it (milestone 8) |

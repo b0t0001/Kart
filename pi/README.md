@@ -57,7 +57,7 @@ Logs from the service: `journalctl -u kart-cv -f`.
 | # | Do this | You should see |
 |---|---|---|
 | 1 | `~/venv/bin/python tools/snap.py` | `cam0: OK (720, 1280, 3) …` and `cam1: OK …`; open `tools/out/cam0.jpg` and `cam1.jpg`: both look into the basket |
-| 2 | `pi/main.py live`, wave a hand over the basket, then hold still | `MOTION` when you wave, `SETTLED` about 1 s after you stop, and **no** `ADDED` |
+| 2 | `pi/main.py live`, wave a hand over the basket, then hold it still inside the basket | `MOTION` when you wave, `SETTLED` about 1 s after you stop, `INTRUSION … ignoring it` while your arm is in, and **no** `ADDED` |
 | 3 | Drop one item in, wait, take it out | `ADDED …` then `REMOVED …` (before enrollment and without a key the name is `? "…"`); crops in `pi/state/crops/` |
 | 4 | Put `ANTHROPIC_API_KEY` in `~/kart/.env`, restart, drop 5 different props | each prints `ADDED <product-id> (cloud 0.xx)` with the right id |
 | 5 | Enroll the props (below), then drop them again | `ADDED <product-id> (local 0.xx)`, instantly, no network needed |
@@ -74,7 +74,16 @@ sudo systemctl stop kart-cv
 
 Cart empty → put the item in → wait for `captured 1/5: take it out` → take it out → repeat with
 a different pose (side, upright, label down). Photos land in `pi/gallery/<product-id>/`. Commit
-and push `pi/gallery/` so every machine gets them. Products the store owner adds live (merchant
+and push `pi/gallery/` so every machine gets them.
+
+Then ask which matcher separates the real props better:
+
+```bash
+~/venv/bin/python tools/gallery_check.py     # compares color histogram vs the ONNX CNN, recommends one
+```
+
+The default is `"features": "hist"`. Switch `pi/config.json` to `"auto"` (ONNX) only if the check
+recommends it. Products the store owner adds live (merchant
 agent) need no enrollment: they go to Claude using their `vision_hint`.
 
 ### Record and replay (for tuning)
@@ -94,11 +103,23 @@ tuning the knobs below.
 | Items added when nothing happened | Floor visible through the cart, or strong flicker → mat on the floor; raise `change_thresh` (30 → 40) |
 | Real items missed | Item very small or same color as the mat → lower `min_blob_frac` (0.004 → 0.002) or use a contrasting mat |
 | Removed items show as added | The empty-basket picture is stale (cart wasn't empty at reset) → empty it, `pi/main.py reset` |
-| Wrong product, method `local` | Look-alike props → enroll more poses, or raise `local_min_margin` (0.08 → 0.12) so Claude decides |
+| Wrong product, method `local` | Look-alike props → enroll more poses, run `tools/gallery_check.py`, or raise `local_min_margin` (0.08 → 0.12) so Claude decides |
+| Events when a big colored item goes in, or `% of the view changed (lighting?)` warnings | The webcam's auto white balance is shifting → lock it (below) |
 | `local-only mode` in the log | No `ANTHROPIC_API_KEY` in `~/kart/.env` |
 | `cam1: could not open …` | Cable or port moved → `tools/snap.py --list`, fix `pi/config.json` |
 
 Every knob lives in `pi/config.json` (defaults in `pi/config.example.json`).
+
+**Locking white balance (if colors drift).** The software already cancels most of it; locking it on
+the camera removes the rest. Check the control names first, since they vary by kernel and model:
+
+```bash
+v4l2-ctl -d /dev/v4l/by-path/…-usb-0:1.1:1.0-video-index0 --list-ctrls     # look for white_balance_*
+v4l2-ctl -d /dev/v4l/by-path/…-usb-0:1.1:1.0-video-index0 -c white_balance_automatic=0
+```
+
+Repeat for the second camera (`…1.3…`), with the cart lit the way it will be at the demo. This is
+untested on the Brio 101: tell the CV chat what `--list-ctrls` prints if the name differs.
 
 ---
 
