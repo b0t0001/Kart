@@ -23,6 +23,12 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 ~08:00 · morning: merged and tested
+- **Merge:** nothing to merge. Everything is on `main`, which is synced with GitHub, and the stale `claude/*` branches are deleted.
+- **All automated suites rerun on `main`: 316 tests green** (CV 80 + 2 end-to-end, backend 53 + 5 end-to-end, merchant 42, Edge Function 5, agent 29, iPad 100).
+- **Test plan:** [TESTING.md](TESTING.md), a six-rung ladder (automated → one-Mac system → go live → Pi cameras → iPad + voice → demo rehearsal).
+- **Routing rule:** chats send cross-chat notices to the manager, never to Dylan; all three have been told.
+
 ### 2026-10-24 ~03:40 · check-in
 - Backend fixed the iPad's follow-up (`f6e41f3`): a Yes, which puts the product on the plan, now consumes the deal suggestion, so the next deal can be offered right away. Pushed. All three chats are idle and done.
 
