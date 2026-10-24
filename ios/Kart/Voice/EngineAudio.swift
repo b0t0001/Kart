@@ -15,6 +15,8 @@ import KartCore
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
     private var queued = 0
+    private var played = 0
+    private var configurationObserver: NSObjectProtocol?
 
     func start() throws {
         let session = AVAudioSession.sharedInstance()
@@ -27,15 +29,47 @@ import KartCore
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: playFormat)
         let chunk = AVAudioFrameCount(micFormat.sampleRate * 0.04)
-        input.installTap(onBus: 0, bufferSize: chunk, format: micFormat) { [weak self] buffer, _ in
+        // @Sendable: AVAudio calls taps and completions on its own realtime queue; without it Swift 6 infers @MainActor
+        // from this method and traps on the first mic buffer (seen on device: _swift_task_checkIsolated).
+        input.installTap(onBus: 0, bufferSize: chunk, format: micFormat) { @Sendable [weak self] buffer, _ in
             guard let pcm = self?.convert(buffer) else { return }
             Task { @MainActor in self?.onMicChunk?(pcm) }
         }
         try engine.start()
         player.play()
+        // iOS stops the engine when the audio setup changes (route, another engine, an interruption); restart it,
+        // or Kart's voice is scheduled into a stopped engine and never heard.
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.log("configuration change: engine \(self.engine.isRunning), player \(self.player.isPlaying), queued \(self.queued)")
+                self.restart(because: "configuration change")
+            }
+        }
+        log("started: output \(session.currentRoute.outputs.map { $0.portType.rawValue }), volume \(session.outputVolume)")
     }
 
+    private func restart(because reason: String) {
+        guard !engine.isRunning else { return }
+        // The player's timeline stopped with the engine but it still reports isPlaying, and play() on it then renders
+        // nothing: on device the greeting queued up unheard until a flush reset it. Reset it here instead.
+        player.stop()
+        queued = 0
+        do {
+            try engine.start()
+            player.play()
+            log("restarted after \(reason)")
+        } catch {
+            log("restart after \(reason) failed: \(error)")
+        }
+    }
+
+    private func log(_ message: String) { print("[KartAudio] \(message)") }
+
     func stop() {
+        configurationObserver.map(NotificationCenter.default.removeObserver)
+        configurationObserver = nil
         engine.inputNode.removeTap(onBus: 0)
         player.stop()
         engine.stop()
@@ -44,18 +78,25 @@ import KartCore
 
     func play(_ pcm: Data) {
         guard let buffer = floatBuffer(from: pcm) else { return }
+        if !engine.isRunning { restart(because: "audio arrived while stopped") }
+        played += 1
+        if played == 1 || played % 100 == 0 {
+            let session = AVAudioSession.sharedInstance()
+            log("playing chunk \(played): engine \(engine.isRunning), player \(player.isPlaying), output \(session.currentRoute.outputs.map { $0.portType.rawValue }), volume \(session.outputVolume)")
+        }
         queued += 1
-        player.scheduleBuffer(buffer) { [weak self] in
+        player.scheduleBuffer(buffer) { @Sendable [weak self] in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, self.queued > 0 else { return }   // a flush already zeroed it: one idle, not one per buffer
                 self.queued -= 1
-                if self.queued <= 0 { self.queued = 0; self.onPlaybackIdle?() }
+                if self.queued == 0 { self.onPlaybackIdle?() }
             }
         }
         if !player.isPlaying { player.play() }
     }
 
     func flush() {
+        log("flush (Line cleared Kart's audio: the shopper or noise cut in): dropping \(queued) queued chunks")
         player.stop()
         queued = 0
         player.play()

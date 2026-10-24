@@ -98,9 +98,11 @@ private struct DealBadge: View {
 
     var body: some View {
         Text(label)
-            .font(Theme.caption).foregroundStyle(Theme.greenInk)
-            .padding(.horizontal, Theme.s).padding(.vertical, 2)
+            .font(Theme.caption.weight(.medium)).foregroundStyle(Theme.greenInk)
+            .lineLimit(1)
+            .padding(.horizontal, Theme.m).padding(.vertical, Theme.xs)
             .background(Theme.greenSoft, in: Capsule())
+            .fixedSize()                                   // never squeezed: the product name gives way first
     }
 }
 

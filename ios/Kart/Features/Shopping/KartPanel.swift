@@ -11,12 +11,16 @@ struct KartPanel: View {
             AvatarView(mood: model.avatarMood, level: model.voice.outputLevel, reaction: model.reaction, size: 180)
                 .matchedGeometryEffect(id: "kart", in: namespace)
             VoicePill(voice: model.voice)
-            Captions(lines: Array(model.backend.transcript.suffix(3)))
-            Spacer(minLength: 0)
+            // A message thread: the newest bubble always in view, older ones scroll up under a fade (and back with a
+            // finger) when a card or a long turn needs the room. Never pushes the card, or the bill beside it, off a
+            // smaller iPad (seen on an 11-inch).
+            Thread(lines: Array(model.backend.transcript.suffix(12)))
+                .frame(maxHeight: .infinity)
             if let card = model.visibleCard {
                 CardView(card: card, catalog: model.backend.catalog) { action in
                     Task { await model.respond(to: card, with: action) }
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 .id(card.id)
                 .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
                                         removal: .move(edge: .leading).combined(with: .opacity)))
@@ -57,29 +61,67 @@ struct VoicePill: View {
     }
 }
 
-/// The last few lines of the conversation: the shopper's in secondary ink, Kart's in its own voice.
+private struct Thread: View {
+    let lines: [TranscriptLine]
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                Captions(lines: lines)
+                    .padding(.top, Theme.l)
+            }
+            .scrollIndicators(.hidden)
+            .defaultScrollAnchor(.top, for: .alignment)          // a short thread sits under Kart, not down by the card
+            .defaultScrollAnchor(.bottom, for: .initialOffset)
+            .defaultScrollAnchor(.bottom, for: .sizeChanges)     // a card appearing keeps the newest bubble in view
+            .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.08)],
+                                 startPoint: .top, endPoint: .bottom))
+            .onChange(of: lines.last?.id) { _, id in
+                guard let id else { return }
+                withAnimation(Theme.spring) { proxy.scrollTo(id, anchor: .bottom) }
+            }
+        }
+    }
+}
+
+/// The last few lines of the conversation as a message thread: Kart on the left in white, the shopper on the right in
+/// the soft brand tint (solid brand stays for buttons, so a bubble never reads as something to tap).
 struct Captions: View {
     let lines: [TranscriptLine]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.m) {
+        VStack(spacing: Theme.s) {
             ForEach(lines) { line in
-                Group {
-                    if line.role == .user {
-                        Text("You: \(line.text)")
-                            .font(Theme.body)
-                            .foregroundStyle(Theme.inkSecondary)
-                    } else {
-                        Text(line.text)
-                            .font(Theme.speech)
-                            .foregroundStyle(Theme.ink)
-                    }
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                Bubble(line: line)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
         .animation(Theme.spring, value: lines.map(\.id))
+    }
+}
+
+private struct Bubble: View {
+    let line: TranscriptLine
+
+    private var isShopper: Bool { line.role == .user }
+
+    var body: some View {
+        let tail: CGFloat = 6
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: 20, bottomLeadingRadius: isShopper ? 20 : tail,
+            bottomTrailingRadius: isShopper ? tail : 20, topTrailingRadius: 20, style: .continuous)
+        HStack {
+            if isShopper { Spacer(minLength: Theme.xxl) }
+            Text(line.text)
+                .font(isShopper ? Theme.body : Theme.speech)
+                .foregroundStyle(isShopper ? Theme.brandDeep : Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, Theme.l)
+                .padding(.vertical, Theme.m)
+                .background(isShopper ? Theme.brandSoft : Theme.surface, in: shape)
+                .accessibilityLabel(isShopper ? "You said: \(line.text)" : line.text)
+            if !isShopper { Spacer(minLength: Theme.xxl) }
+        }
     }
 }

@@ -21,6 +21,10 @@ fi
   echo "SUPABASE_URL = $(printf '%s' "$URL" | sed 's#//#/$()/#')"   # xcconfig treats // as a comment
   echo "SUPABASE_ANON_KEY = $KEY"
   echo "CART_ID = ${CART:-7}"
-  if [ -n "$TEAM" ]; then echo "DEVELOPMENT_TEAM = $TEAM"; fi
+  if [ -n "$TEAM" ]; then
+    echo "DEVELOPMENT_TEAM = $TEAM"
+    # Apple already has com.kart.app on another team: device builds get a per-team id; the simulator keeps com.kart.app.
+    echo "KART_BUNDLE_SUFFIX[sdk=iphoneos*] = .$(printf '%s' "$TEAM" | tr '[:upper:]' '[:lower:]')"
+  fi
 } > Config.xcconfig
 echo "wrote ios/Config.xcconfig (url ${URL:-unset}, cart ${CART:-7}, team ${TEAM:-none})"

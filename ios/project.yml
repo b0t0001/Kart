@@ -37,7 +37,7 @@ targets:
         - KartUITests
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.kart.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.kart.app$(KART_BUNDLE_SUFFIX)   # com.kart.app is taken on Apple's side for devices
         TARGETED_DEVICE_FAMILY: "2"
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES

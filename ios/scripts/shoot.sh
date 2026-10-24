@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -f Config.xcconfig ] || cp Config.example.xcconfig Config.xcconfig   # no Config yet: build against the mock
 SCENARIOS=${1:?scenario[,scenario…]}; shift || true
-DEVICE="iPad Pro 13-inch (M5)"
+DEVICE="${DEVICE:-iPad Pro 13-inch (M5)}"   # DEVICE="iPad Pro 11-inch (M5)" for the smaller screen
 if [ -z "${SKIP_BUILD:-}" ]; then
   xcodegen generate >/dev/null
   xcodebuild -project Kart.xcodeproj -scheme Kart -destination "platform=iOS Simulator,name=$DEVICE" \

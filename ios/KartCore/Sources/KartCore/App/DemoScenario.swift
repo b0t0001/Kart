@@ -3,7 +3,7 @@ import Foundation
 /// Seeded states for screenshots, rehearsal, and the offline demo (launch with `-KartScenario <name>`).
 /// Nothing is spoken: transcript lines are written directly.
 public enum DemoScenario: String, CaseIterable, Sendable {
-    case welcome, greeting, shopping, deal, confirm, crowded, checkout, checkoutUnresolved, receipt
+    case welcome, greeting, shopping, deal, confirm, crowded, talkative, checkout, checkoutUnresolved, receipt
 
     static let unsureLabel = "red jar of Rao's marinara"
     static let crowdedProducts = [
@@ -36,6 +36,14 @@ public enum DemoScenario: String, CaseIterable, Sendable {
                 if Self.crowdedTwice.contains(id) { await backend.simulateVision(.added, productId: id, confidence: 0.95, label: id) }
             }
             try await backend.dismissSuggestion()
+        case .talkative:                                     // the on-device taco test: long captions and a deal card
+            try await backend.appendTranscript(.user, "Hey, Kart, I don't really know, I don't have an exact list, but I'm "
+                + "looking to buy like ingredients for tacos. I have a family of 4, we just want to like have a taco night.")
+            try await backend.appendTranscript(.agent, "Taco night for four, love it. One sec while I build your list. I've put "
+                + "tortillas, ground beef, taco seasoning and salsa on your list. Your first stop is aisle 2 for the tortillas.")
+            try await backend.setPlan(["mission-tortillas", "ground-beef", "taco-seasoning", "tostitos-salsa"]
+                .map { PlanItem(productId: $0, reason: "taco night") })
+            await backend.simulateVision(.added, productId: "mission-tortillas", confidence: 0.95, label: "tortillas")
         case .checkout, .checkoutUnresolved, .receipt:
             for id in Self.checkoutProducts { await backend.simulateVision(.added, productId: id, confidence: 0.95, label: id) }
             try await backend.dismissSuggestion()
