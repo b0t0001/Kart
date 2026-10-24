@@ -57,10 +57,17 @@ def _crop(img: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
     return img[y:y + h, x:x + w]
 
 
-def classify_blob(blob: Blob, result: ChangeResult, empty: np.ndarray, cart: CartMemory, features, cfg) -> str | None:
+def gain_matched(result: ChangeResult, empty: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """(current, reference) brightness-matched to the empty picture. Full-frame work: once per camera."""
+    return match_gain(result.frame, empty), match_gain(result.reference, empty)
+
+
+def classify_blob(blob: Blob, result: ChangeResult, empty: np.ndarray, cart: CartMemory, features, cfg,
+                  matched: tuple[np.ndarray, np.ndarray] | None = None) -> str | None:
+    cur, ref = matched if matched is not None else gain_matched(result, empty)
     empty_crop = _crop(empty, blob.box)
-    after = _crop(match_gain(result.frame, empty), blob.box)
-    before = _crop(match_gain(result.reference, empty), blob.box)
+    after = _crop(cur, blob.box)
+    before = _crop(ref, blob.box)
     after_empty = float(lab_distance(after, empty_crop).mean()) < cfg.empty_thresh
     before_empty = float(lab_distance(before, empty_crop).mean()) < cfg.empty_thresh
     if after_empty and before_empty:
@@ -196,8 +203,9 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
             # Without an empty-basket picture a removal looks like an addition; let the other camera decide.
             log.warning("cam%d has no empty-basket picture yet; ignoring its changes (reset with the cart empty)", r.cam)
             continue
+        matched = gain_matched(r, empty)
         for b in r.blobs:
-            kind = classify_blob(b, r, empty, cart, features, cfg)
+            kind = classify_blob(b, r, empty, cart, features, cfg, matched)
             if kind == "added":
                 added.setdefault(r.cam, []).append(b)
             elif kind == "removed":

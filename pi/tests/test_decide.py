@@ -77,3 +77,14 @@ def test_camera_without_empty_picture_is_skipped(tmp_path):  # review I1
     only_cam0 = {0: w.empties[0]}  # cam1 never got an empty-basket picture
     ds = decide(settle(Scene(items=[RED]), Scene(), w.cfg), only_cam0, w.cart, w.identifier, w.features, w.cfg)
     assert [(d.kind, d.product_id) for d in ds] == [("removed", "red-box")]
+
+
+def test_gain_matching_runs_once_per_camera_not_per_blob(tmp_path, monkeypatch):  # review I4: Pi speed
+    import kartcv.decide as dm
+    w = world(tmp_path)
+    calls = []
+    real = dm.match_gain
+    monkeypatch.setattr(dm, "match_gain", lambda img, tgt: calls.append(1) or real(img, tgt))
+    items = [RED, BLUE, Item("green-bag", 80, 60, seed=3)]
+    decide(settle(Scene(), Scene(items=items), w.cfg), w.empties, w.cart, w.identifier, w.features, w.cfg)
+    assert len(calls) <= 2 * 2  # (current, reference) once per camera, however many blobs
