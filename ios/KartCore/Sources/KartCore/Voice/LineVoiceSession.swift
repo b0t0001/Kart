@@ -125,6 +125,8 @@ public final class LineVoiceSession: VoiceSession {
     public private(set) var state: VoiceState = .idle
     public private(set) var outputLevel: Double = 0
     public private(set) var isMuted = false
+    public var holdToTalk = false
+    public private(set) var isHeld = false
 
     @ObservationIgnored private let tokens: any VoiceTokenProviding
     @ObservationIgnored private let transport: any LineTransport
@@ -158,6 +160,10 @@ public final class LineVoiceSession: VoiceSession {
         disconnect()
         outputLevel = 0
         state = .idle
+    }
+
+    public func setHeld(_ held: Bool) {
+        isHeld = held
     }
 
     public func setMuted(_ muted: Bool) {
@@ -244,7 +250,10 @@ public final class LineVoiceSession: VoiceSession {
 
     private func sendMic(_ pcm: Data) {
         guard let streamId, !isMuted, state != .offline else { return }
-        let text = LineCodec.media(streamId: streamId, pcm: pcm)
+        // Hold-to-talk: silence of the same length while not held, so store chatter never leaves the iPad, the stream
+        // stays alive, and Line ends the shopper's turn on its own when they let go (Line has no end-of-turn message).
+        let audio = holdToTalk && !isHeld ? Data(count: pcm.count) : pcm
+        let text = LineCodec.media(streamId: streamId, pcm: audio)
         Task { try? await transport.send(text) }
     }
 

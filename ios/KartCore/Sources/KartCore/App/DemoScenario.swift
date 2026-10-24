@@ -3,7 +3,7 @@ import Foundation
 /// Seeded states for screenshots, rehearsal, and the offline demo (launch with `-KartScenario <name>`).
 /// Nothing is spoken: transcript lines are written directly.
 public enum DemoScenario: String, CaseIterable, Sendable {
-    case welcome, greeting, shopping, deal, confirm, crowded, talkative, checkout, checkoutUnresolved, receipt
+    case welcome, greeting, shopping, deal, confirm, crowded, talkative, amounts, checkout, checkoutUnresolved, receipt
 
     static let unsureLabel = "red jar of Rao's marinara"
     static let crowdedProducts = [
@@ -44,6 +44,16 @@ public enum DemoScenario: String, CaseIterable, Sendable {
             try await backend.setPlan(["mission-tortillas", "ground-beef", "taco-seasoning", "tostitos-salsa"]
                 .map { PlanItem(productId: $0, reason: "taco night") })
             await backend.simulateVision(.added, productId: "mission-tortillas", confidence: 0.95, label: "tortillas")
+        case .amounts:                                       // quantities: "2×" lines, and "1 of 2" for the beef
+            try await backend.appendTranscript(.user, "Taco night for eight people, and I need three avocados.")
+            try await backend.appendTranscript(.agent, "Taco night for eight, love it. I put two pounds of ground beef, "
+                + "two packs of tortillas and taco seasoning on your list, plus one bag of five avocados to cover your three.")
+            try await backend.setPlan([PlanItem(productId: "avocados", reason: "tacos"),
+                                       PlanItem(productId: "mission-tortillas", reason: "tacos", qty: 2),
+                                       PlanItem(productId: "ground-beef", reason: "tacos", qty: 2),
+                                       PlanItem(productId: "taco-seasoning", reason: "tacos")])
+            await backend.simulateVision(.added, productId: "ground-beef", confidence: 0.95, label: "ground beef")
+            try await backend.dismissSuggestion()
         case .checkout, .checkoutUnresolved, .receipt:
             for id in Self.checkoutProducts { await backend.simulateVision(.added, productId: id, confidence: 0.95, label: id) }
             try await backend.dismissSuggestion()

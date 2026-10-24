@@ -159,3 +159,28 @@ private let fast: [Duration] = [.milliseconds(10), .milliseconds(10), .milliseco
     let contexts = transport.events("custom").compactMap { $0["metadata"] as? [String: Any] }.filter { $0["type"] as? String == "trip_context" }
     #expect(contexts.last?["trip_id"] as? String == trip.uuidString.lowercased())   // the new call knows the trip
 }
+
+@MainActor @Test func holdToTalkSendsSilenceUnlessHeld() async throws {
+    let transport = FakeTransport(), audio = FakeAudio()
+    let voice = LineVoiceSession(tokens: FakeTokens(), transport: transport, audio: audio)
+    let starting = Task { await voice.start(cartId: "7", tripId: UUID()) }
+    await settle()
+    let streamId = try #require(transport.events("start").first?["stream_id"] as? String)
+    transport.receive(#"{"event":"ack","stream_id":"\#(streamId)","config":{}}"#)
+    await starting.value
+    voice.holdToTalk = true
+    let speech = Data([0, 0, 1, 0, 9, 9])
+    func lastPayload() -> String? { (transport.events("media_input").last?["media"] as? [String: Any])?["payload"] as? String }
+
+    audio.onMicChunk?(speech)                                 // store chatter while nobody holds the button
+    await settle()
+    #expect(lastPayload() == Data(count: speech.count).base64EncodedString())   // silence: Line's turn ends, nothing heard
+    voice.setHeld(true)
+    audio.onMicChunk?(speech)
+    await settle()
+    #expect(lastPayload() == speech.base64EncodedString() && voice.isHeld)
+    voice.setHeld(false)
+    audio.onMicChunk?(speech)
+    await settle()
+    #expect(lastPayload() == Data(count: speech.count).base64EncodedString())
+}

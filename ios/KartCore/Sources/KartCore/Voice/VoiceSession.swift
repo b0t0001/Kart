@@ -21,9 +21,13 @@ public enum VoiceEvent: Sendable, Equatable {
     /// 0–1 loudness of Kart's voice; drives the avatar's mouth.
     var outputLevel: Double { get }
     var isMuted: Bool { get }
+    /// Hold-to-talk (for a loud store): the mic reaches Kart only while the shopper holds the talk button.
+    var holdToTalk: Bool { get set }
+    var isHeld: Bool { get }
     func start(cartId: String, tripId: UUID) async
     func stop()
     func setMuted(_ muted: Bool)
+    func setHeld(_ held: Bool)
     func send(_ event: VoiceEvent)
 }
 

@@ -7,6 +7,8 @@ public final class MockVoiceSession: VoiceSession {
     public private(set) var state: VoiceState = .idle
     public private(set) var outputLevel: Double = 0
     public private(set) var isMuted = false
+    public var holdToTalk = false
+    public private(set) var isHeld = false
 
     /// Debug: simulate the voice connection dropping.
     public var forcedOffline = false {
@@ -49,6 +51,10 @@ public final class MockVoiceSession: VoiceSession {
         levelTask?.cancel()
         outputLevel = 0
         state = forcedOffline ? .offline : .idle
+    }
+
+    public func setHeld(_ held: Bool) {
+        isHeld = held
     }
 
     public func setMuted(_ muted: Bool) {

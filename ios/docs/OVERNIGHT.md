@@ -50,7 +50,9 @@ Local test of the agent before deploying: `cd agent && .venv/bin/python main.py`
 | `-KartCartID <id>` | Use another cart row (the live rehearsal uses `ipad-live`). |
 | `-KartVoice line` / `mock` | Real voice through Cartesia Line, or the scripted mock (default), for this launch. |
 | Debug panel → **Use Kart's real voice, Cartesia (relaunch)** | The same, and it sticks across launches (for an iPad started from the home screen). **Use the scripted voice (relaunch)** switches back. |
-| `-KartScenario <name>` | Seed a screen for screenshots (always the mock). |
+| Debug panel → **Hold to talk (for a loud store)** | A big press-and-hold button on the main screen. While it isn't held the iPad sends silence, so store chatter can't reach Kart; letting go ends your turn. Sticks across launches; hands-free is the default. `-KartHoldToTalk YES` does the same for one launch. |
+| `cartesia env set KART_BARGE_IN=off` (agent) | Nothing cuts Kart off mid-sentence. The greeting, deal lines and yes/no replies are already uninterruptible, so chatter can't wipe them. |
+| `-KartScenario <name>` | Seed a screen for screenshots (always the mock). `talkative` is a long conversation with a deal card; `amounts` shows "2×" lines and "1 of 2". `DEVICE="iPad Pro 11-inch (M5)" scripts/shoot.sh …` shoots the smaller iPad. |
 | `-KartStill YES`, `-KartDebugButton YES` | Freeze Kart's idle animation (UI tests); show a corner button for the debug panel. |
 
 ## Things worth knowing

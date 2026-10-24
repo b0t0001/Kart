@@ -113,6 +113,7 @@ final class KartWorld {
             mockVoice = scripted
             voiceKind = .mock
         }
+        voice.holdToTalk = LaunchPreferences.holdToTalk(defaults: defaults)     // the debug panel's loud-store switch
         model = AppModel(backend: backend, voice: voice, payment: payment, sounds: SoundPlayer(), clock: { clock.now })
     }
 

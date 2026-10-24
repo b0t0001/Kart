@@ -30,6 +30,10 @@ struct DebugPanel: View {
                             LaunchPreferences.persistVoice(.mock, defaults: .standard)
                         }
                     }
+                    Toggle("Hold to talk (for a loud store)", isOn: Binding(
+                        get: { world.voice.holdToTalk },
+                        set: { world.voice.holdToTalk = $0; LaunchPreferences.persistHoldToTalk($0, defaults: .standard) }))
+                        .accessibilityIdentifier("debug.holdToTalk")
                     if let error = world.supabase?.lastError {
                         Text("Last backend error: \(error)").foregroundStyle(.red).font(.footnote)
                     }

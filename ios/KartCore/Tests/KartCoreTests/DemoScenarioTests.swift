@@ -13,6 +13,8 @@ import Testing
     #expect(try await run(.deal).cart.suggestion?.dealId == "d-parm-3off")
     #expect(try await run(.confirm).events.contains { $0.needsConfirmation })
     #expect(try await run(.crowded).cart.items.count == 12)
+    let amounts = try await run(.amounts)                     // taco night for eight: 2 lb beef, one in the cart
+    #expect(amounts.cart.plan.first { $0.productId == "ground-beef" }.map { ($0.qty, $0.done) } ?? (0, true) == (2, false))
     let talk = try await run(.talkative)                     // the on-device taco test: long captions plus a deal card
     #expect(talk.transcript.count == 3 && talk.transcript[1].text.count > 150 && talk.cart.suggestion != nil)
     #expect(try await run(.checkoutUnresolved).cart.status == .checkout)

@@ -12,7 +12,7 @@ struct TripPanel: View {
         VStack(spacing: Theme.xl) {
             NextStopCard(model: model)
             HStack(alignment: .top, spacing: Theme.xl) {
-                ListColumn(plan: cart.plan, catalog: catalog)
+                ListColumn(plan: cart.plan, items: cart.items, catalog: catalog)
                 CartColumn(items: cart.items, unresolved: model.unresolvedCount, catalog: catalog)
             }
             .frame(maxHeight: .infinity)
@@ -56,7 +56,12 @@ private struct NextStopCard: View {
 
 private struct ListColumn: View {
     let plan: [PlanItem]
+    let items: [CartItem]
     let catalog: Catalog
+
+    private func inCart(_ productId: String) -> Int {
+        items.filter { $0.productId == productId }.reduce(0) { $0 + $1.qty }
+    }
 
     var body: some View {
         Column(title: "Your list") {
@@ -70,16 +75,20 @@ private struct ListColumn: View {
                     Image(systemName: line.done ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 26, weight: .medium))
                         .foregroundStyle(line.done ? Theme.green : Theme.hairline)
-                    Text(line.name ?? catalog.product(line.productId)?.shortName ?? line.reason)
+                    Text(PlanRow.title(line, name: line.name ?? catalog.product(line.productId)?.shortName ?? line.reason))
                         .font(Theme.body)
                         .foregroundStyle(line.done ? Theme.inkSecondary : Theme.ink)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                     Spacer(minLength: Theme.s)
                     if line.inStock == false {
                         Text("Out of stock").font(Theme.caption).foregroundStyle(Theme.amberInk)
                     } else if !line.done {
                         if let deal = line.dealLabel { DealBadge(label: deal) }
-                        if let aisle = line.aisle {
+                        if let progress = PlanRow.progress(line, inCart: inCart(line.productId)) {
+                            // Partly in the cart: you're at that shelf, so "1 of 2" takes the aisle's place.
+                            Text(progress).font(Theme.caption.weight(.medium)).foregroundStyle(Theme.greenInk)
+                        } else if let aisle = line.aisle {
                             Text(aisle).font(Theme.caption).foregroundStyle(Theme.inkSecondary)
                         }
                     }

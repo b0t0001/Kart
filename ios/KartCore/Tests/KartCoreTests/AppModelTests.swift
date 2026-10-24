@@ -7,6 +7,8 @@ import Testing
     var state: VoiceState = .listening
     var outputLevel: Double = 0
     var isMuted = false
+    var holdToTalk = false
+    var isHeld = false
     var sent: [VoiceEvent] = []
     var startCount = 0
     var stopCount = 0
@@ -14,6 +16,7 @@ import Testing
     func start(cartId: String, tripId: UUID) async { startCount += 1 }
     func stop() { stopCount += 1 }
     func setMuted(_ muted: Bool) { isMuted = muted }
+    func setHeld(_ held: Bool) { isHeld = held }
     func send(_ event: VoiceEvent) { sent.append(event) }
 }
 

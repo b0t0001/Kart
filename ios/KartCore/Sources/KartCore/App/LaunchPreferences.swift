@@ -34,3 +34,12 @@ extension LaunchPreferences {
 
     public static func persistVoice(_ voice: LaunchVoice, defaults: UserDefaults) { defaults.set(voice.rawValue, forKey: voiceKey) }
 }
+
+extension LaunchPreferences {
+    public static let holdToTalkKey = "KartHoldToTalk"
+
+    /// Hands-free by default; the debug panel's "Hold to talk" switch (for a loud store) sticks across launches.
+    public static func holdToTalk(defaults: UserDefaults) -> Bool { defaults.bool(forKey: holdToTalkKey) }
+
+    public static func persistHoldToTalk(_ on: Bool, defaults: UserDefaults) { defaults.set(on, forKey: holdToTalkKey) }
+}

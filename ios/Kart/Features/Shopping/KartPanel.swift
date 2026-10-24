@@ -10,7 +10,7 @@ struct KartPanel: View {
         VStack(spacing: Theme.xl) {
             AvatarView(mood: model.avatarMood, level: model.voice.outputLevel, reaction: model.reaction, size: 180)
                 .matchedGeometryEffect(id: "kart", in: namespace)
-            VoicePill(voice: model.voice)
+            if !model.voice.holdToTalk { VoicePill(voice: model.voice) }
             // A message thread: the newest bubble always in view, older ones scroll up under a fade (and back with a
             // finger) when a card or a long turn needs the room. Never pushes the card, or the bill beside it, off a
             // smaller iPad (seen on an 11-inch).
@@ -25,10 +25,37 @@ struct KartPanel: View {
                 .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
                                         removal: .move(edge: .leading).combined(with: .opacity)))
             }
+            if model.voice.holdToTalk { HoldToTalkButton(voice: model.voice) }
         }
         .padding(Theme.xl)
         .frame(maxHeight: .infinity, alignment: .top)
         .animation(Theme.spring, value: model.visibleCard?.id)
+    }
+}
+
+/// Hold-to-talk mode (a loud store): press and hold anywhere on it to talk to Kart, let go to send. Big, low and full
+/// width, so a thumb finds it while the other hand pushes the cart. Soft at rest; solid only while held, so it never
+/// competes with a card's Yes.
+struct HoldToTalkButton: View {
+    let voice: any VoiceSession
+
+    var body: some View {
+        let held = voice.isHeld
+        Label(held ? "Listening… let go to send" : "Hold to talk", systemImage: held ? "waveform" : "mic.fill")
+            .font(Theme.headline)
+            .foregroundStyle(held ? Color.white : Theme.brandDeep)
+            .frame(maxWidth: .infinity, minHeight: 96)
+            .background(held ? Theme.brand : Theme.brandSoft, in: Capsule())
+            .scaleEffect(held ? 1.03 : 1)
+            .contentShape(Capsule())
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { _ in if !voice.isHeld { voice.setHeld(true) } }
+                .onEnded { _ in voice.setHeld(false) })
+            .animation(Theme.spring, value: held)
+            .accessibilityElement()
+            .accessibilityLabel("Hold to talk")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityIdentifier("voice.holdToTalk")
     }
 }
 

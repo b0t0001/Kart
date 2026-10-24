@@ -40,3 +40,10 @@ private func defaults() -> UserDefaults {
     LaunchPreferences.persistVoice(.mock, defaults: d)
     #expect(LaunchPreferences.voice(defaults: d, scenario: nil, hasConfig: true) == .mock)
 }
+
+@Test func holdToTalkIsOffByDefaultAndSticks() {
+    let d = defaults()
+    #expect(LaunchPreferences.holdToTalk(defaults: d) == false)        // hands-free by default
+    LaunchPreferences.persistHoldToTalk(true, defaults: d)             // debug panel: "Hold to talk"
+    #expect(LaunchPreferences.holdToTalk(defaults: d) == true)
+}
