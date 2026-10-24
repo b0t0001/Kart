@@ -216,7 +216,8 @@ def _clean_edit_readback(tool_uses: list[Any], results: list[dict[str, Any]]) ->
         for out in lines:
             by_aisle.setdefault(out["edit"].get("aisle"), []).append(out["edit"]["what"])
         parts = [f"{_and(names)}, {aisle}" if aisle else _and(names) for aisle, names in by_aisle.items()]
-        return "Added " + ", and ".join(parts) + "."      # "Added salsa and queso, Aisle 5, and sour cream, Aisle 8."
+        notes = "".join(out["edit"].get("budget_note") or "" for out in lines)   # " That puts you at $X, over your $Y."
+        return "Added " + ", and ".join(parts) + "." + notes   # "Added salsa and queso, Aisle 5, and sour cream, Aisle 8."
     return " ".join(out["readback"] for out in lines)
 
 

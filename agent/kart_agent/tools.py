@@ -258,7 +258,8 @@ async def _edit_plan(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> di
                               "out_of_stock": [], "next_step": after.get("next_step"),
                               "readback": _readback(kind, product, target, old, in_cart) + _budget_note(cart, after)}
     if kind == "added":                                      # several adds at once are read back as one line
-        result["edit"] = {"kind": "added", "what": _added(target, product), "aisle": product.get("aisle")}
+        result["edit"] = {"kind": "added", "what": _added(target, product), "aisle": product.get("aisle"),
+                          "budget_note": _budget_note(cart, after)}
     if kind in ("added", "removed", "swapped", "amount") and isinstance(ctx.get("undo"), list):
         ctx["undo"].append({"plan": before, "readback": _undo_line(kind, product, had or 1, old)})
     if isinstance(ctx.get("skipped"), set):                 # taken off the list: no deals on it this trip
