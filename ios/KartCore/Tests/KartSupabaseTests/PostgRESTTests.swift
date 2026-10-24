@@ -117,6 +117,26 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         #expect(backend.catalog.product("kirkland-parmesan")?.price == Decimal(string: "4.99"))   // products still refresh
     }
 
+    @MainActor @Test func aFeatureOnByDefaultCountsUnlessTheCartTurnsItOff() async throws {
+        func cart(_ features: String) -> String {
+            #"[{"cart_id":"7","trip_id":"6f9619ff-8b86-d011-b42d-00c04fc964ff","status":"shopping","features":\#(features)}]"#
+        }
+        StubProtocol.routes = [
+            "products": .init(status: 200, body: Self.parmesanRow), "deals": .init(status: 200, body: "[]"),
+            "feature_flags": .init(status: 200, body: #"[{"name":"quantity_nudges","enabled_default":true}]"#),
+            "carts": .init(status: 200, body: cart("{}")),
+        ]
+        defer { StubProtocol.routes = [:] }
+        let backend = SupabaseKartBackend(url: URL(string: "http://127.0.0.1:54321")!, anonKey: "anon", cartId: "7",
+                                          layout: try Fixtures.catalog().layout, session: StubProtocol.session())
+        await backend.refreshCatalog()
+        try await backend.dismissSuggestion()                       // any RPC refetches the cart
+        #expect(backend.cart.quantityNudgesOn)                     // the flag's default applies to a cart with {}
+        StubProtocol.routes["carts"] = .init(status: 200, body: cart(#"{"quantity_nudges":false}"#))
+        try await backend.setStatus(.shopping)
+        #expect(!backend.cart.quantityNudgesOn)                    // the cart's own switch wins
+    }
+
     @MainActor @Test func aLateOlderRefetchNeverStepsTheCartBack() async throws {
         let trip = "6f9619ff-8b86-d011-b42d-00c04fc964ff"
         func row(_ updated: String, qty: Int) -> String {

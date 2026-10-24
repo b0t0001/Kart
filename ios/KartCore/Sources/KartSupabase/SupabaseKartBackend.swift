@@ -20,6 +20,8 @@ public final class SupabaseKartBackend: KartBackend {
     @ObservationIgnored private let cartId: String
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
     @ObservationIgnored private var pending: [Slice: Task<Void, Never>] = [:]
+    /// Each feature flag's enabled_default; a cart's own `features` entry overrides it.
+    @ObservationIgnored private var featureDefaults: [String: Bool] = [:]
 
     private enum Slice: Hashable { case cart, events, transcript, receipt, catalog }
 
@@ -191,7 +193,8 @@ public final class SupabaseKartBackend: KartBackend {
     }
 
     private func refreshCart(force: Bool = false) async {
-        guard let fresh = await fetch("carts?cart_id=eq.\(cartId)", as: CartState.self)?.first else { return }
+        guard var fresh = await fetch("carts?cart_id=eq.\(cartId)", as: CartState.self)?.first else { return }
+        fresh.features = featureDefaults.merging(fresh.features) { _, own in own }   // on by default unless switched off
         let tripChanged = fresh.tripId != cart.tripId
         // Overlapping refetches (a burst of row updates per event) can finish out of order: never step back in time.
         if !tripChanged, !force, let shown = cart.updatedAt, let updated = fresh.updatedAt, updated < shown { return }
@@ -226,6 +229,9 @@ public final class SupabaseKartBackend: KartBackend {
     }
 
     func refreshCatalog() async {
+        if let flags = await fetch("feature_flags?select=name,enabled_default", as: FlagRow.self) {
+            featureDefaults = Dictionary(flags.map { ($0.name, $0.enabledDefault) }, uniquingKeysWith: { first, _ in first })
+        }
         guard let products = await fetch("products?active=is.true&order=sort", as: Product.self),
               let deals = await fetch("deals?active=is.true&order=sort", as: Deal.self) else { return }
         catalog = Catalog(layout: await fetchLayout() ?? catalog.layout, products: products, deals: deals)
@@ -239,6 +245,12 @@ public final class SupabaseKartBackend: KartBackend {
         return StoreLayout(store: StoreInfo(name: store.name, width: store.width, height: store.height),
                            entrance: GridPoint(x: store.entranceX, y: store.entranceY), sections: sections)
     }
+}
+
+/// One `feature_flags` row: a beta and whether it's on for carts that don't say.
+private struct FlagRow: Decodable, Sendable {
+    let name: String
+    let enabledDefault: Bool
 }
 
 /// One `store_info` row: the store's size and entrance (and which layout is active, unused here).
