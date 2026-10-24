@@ -5,6 +5,7 @@ import SwiftUI
 struct WelcomeView: View {
     let model: AppModel
     let namespace: Namespace.ID
+    @State private var signingIn = false
 
     var body: some View {
         VStack(spacing: Theme.xxl) {
@@ -26,6 +27,22 @@ struct WelcomeView: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel("Start shopping")
         .accessibilityIdentifier("welcome.start")
+        // Member memory beta: outside the tap-anywhere element, so it stays its own button.
+        .overlay(alignment: .bottom) {
+            if model.backend.cart.memberMemoryOn {
+                Button { signingIn = true } label: {
+                    Label("Member? Sign in", systemImage: "person.crop.circle")
+                        .font(Theme.headline).foregroundStyle(Theme.brandDeep)
+                        .padding(.horizontal, Theme.xl).frame(minHeight: Theme.minTap)
+                        .background(Theme.brandSoft, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, Theme.xxxl)
+                .accessibilityIdentifier("welcome.signIn")
+            }
+        }
+        .overlay(alignment: .top) { DemoDateChip(model: model).padding(.top, Theme.xl) }
+        .sheet(isPresented: $signingIn) { MemberSignInView(model: model) }
     }
 }
 

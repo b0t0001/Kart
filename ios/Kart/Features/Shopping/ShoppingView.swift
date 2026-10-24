@@ -11,12 +11,24 @@ struct ShoppingView: View {
             HStack(spacing: Theme.xl) {
                 KartPanel(model: model, namespace: namespace)
                     .frame(width: (geometry.size.width - Theme.xl) * 0.4)
+                    .overlay(alignment: .topLeading) {        // member memory beta: who's signed in, the demo date
+                        VStack(alignment: .leading, spacing: Theme.s) {
+                            MemberChip(model: model)
+                            DemoDateChip(model: model)
+                        }
+                    }
                 TripPanel(model: model)
             }
         }
         .padding(Theme.xxl)
         .overlay(alignment: .top) { ReconnectingBanner(connection: model.backend.connection) }
         .overlay { StillShoppingPrompt(model: model) }
+        .task {                                               // member memory beta: a quiet minute → Kart's one question
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                model.sendLullIfDue(now: .now)
+            }
+        }
     }
 }
 

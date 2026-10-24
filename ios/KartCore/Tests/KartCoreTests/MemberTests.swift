@@ -203,3 +203,18 @@ struct MemberContractTests {
         #expect(t.model.demoDateLabel == "Fri, Oct 30 · demo date")
     }
 }
+
+@MainActor @Test func memberScenariosSeedTheBeat() async throws {
+    func run(_ s: DemoScenario) async throws -> MockKartBackend {
+        let clock = ManualClock()
+        let b = MockKartBackend(catalog: try Fixtures.catalog(), clock: { clock.now })
+        try await s.apply(to: b, clock: clock)
+        return b
+    }
+    let welcome = try await run(.memberWelcome)
+    #expect(welcome.cart.status == .idle && welcome.cart.memberMemoryOn)
+    let member = try await run(.member)
+    #expect(member.cart.memberId == "1029" && member.memberProfile?.picks.count == 3)
+    #expect(member.transcript.contains { $0.text.hasPrefix("Welcome back, Dylan!") })
+    #expect(TripRouter.screen(cart: member.cart, transcript: member.transcript) == .shopping)
+}
