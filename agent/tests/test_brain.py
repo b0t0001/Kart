@@ -118,3 +118,31 @@ async def test_the_demo_meals_have_exact_lists_in_the_prompt():
     system = llm.requests[0]["system"]
     assert "barilla-spaghetti x1, rao-marinara x1, french-baguette x1" in system
     assert "tostitos-salsa x1, queso x1, black-beans x1, jalapenos x1, daisy-sour-cream x1. Leave the chips off" in system
+
+
+async def test_the_prompt_says_how_to_edit_the_list_and_what_to_do_when_the_store_lacks_something():
+    llm = FakeLLM([Turn(chunks=["ok"])])
+    await collect(Brain(llm=llm).respond("hi", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
+    system = llm.requests[0]["system"]
+    assert "say its readback" in system and "change_by" in system and "replaces" in system
+    assert "call not_sold_here" in system and "Never say another store has it" in system
+
+
+async def test_a_clean_list_edit_is_read_back_word_for_word_without_another_claude_round():
+    llm = FakeLLM([Turn(chunks=["Sure."], tools=[ToolUse("t1", "add_to_plan", {"product_id": "daisy-sour-cream",
+                                                                               "reason": "tacos"})])])
+    brain = Brain(llm=llm)                                    # one scripted turn: a second Claude round would fail
+    said = await collect(brain.respond("add sour cream", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
+    assert "".join(said) == "Sure. Added sour cream, Aisle 8."
+    assert brain.messages[-1] == {"role": "assistant", "content": [{"type": "text", "text": "Added sour cream, Aisle 8."}]}
+
+
+async def test_a_sold_out_edit_goes_back_to_claude_to_offer_a_substitute():
+    backend = FakeBackend()
+    salsa = next(p for p in backend.catalog if p["id"] == "tostitos-salsa")
+    salsa["stock"], salsa["in_stock"] = 0, False
+    llm = FakeLLM([Turn(chunks=["Sure."], tools=[ToolUse("t1", "add_to_plan", {"product_id": "tostitos-salsa",
+                                                                               "reason": "nachos"})]),
+                   Turn(chunks=["Sorry, salsa is sold out today. The queso in Aisle 5 is in stock. Want that instead?"])])
+    said = await collect(Brain(llm=llm).respond("add salsa", {"backend": backend, "cart_id": "7", "trip_id": "t"}))
+    assert "".join(said).endswith("Want that instead?") and not llm.turns

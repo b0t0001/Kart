@@ -23,9 +23,8 @@ hears you right away.
 - Amounts count packages as the store sells them (the sizes are in the product list): "three avocados" is one \
 5-count bag, and say so ("one bag of five avocados"). For a meal, size it from the people and the package sizes \
 (about a quarter pound of meat per person; one 20-count pack of tortillas feeds about six). Otherwise one. Say \
-amounts back when they're more than one ("two pounds of ground beef"). "Make it three" or "just one" changes the amount with \
-add_to_plan; "take the salsa off" uses remove_from_plan. If a tool result has notes (like "Only 2 Parmesan in stock"), \
-tell the shopper. With set_plan, pass meal: what the trip is for in a few words ("taco night for 4"). Give \
+amounts back when they're more than one ("two pounds of ground beef"). If a tool result has notes (like "Only 2 \
+Parmesan in stock"), tell the shopper. With set_plan, pass meal: what the trip is for in a few words ("taco night for 4"). Give \
 every plan line a short basis, the math behind its amount ("8 people x 1/4 lb = 2 lb", \
 "16 tacos, 20 per pack = 1 pack").
 - Store meal lists: when the shopper asks for one of these, plan exactly this list (scale only for a much bigger \
@@ -38,7 +37,18 @@ daisy-sour-cream x1. Leave the chips off: the cart offers them with a deal. Basi
 deals right after.
 - The mic hears the whole store. If what you heard clearly isn't meant for you (people talking to each other, \
 background chatter, half a sentence), reply with exactly <quiet> and nothing else. When unsure, answer briefly.
-- If something isn't in the store, say so plainly ("I don't see cilantro here").
+- Editing the list: "add the sour cream" (add_to_plan), "take the salsa off" (remove_from_plan), "make it three" or \
+"just one" (add_to_plan with qty), "another one" or "one more box" (change_by 1), "one less" (change_by -1), "swap the \
+salsa for queso" (add_to_plan for the queso with replaces = the salsa). Always call the tool, even if you think it's \
+sold out. Before it, say just one word ("Sure."): the cart reads a plain edit back itself. If you get the result back \
+instead, say its readback and nothing more (unless it's sold out, below).
+- Sold out: the readback says so. Offer at most one of the result's substitutes, only if it reasonably stands in, with \
+its aisle ("The queso in Aisle 5 is in stock. Want that instead?"). If none does, stop there.
+- Not in the store (nothing in the product list below fits): call not_sold_here, then say it plainly ("We don't carry \
+cilantro."). Then offer at most one in_store option if it reasonably stands in ("The salsa in Aisle 5 could work \
+instead."), and at most one nearby store whose good_for fits, only as a maybe ("Berkeley Bowl, about 1.5 miles away, \
+might have it fresh."). Never say another store has it or what it costs there, and never say what a product \
+contains unless its name says so.
 - Don't plan products that are out of stock; offer the closest in-stock alternative instead.
 - For a meal, plan the basics (for a pasta dinner: the pasta, the sauce, bread). Leave extras like cheese, sides and \
 drinks off unless they ask: the cart offers those with deal cards, and it never offers a deal on something already on \
@@ -135,4 +145,30 @@ class Brain:
                 results.append({"type": "tool_result", "tool_use_id": block.id, "content": result,
                                 **({"is_error": True} if '"error"' in result[:12] else {})})
             self.messages.append({"role": "user", "content": results})
+            readback = _clean_edit_readback(tool_uses, results)
+            if readback:                                 # a plain list edit: say it word for word, no second round
+                yield readback if last_said[-1:].isspace() or not last_said else " " + readback
+                self.messages.append({"role": "assistant", "content": [{"type": "text", "text": readback}]})
+                return
         yield "Sorry, give me a second and say that again?"
+
+
+EDIT_TOOLS = {"add_to_plan", "remove_from_plan"}
+
+
+def _clean_edit_readback(tool_uses: list[Any], results: list[dict[str, Any]]) -> str | None:
+    """The readback(s) when every tool this round was a list edit that went through as asked: nothing sold out, no
+    stock notes, no errors. Otherwise None, and Claude gets the results (to offer a substitute, say a note, ...)."""
+    if not tool_uses or any(b.name not in EDIT_TOOLS for b in tool_uses):
+        return None
+    lines = []
+    for result in results:
+        try:
+            out = json.loads(result["content"])
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(out, dict) or not out.get("readback") or out.get("error") or out.get("notes") \
+                or out.get("out_of_stock") or out.get("not_in_store"):
+            return None
+        lines.append(out["readback"])
+    return " ".join(lines)

@@ -70,7 +70,7 @@ def _words(n: int) -> str:
 def _unit(product_name: str) -> str | None:
     """The package a count means, from the name as sold: "5 ct bag" -> bag, "20 ct" -> pack, "1 lb" -> pound."""
     name = product_name.lower()
-    for word in ("bag", "wedge", "jar", "box", "bunch", "kit"):
+    for word in ("bag", "wedge", "jar", "box", "bunch", "kit", "can"):
         if re.search(rf"\b{word}\b", name):
             return word
     if re.search(r"\b\d+\s*ct\b", name):

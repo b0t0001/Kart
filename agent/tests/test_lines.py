@@ -115,3 +115,9 @@ def test_kart_speaks_up_when_you_pay_and_when_the_camera_is_unsure():
     assert proactive_line({"type": "ui_action", "action": "unknown_item"}, CATALOG, []) == (
         "I'm not sure what that is. Can you check the screen?")
     assert proactive_line({"type": "ui_action", "action": "checkout_tapped"}, CATALOG, []) is None
+
+
+def test_canned_goods_count_in_cans():
+    from kart_agent.lines import _amount
+    beans = {"id": "black-beans", "name": "Black Beans, 15 oz can", "short_name": "Black Beans", "category": "canned"}
+    assert _amount(2, beans) == "two cans of black beans"

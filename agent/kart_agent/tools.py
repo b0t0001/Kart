@@ -7,6 +7,9 @@ import re
 import uuid
 from typing import Any
 
+from .lines import _amount, _unit_of, _words
+
+
 def _tool(name: str, description: str, properties: dict[str, Any] | None = None, required: list[str] | None = None) -> dict[str, Any]:
     return {
         "name": name,
@@ -36,10 +39,18 @@ TOOLS: list[dict[str, Any]] = [
            "meal": {"type": "string", "description": "what the trip is for, in a few words, e.g. 'taco night for 4'"}},
           ["items"]),
     _tool("add_to_plan", "Add one product to the shopping list, keeping the rest; with qty, sets how many (also for a "
-          "product already on the list: 'make it three').",
+          "product already on the list: 'make it three'). Returns `readback`, the short line to say back.",
           {"product_id": {"type": "string"}, "reason": {"type": "string"}, "qty": {"type": "integer", "minimum": 1},
+           "change_by": {"type": "integer", "description": "'another one' = 1, 'one less' = -1: changes the amount by this"},
+           "replaces": {"type": "string", "description": "'swap the salsa for queso': the salsa's product_id, taken off "
+                                                         "in the same update"},
            "basis": {"type": "string"}}, ["product_id", "reason"]),
-    _tool("remove_from_plan", "Take one product off the shopping list.", {"product_id": {"type": "string"}}, ["product_id"]),
+    _tool("remove_from_plan", "Take one product off the shopping list. Returns `readback`.",
+          {"product_id": {"type": "string"}}, ["product_id"]),
+    _tool("not_sold_here", "The shopper wants something that isn't in the store's product list. Returns in-stock "
+          "products that could stand in (matching `like`) and nearby stores that might have it. Changes nothing.",
+          {"item": {"type": "string", "description": "what they asked for, e.g. 'cilantro'"},
+           "like": {"type": "string", "description": "words for what could stand in, e.g. 'salsa mexican'"}}, ["item"]),
     _tool("get_deals", "Every live deal in the store, with product, label and aisle."),
     _tool("set_location", "The shopper said where they are, e.g. 'aisle 5'.", {"section": {"type": "string"}}, ["section"]),
     _tool("dismiss_suggestion", "The shopper said no to the current deal suggestion."),
@@ -58,6 +69,69 @@ def _tokens(text: str) -> set[str]:
 def _product_view(p: dict[str, Any]) -> dict[str, Any]:
     keys = ("id", "short_name", "name", "price", "sale_price", "deal_label", "aisle", "in_stock", "stock")
     return {k: p.get(k) for k in keys}
+
+
+def _name(p: dict[str, Any]) -> str:
+    """How the product sounds mid-sentence: "sour cream"."""
+    return (p.get("short_name") or p["name"]).lower()
+
+
+def _cap(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
+def _sold_out(p: dict[str, Any]) -> bool:
+    return p.get("in_stock") is False or p.get("stock") == 0
+
+
+def _substitutes(product: dict[str, Any], catalog: list[dict[str, Any]], listed: set[str] = frozenset()) -> list[dict[str, Any]]:
+    """In-stock stand-ins for a sold-out product, not already on the list: the same kind first, then the most shared
+    tags (at least two)."""
+    tags = set(product.get("tags") or [])
+    scored = []
+    for index, p in enumerate(catalog):
+        if p["id"] == product["id"] or p["id"] in listed or _sold_out(p):
+            continue
+        same, shared = p.get("category") == product.get("category"), len(tags & set(p.get("tags") or []))
+        if same or shared >= 2:
+            scored.append((not same, -shared, index, p))
+    return [_product_view(p) for *_, p in sorted(scored, key=lambda s: s[:3])[:3]]
+
+
+def _distance(value: Any) -> Any:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return f"about {value:g} {'mile' if value == 1 else 'miles'} away"
+    return value
+
+
+async def _nearby_stores(backend: Any) -> list[dict[str, Any]]:
+    """Other stores nearby (store_info.nearby), each one that only *might* have it. Empty if the store has none."""
+    try:
+        stores = await backend.get_nearby_stores()
+    except Exception:
+        return []
+    return [{"name": s["name"], "distance": _distance(s.get("distance")), "kind": s.get("kind"),
+             "good_for": s.get("good_for") or [], "might_have_it": True}
+            for s in stores if isinstance(s, dict) and isinstance(s.get("name"), str)]
+
+
+def _readback(kind: str, product: dict[str, Any], qty: int, old: dict[str, Any] | None, in_cart: int) -> str:
+    """The short line Kart says after a list edit, from the live catalog."""
+    where = f", {product['aisle']}" if product.get("aisle") else ""
+    counted = _unit_of(product) is not None                 # "two boxes of spaghetti"; else "sour cream, two"
+    if kind == "added":
+        if qty == 1 or counted:
+            return f"Added {_name(product) if qty == 1 else _amount(qty, product)}{where}."
+        return f"Added {_name(product)}, {_words(qty)} of them{where}."
+    if kind == "swapped" and old is not None:
+        return f"Swapped {_name(old)} for {_name(product)}{where}."
+    if kind == "amount":
+        return f"{_cap(_amount(qty, product))} now." if counted else f"{_cap(_name(product))}, {_words(qty)} now."
+    if kind == "already":
+        return f"{_cap(_name(product))}'s already on your list."
+    if kind == "removed":
+        return f"Took {_name(product)} off your list." + (" It's still in your cart." if in_cart else "")
+    return f"{_cap(_name(product))} wasn't on your list."
 
 
 async def run_tool(name: str, args: Any, ctx: dict[str, Any]) -> str:
@@ -101,21 +175,58 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
             "suggestion": (cart.get("suggestion") or {}).get("text"),
             "unrecognized_items": len(await backend.unresolved_events(cart_id, ctx.get("trip_id") or cart.get("trip_id"))),
         }
+    if name == "not_sold_here":
+        item, products = _str(args, "item"), await backend.get_catalog()
+        asked = _tokens(item)
+        carried = [p for p in products if asked and asked <= _tokens(f"{p['name']} {p.get('short_name') or ''}")]
+        if carried:                                          # it is sold here after all: add it instead
+            return {"sold_here": [_product_view(p) for p in carried[:3]]}
+        like, scored = _tokens(args.get("like") or ""), []
+        for index, p in enumerate(products):
+            words = _tokens(" ".join([p["name"], p.get("short_name") or "", p.get("category") or "", *p.get("tags", [])]))
+            hits = len(like & words)
+            if hits and not _sold_out(p):
+                scored.append((-hits, index, p))
+        return {"not_sold_here": item, "in_store": [_product_view(p) for *_, p in sorted(scored, key=lambda s: s[:2])[:3]],
+                "nearby_stores": await _nearby_stores(backend)}
     if name in ("set_plan", "add_to_plan", "remove_from_plan"):
-        catalog = {p["id"]: p for p in await backend.get_catalog()}
+        products = await backend.get_catalog()
+        catalog = {p["id"]: p for p in products}
+        edit: tuple[str, str, dict[str, Any] | None, int] | None = None   # (kind, product_id, swapped-out product, in cart)
         if name in ("add_to_plan", "remove_from_plan"):
             cart = await backend.get_cart(cart_id)
             items = [{"product_id": p["product_id"], "reason": p.get("reason", ""), "qty": p.get("qty", 1),
                       "basis": p.get("basis")} for p in cart.get("plan", [])]
             product_id = _str(args, "product_id")
+            product = catalog.get(product_id)
+            current = next((i for i in items if i["product_id"] == product_id), None)
+            in_cart = sum(i.get("qty", 1) for i in cart.get("items", []) if i.get("product_id") == product_id)
+            qty, change = args.get("qty"), args.get("change_by")
+            qty = qty if isinstance(qty, int) and qty > 0 else None
+            change = change if isinstance(change, int) and not isinstance(change, bool) and change else None
+            if name == "add_to_plan" and product is not None and _sold_out(product):   # say so, offer what's in stock
+                return {"planned": [], "not_in_store": [], "out_of_stock": [product_id], "next_step": cart.get("next_step"),
+                        "readback": f"Sorry, {_name(product)} is sold out today.",
+                        "substitutes": _substitutes(product, products, {i["product_id"] for i in items})}
             if name == "remove_from_plan":
                 items = [i for i in items if i["product_id"] != product_id]
-            elif all(i["product_id"] != product_id for i in items):
-                items.append({"product_id": product_id, "reason": _str(args, "reason"), "qty": args.get("qty", 1),
-                              "basis": args.get("basis")})
-            elif isinstance(args.get("qty"), int):
-                items = [{**i, "qty": args["qty"], "basis": args.get("basis") or i.get("basis")}
+                edit = ("removed" if current else "absent", product_id, None, in_cart)
+            elif current is None:
+                old = catalog.get(args["replaces"]) if isinstance(args.get("replaces"), str) else None
+                items = [i for i in items if old is None or i["product_id"] != old["id"]]
+                items.append({"product_id": product_id, "reason": _str(args, "reason"),
+                              "qty": qty or (change if change and change > 0 else 1), "basis": args.get("basis")})
+                edit = ("swapped" if old else "added", product_id, old, in_cart)
+            elif change and current["qty"] + change <= 0:   # "one less" of the last one
+                items = [i for i in items if i["product_id"] != product_id]
+                edit = ("removed", product_id, None, in_cart)
+            elif change or qty:
+                new = current["qty"] + change if change else qty
+                items = [{**i, "qty": new, "basis": args.get("basis") or i.get("basis")}
                          if i["product_id"] == product_id else i for i in items]
+                edit = ("amount", product_id, None, in_cart)
+            else:
+                edit = ("already", product_id, None, in_cart)
         else:
             items = args.get("items")
             if not isinstance(items, list):
@@ -144,7 +255,14 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
                 lines.append({"product_id": item["product_id"], "reason": str(item.get("reason", "")), "qty": qty,
                               **({"basis": basis} if isinstance(basis, str) and basis else {})})
         cart = await backend.rpc("set_plan", p_cart_id=cart_id, p_plan=lines)
-        result = {"planned": planned, "not_in_store": missing, "out_of_stock": sold_out, "next_step": cart.get("next_step")}
+        result: dict[str, Any] = {"planned": planned, "not_in_store": missing, "out_of_stock": sold_out,
+                                  "next_step": cart.get("next_step")}
+        if sold_out:
+            result["substitutes"] = {pid: _substitutes(catalog[pid], products, set(planned)) for pid in sold_out}
+        if edit and edit[1] in catalog:
+            kind, pid, old, in_cart = edit
+            final = next((line["qty"] for line in lines if line["product_id"] == pid), 1)
+            result["readback"] = _readback(kind, catalog[pid], final, old, in_cart)
         return {**result, "notes": notes} if notes else result
     if name == "get_deals":
         return [_product_view(p) for p in await backend.get_catalog() if p.get("deal_label")]

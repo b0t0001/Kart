@@ -18,7 +18,19 @@ CATALOG = [
      "stock": 2, "category": "cheese", "tags": ["pasta", "italian"]},
     {"id": "bananas", "name": "Bananas, bunch (about 2.5 lb)", "short_name": "Bananas", "price": 1.49, "sale_price": 1.49,
      "deal_label": None, "aisle": "Aisle 1", "section": "A1", "in_stock": False, "stock": 0, "category": "produce", "tags": ["fruit"]},
+    {"id": "tostitos-salsa", "name": "Salsa, 16 oz jar", "short_name": "Salsa", "price": 3.49, "sale_price": 3.49,
+     "deal_label": None, "aisle": "Aisle 5", "section": "A5", "in_stock": True, "stock": 35, "category": "salsa",
+     "tags": ["tacos", "nachos", "mexican", "snack"]},
+    {"id": "queso", "name": "Salsa con Queso Dip, 15 oz jar", "short_name": "Queso", "price": 3.99, "sale_price": 3.99,
+     "deal_label": None, "aisle": "Aisle 5", "section": "A5", "in_stock": True, "stock": 20, "category": "dip",
+     "tags": ["nachos", "mexican", "snack", "party"]},
+    {"id": "daisy-sour-cream", "name": "Sour Cream, 16 oz", "short_name": "Sour Cream", "price": 2.99, "sale_price": 2.99,
+     "deal_label": None, "aisle": "Aisle 8", "section": "A8", "in_stock": True, "stock": 30, "category": "dairy",
+     "tags": ["tacos", "nachos", "mexican"]},
 ]
+
+NEARBY = [{"name": "Berkeley Bowl", "distance": 1.5, "kind": "grocery", "good_for": ["produce", "fresh herbs"]},
+          {"name": "Walgreens", "distance": 0.4, "kind": "pharmacy", "good_for": ["household", "snacks"]}]
 
 
 DEALS = [{"id": "d-parm-3off", "product_id": "kirkland-parmesan", "label": "$3 off",
@@ -34,12 +46,19 @@ class FakeBackend:
     deals: list[dict[str, Any]] = field(default_factory=lambda: copy.deepcopy(DEALS))
     transcript: list[tuple[str, str]] = field(default_factory=list)
     calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    catalog: list[dict[str, Any]] = field(default_factory=lambda: copy.deepcopy(CATALOG))
+    nearby: list[dict[str, Any]] | None = field(default_factory=lambda: copy.deepcopy(NEARBY))   # None: the read fails
 
     async def get_cart(self, cart_id: str) -> dict[str, Any]:
         return copy.deepcopy(self.cart)
 
     async def get_catalog(self) -> list[dict[str, Any]]:
-        return copy.deepcopy(CATALOG)
+        return copy.deepcopy(self.catalog)
+
+    async def get_nearby_stores(self) -> list[dict[str, Any]]:
+        if self.nearby is None:
+            raise RuntimeError("store_info.nearby is not there yet")
+        return copy.deepcopy(self.nearby)
 
     async def get_live_deals(self) -> list[dict[str, Any]]:
         return copy.deepcopy(self.deals)

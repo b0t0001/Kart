@@ -19,7 +19,7 @@ def ctx(backend):
 def test_every_tool_streams_eagerly_and_has_a_schema():
     names = {t["name"] for t in TOOLS}
     assert names == {"search_catalog", "get_cart", "set_plan", "add_to_plan", "remove_from_plan", "dismiss_nudge", "get_deals", "set_location",
-                     "dismiss_suggestion", "confirm_item", "start_checkout"}
+                     "dismiss_suggestion", "confirm_item", "start_checkout", "not_sold_here"}
     assert all(t["eager_input_streaming"] and t["input_schema"]["type"] == "object" for t in TOOLS)
 
 
@@ -117,3 +117,102 @@ async def test_set_plan_remembers_what_the_trip_is_for(backend):
     c = ctx(backend)
     await run_tool("set_plan", {"meal": "taco night for 4", "items": [{"product_id": "barilla-spaghetti", "reason": "x"}]}, c)
     assert c["meal"] == "taco night for 4"
+
+
+# Editing the list by voice: every edit comes back with the line Kart reads back (facts from the live catalog).
+
+def planned(backend):
+    return {p["product_id"]: p["qty"] for p in backend.cart["plan"]}
+
+
+async def test_adding_a_product_reads_back_where_it_is(backend):
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "daisy-sour-cream", "reason": "tacos"}, ctx(backend)))
+    assert out["readback"] == "Added sour cream, Aisle 8." and planned(backend) == {"daisy-sour-cream": 1}
+
+
+async def test_another_one_raises_the_amount_by_one(backend):
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta night", "qty": 1}]
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "barilla-spaghetti", "reason": "pasta night",
+                                                    "change_by": 1}, ctx(backend)))
+    assert out["readback"] == "Two boxes of spaghetti now." and planned(backend) == {"barilla-spaghetti": 2}
+
+
+async def test_one_less_of_the_last_one_takes_it_off(backend):
+    backend.cart["plan"] = [{"product_id": "tostitos-salsa", "reason": "nachos", "qty": 1}]
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "tostitos-salsa", "reason": "nachos", "change_by": -1},
+                                    ctx(backend)))
+    assert out["readback"] == "Took salsa off your list." and planned(backend) == {}
+
+
+async def test_make_it_two_sets_the_amount(backend):
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta night", "qty": 3}]
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "barilla-spaghetti", "reason": "pasta night", "qty": 2},
+                                    ctx(backend)))
+    assert out["readback"] == "Two boxes of spaghetti now." and planned(backend) == {"barilla-spaghetti": 2}
+
+
+async def test_adding_what_is_already_on_the_list_says_so(backend):
+    backend.cart["plan"] = [{"product_id": "tostitos-salsa", "reason": "nachos", "qty": 1}]
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "tostitos-salsa", "reason": "nachos"}, ctx(backend)))
+    assert out["readback"] == "Salsa's already on your list." and planned(backend) == {"tostitos-salsa": 1}
+
+
+async def test_a_sold_out_product_is_not_added_and_comes_with_in_stock_substitutes(backend):
+    salsa = next(p for p in backend.catalog if p["id"] == "tostitos-salsa")
+    salsa["stock"], salsa["in_stock"] = 0, False
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "tostitos-salsa", "reason": "nachos"}, ctx(backend)))
+    assert out["readback"] == "Sorry, salsa is sold out today." and planned(backend) == {}
+    assert [s["id"] for s in out["substitutes"]] == ["queso", "daisy-sour-cream"]      # most shared tags first
+    assert all(s["in_stock"] for s in out["substitutes"]) and out["substitutes"][0]["aisle"] == "Aisle 5"
+
+
+async def test_swap_replaces_one_product_with_another_in_one_update(backend):
+    backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "nachos", "qty": 1},
+                            {"product_id": "tostitos-salsa", "reason": "nachos", "qty": 1}]
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "queso", "reason": "nachos", "replaces": "tostitos-salsa"},
+                                    ctx(backend)))
+    assert out["readback"] == "Swapped salsa for queso, Aisle 5."
+    assert planned(backend) == {"barilla-spaghetti": 1, "queso": 1}
+    assert [name for name, _ in backend.calls].count("set_plan") == 1
+
+
+async def test_removing_reads_back_and_says_when_it_is_still_in_the_cart(backend):
+    backend.cart["plan"] = [{"product_id": "tostitos-salsa", "reason": "nachos", "qty": 1}]
+    backend.cart["items"] = [{"product_id": "tostitos-salsa", "name": "Salsa", "qty": 1, "price": 3.49}]
+    out = json.loads(await run_tool("remove_from_plan", {"product_id": "tostitos-salsa"}, ctx(backend)))
+    assert out["readback"] == "Took salsa off your list. It's still in your cart." and planned(backend) == {}
+
+
+async def test_something_the_store_does_not_carry_gets_in_store_options_and_nearby_stores(backend):
+    out = json.loads(await run_tool("not_sold_here", {"item": "cilantro", "like": "salsa mexican"}, ctx(backend)))
+    assert out["not_sold_here"] == "cilantro"
+    assert [p["id"] for p in out["in_store"]][0] == "tostitos-salsa" and all(p["in_stock"] for p in out["in_store"])
+    assert out["nearby_stores"][0] == {"name": "Berkeley Bowl", "distance": "about 1.5 miles away", "kind": "grocery",
+                                       "good_for": ["produce", "fresh herbs"], "might_have_it": True}
+    assert backend.calls == []                                  # nothing on the list changes
+
+
+async def test_not_sold_here_works_before_the_backend_has_nearby_stores(backend):
+    backend.nearby = None
+    out = json.loads(await run_tool("not_sold_here", {"item": "cilantro"}, ctx(backend)))
+    assert out["nearby_stores"] == [] and out["in_store"] == []
+
+
+async def test_not_sold_here_notices_when_the_store_does_carry_it(backend):
+    out = json.loads(await run_tool("not_sold_here", {"item": "sour cream"}, ctx(backend)))
+    assert [p["id"] for p in out["sold_here"]] == ["daisy-sour-cream"] and "not_sold_here" not in out
+
+
+async def test_an_amount_without_a_package_unit_still_reads_naturally(backend):
+    backend.cart["plan"] = [{"product_id": "daisy-sour-cream", "reason": "tacos", "qty": 1}]
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "daisy-sour-cream", "reason": "tacos", "qty": 2},
+                                    ctx(backend)))
+    assert out["readback"] == "Sour cream, two now."
+
+
+async def test_substitutes_skip_what_is_already_on_the_list(backend):
+    backend.cart["plan"] = [{"product_id": "queso", "reason": "nachos", "qty": 1}]
+    salsa = next(p for p in backend.catalog if p["id"] == "tostitos-salsa")
+    salsa["stock"], salsa["in_stock"] = 0, False
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "tostitos-salsa", "reason": "nachos"}, ctx(backend)))
+    assert [s["id"] for s in out["substitutes"]] == ["daisy-sour-cream"]
