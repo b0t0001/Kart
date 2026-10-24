@@ -1,0 +1,170 @@
+"""One full shopper trip plus the merchant beat, through Supabase the way the Pi and iPad see it.
+
+  backend/.venv/bin/python -m pytest backend/e2e        # needs a running Supabase + values in .env
+"""
+
+from __future__ import annotations
+
+import uuid
+
+import httpx
+import pytest
+from client import ANON, URL, RpcError
+from psycopg.types.json import Jsonb
+from realtime import Watch
+
+PASTA = [
+    {"product_id": "barilla-spaghetti", "reason": "the pasta"},
+    {"product_id": "rao-marinara", "reason": "the sauce"},
+    {"product_id": "kirkland-parmesan", "reason": "to grate on top"},
+    {"product_id": "french-baguette", "reason": "garlic bread"},
+]
+
+
+def cv_event(cart_id, type_, product_id, label, confidence=0.93, method="local", cameras=(0, 1)):
+    """An event exactly as the Pi emits it (pi spec §8)."""
+    eid = str(uuid.uuid4())
+    return {"event_id": eid, "cart_id": cart_id, "type": type_, "product_id": product_id,
+            "confidence": confidence, "method": method, "label": label, "cameras": list(cameras),
+            "crops": [f"state/crops/{eid}_cam0.jpg"], "ts": "2026-10-24T14:02:11Z"}
+
+
+def cv_to_rpc(ev):
+    """The Pi's HttpSink mapping onto apply_cart_event (CONTRACT §4)."""
+    return {"p_cart_id": ev["cart_id"], "p_type": ev["type"], "p_product_id": ev["product_id"],
+            "p_confidence": ev["confidence"], "p_source": "vision", "p_label": ev["label"],
+            "p_camera": ev["cameras"][0] if ev["cameras"] else None,
+            "p_event_id": ev["event_id"], "p_method": ev["method"]}
+
+
+def merchant(db, tool, args, summary):
+    """What the console does on Confirm: a staged change, then merchant_apply."""
+    cid = db.execute("insert into merchant_changes (tool, args, summary, request) values (%s, %s, %s, 'e2e') "
+                     "returning id", [tool, Jsonb(args), summary]).fetchone()[0]
+    db.execute("select merchant_apply(%s)", [cid])
+    return cid
+
+
+def qty(cart, pid):
+    return next((i["qty"] for i in cart["items"] if i["product_id"] == pid), 0)
+
+
+def test_full_trip_with_the_merchant_beat(rest, db, cart_id):
+    watch = Watch(URL, ANON, "carts", f"cart_id=eq.{cart_id}")
+    try:
+        # The pitch opens without a Parmesan deal; the owner will create it live.
+        merchant(db, "end_deal", {"deal_id": "d-parm-3off"}, "End the Parmesan deal")
+
+        # iPad: Welcome tap, then the voice agent's plan
+        c = rest.rpc("reset_cart", p_cart_id=cart_id)
+        trip = c["trip_id"]
+        assert c["status"] == "shopping" and c["items"] == []
+        c = rest.rpc("set_plan", p_cart_id=cart_id, p_plan=PASTA)
+        assert [p["product_id"] for p in c["plan"]][0] == "french-baguette"     # route from the entrance
+        assert c["next_step"] == "Aisle 2 → Baguette, $1 off"
+        line = rest.rpc("append_transcript", p_cart_id=cart_id, p_role="user", p_text="pasta dinner for my family")
+        assert line["trip_id"] == trip
+
+        # CV: spaghetti goes in (§8 event), then the outbox retries the same event
+        spag = cv_event(cart_id, "added", "barilla-spaghetti", "Barilla Spaghetti, 1 lb")
+        c = rest.rpc("apply_cart_event", **cv_to_rpc(spag))
+        assert c["total"] == 1.99 and c["location"]["section"] == "A6"
+        assert c["suggestion"]["text"] == "Baguette is $1 off in Aisle 2. Want it?"
+        c = rest.rpc("apply_cart_event", **cv_to_rpc(spag))
+        assert qty(c, "barilla-spaghetti") == 1
+        assert len(rest.get("/cart_events", event_id=f"eq.{spag['event_id']}", select="id")) == 1
+        seen = watch.wait_for(lambda r: float(r.get("total") or 0) == 1.99)
+        assert seen["cart_id"] == cart_id                                        # realtime reached the "iPad"
+
+        # iPad: "No thanks" on the Baguette card
+        c = rest.rpc("dismiss_suggestion", p_cart_id=cart_id)
+        assert c["suggestion"] is None and "d-baguette-1off" in c["suggested_deals"]
+
+        # Merchant: "parmesan $3 off" confirmed in the console → the cart's card switches live
+        merchant(db, "create_deal", {"deal_id": "d-e2e-parm", "product_id": "kirkland-parmesan",
+                                     "type": "amount_off", "value": 3, "label": "$3 off", "ends_at": None,
+                                     "pairs_with": ["barilla-spaghetti", "rao-marinara"]}, "Parmesan $3 off")
+        rec = watch.wait_for(lambda r: (r.get("suggestion") or {}).get("deal_id") == "d-e2e-parm")
+        assert rec["suggestion"]["text"] == "Parmesan is $3 off in Aisle 4. Want it?"
+
+        # CV: the shopper takes it (cloud match)
+        c = rest.rpc("apply_cart_event", **cv_to_rpc(
+            cv_event(cart_id, "added", "kirkland-parmesan", "Kirkland Parmigiano Reggiano", 0.88, "cloud")))
+        parm = next(i for i in c["items"] if i["product_id"] == "kirkland-parmesan")
+        assert (parm["price"], parm["list_price"], parm["deal_label"]) == (9.99, 12.99, "$3 off")
+        assert c["savings"] == 3.0 and c["suggestion"] is None
+
+        # CV: something it can't identify → confirm card; checkout is blocked until it's answered
+        unk = cv_event(cart_id, "added", None, "blue cardboard box, label not visible", 0.31, "none")
+        c = rest.rpc("apply_cart_event", **cv_to_rpc(unk))
+        assert c["item_count"] == 2
+        ev = rest.get("/cart_events", event_id=f"eq.{unk['event_id']}", select="product_id,applied,resolved_at")[0]
+        assert ev == {"product_id": None, "applied": False, "resolved_at": None}
+        rest.rpc("set_cart_status", p_cart_id=cart_id, p_status="checkout")
+        with pytest.raises(RpcError) as blocked:
+            rest.rpc("checkout", p_cart_id=cart_id, p_provider="simulated")
+        assert blocked.value.status == 400 and blocked.value.body["message"].startswith("unresolved_items: 1 ")
+
+        # iPad: "Is this Rao's?" → Yes
+        c = rest.rpc("apply_cart_event", p_cart_id=cart_id, p_type="added", p_product_id="rao-marinara",
+                     p_confidence=1.0, p_source="manual", p_label="confirmed by shopper",
+                     p_method="manual", p_resolves_event_id=unk["event_id"])
+        assert qty(c, "rao-marinara") == 1
+        assert rest.get("/cart_events", event_id=f"eq.{unk['event_id']}", select="resolved_at")[0]["resolved_at"]
+
+        # Voice: "I'm at aisle 4"
+        c = rest.rpc("set_location", p_cart_id=cart_id, p_section="aisle 4")
+        assert c["location"]["section"] == "A4" and c["location"]["source"] == "voice"
+
+        # iPad: Pay
+        receipt = rest.rpc("checkout", p_cart_id=cart_id, p_provider="simulated")
+        assert (receipt["total"], receipt["savings"], receipt["item_count"]) == (c["total"], 3.0, 3)
+        assert receipt["total"] == round(1.99 + 9.99 + 8.49, 2)
+        assert receipt["trip_id"] == trip and receipt["status"] == "paid" and receipt["duration_s"] >= 0
+        assert rest.rpc("checkout", p_cart_id=cart_id, p_provider="simulated")["id"] == receipt["id"]
+        assert rest.get("/carts", cart_id=f"eq.{cart_id}", select="status")[0]["status"] == "paid"
+        assert len(rest.get("/receipts", cart_id=f"eq.{cart_id}", select="id")) == 1
+
+        # Next trip: everything for this cart starts clean
+        c = rest.rpc("reset_cart", p_cart_id=cart_id)
+        assert c["trip_id"] != trip and c["items"] == [] and c["status"] == "shopping"
+        assert rest.get("/transcript", cart_id=f"eq.{cart_id}", select="id") == []
+    finally:
+        watch.close()
+
+
+def test_anon_key_cannot_touch_what_it_shouldnt(rest, db, cart_id):
+    rest.rpc("reset_cart", p_cart_id=cart_id)
+    h = rest.http
+    assert h.get("/merchant_changes").status_code in (401, 403)
+    assert h.patch("/carts", params={"cart_id": f"eq.{cart_id}"}, json={"total": 0}).status_code in (401, 403)
+    assert h.patch("/products", params={"id": "eq.bananas"}, json={"price": 0}).status_code in (401, 403)
+    for fn, body in [("merchant_apply", {"p_change_id": 1}), ("seed_catalog", {"p_store": {}}),
+                     ("recompute_cart", {"p_cart_id": cart_id})]:
+        assert h.post(f"/rpc/{fn}", json=body).status_code in (401, 403, 404), fn
+    assert float(db.execute("select price from products where id = 'bananas'").fetchone()[0]) == 1.49
+
+
+def test_catalog_reads_the_ipad_and_cv_use(rest):
+    rows = rest.get("/product_catalog", select="id,short_name,sale_price,deal_label,aisle,in_stock,vision_hint")
+    assert len(rows) == 18 and all(r["vision_hint"] for r in rows)
+    assert len(rest.get("/products", active="is.true", select="id")) == 18
+    assert {d["id"] for d in rest.get("/deals", select="id")} >= {"d-parm-3off", "d-chips-150off"}
+
+
+def test_voice_token_function(rest, cart_id):
+    rest.rpc("reset_cart", p_cart_id=cart_id)
+    fn = URL + "/functions/v1/voice-token"
+    headers = {"apikey": ANON, "Authorization": f"Bearer {ANON}"}
+    r = httpx.post(fn, json={"cart_id": "no-such-cart"}, headers=headers, timeout=20)
+    if r.status_code in (404, 503) and "unknown cart_id" not in r.text:
+        pytest.skip(f"voice-token isn't being served here ({r.status_code})")
+    assert (r.status_code, r.json()) == (400, {"error": "unknown cart_id"})
+    r = httpx.post(fn, json={"cart_id": cart_id}, headers=headers, timeout=20)
+    assert r.status_code in (200, 502)          # 502 until a real CARTESIA_API_KEY is set
+    body = r.json()
+    if r.status_code == 200:
+        assert body["token"] and body["ws_url"].startswith("wss://api.cartesia.ai/agents/stream/")
+    else:
+        assert body["error"] == "cartesia token failed"
+    assert "sk_car" not in r.text

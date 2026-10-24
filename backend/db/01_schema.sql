@@ -121,6 +121,19 @@ create table if not exists receipts (
   unique (cart_id, trip_id)
 );
 
+-- Analytics: every moment-of-decision offer, and what the shopper did with it (06_analytics.sql).
+create table if not exists deal_offers (
+  id            bigserial primary key,
+  cart_id       text not null references carts(cart_id) on delete cascade,
+  trip_id       uuid not null,
+  deal_id       text not null,
+  product_id    text not null,
+  offered_at    timestamptz not null default now(),
+  accepted_at   timestamptz,      -- the offered product went into the cart this trip
+  dismissed_at  timestamptz       -- "No thanks"
+);
+create index if not exists deal_offers_trip on deal_offers (cart_id, trip_id);
+
 insert into carts (cart_id) values ('7') on conflict do nothing;
 
 -- ── Realtime (Supabase publishes changes on these tables) ──

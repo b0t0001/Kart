@@ -212,6 +212,8 @@ begin
                 >= coalesce((c.suggestion->>'offered_at')::timestamptz, '-infinity')) then
     v_suggested := array_append(v_suggested, v_cand.deal_id);
     v_offered := now();
+    insert into deal_offers (cart_id, trip_id, deal_id, product_id)
+    values (p_cart_id, c.trip_id, v_cand.deal_id, v_cand.id);
     v_sugg := jsonb_build_object('product_id', v_cand.id, 'deal_id', v_cand.deal_id);
   elsif v_keep then
     v_cand := v_cur;
@@ -351,8 +353,10 @@ begin
       update cart_events set applied = true where id = v_ev;
     end if;
 
-    -- P3: an add tells us where the shopper is.
+    -- P3: an add tells us where the shopper is. Analytics: an add of an offered product converts.
     if v_applied and p_type = 'added' then
+      update deal_offers set accepted_at = now()
+      where cart_id = p_cart_id and trip_id = c.trip_id and product_id = v_pid and accepted_at is null;
       select section into v_section from products where id = v_pid;
       update carts set location = jsonb_build_object('section', v_section, 'source', 'item', 'at', now())
       where cart_id = p_cart_id;
@@ -408,6 +412,10 @@ end $$;
 create or replace function dismiss_suggestion(p_cart_id text)
 returns carts language plpgsql security definer set search_path = public as $$
 begin
+  update deal_offers o set dismissed_at = now()
+  from carts c
+  where c.cart_id = p_cart_id and o.cart_id = c.cart_id and o.trip_id = c.trip_id
+    and o.deal_id = c.suggestion->>'deal_id' and o.dismissed_at is null;
   update carts set suggestion = null where cart_id = p_cart_id;
   return recompute_cart(p_cart_id);
 end $$;
