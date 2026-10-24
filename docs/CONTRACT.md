@@ -1,4 +1,4 @@
-# KART integration contract — v0.8 (DRAFT)
+# KART integration contract — v0.9 (DRAFT)
 
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
@@ -131,6 +131,15 @@ Writers **only** use these; nobody writes `carts.items` directly.
   - It raises **`unresolved_items: N …`** (PostgREST 400) while an added unknown item is unresolved. That's the server-side half of the iPad's checkout block.
 - **P7:** `backend/supabase/functions/voice-token`, in exactly the iPad's shape; deployed with `backend/deploy_functions.sh`.
 
+**Merchant admin agent (backend `d5d3c2b`, v0.9):** 47 backend, 40 merchant and 5 Edge Function tests pass. It has not yet run against real Claude, which needs `ANTHROPIC_API_KEY`.
+- `merchant/server.py` serves a console: chat, a live view of cart 7, the live catalog, and a change log.
+- Claude (`claude-opus-5-5`) gets typed tools only: `search_products`, `list_deals`, `recent_changes`, `update_price`, `move_product`, `set_stock`, `add_product`, `create_deal`, `end_deal`, `undo_change`.
+- Write tools only **stage** a change with a plain-English preview. Only the owner's **Confirm** click applies it (`merchant_apply`, service role only). Every change is logged before and after, with one-click undo. Undo won't clobber a newer edit, and a preview that went stale before Confirm is refused. *Claude can propose but never apply.*
+- `merchant_changes` is service-role only: no anon read, no realtime.
+- **`carts.suggestion.offered_at`** (additive). A deal the store creates **after** the current suggestion was offered replaces it. **iPad: a changed `suggestion.deal_id` = a new card** (and Kart says it).
+- **Catalog for CV (decided):** CV fetches `id` / `name` / `vision_hint` from Supabase `products` (anon read) at startup and on every `trip_id` change, falling back to `data/store.json` when offline. So a product the owner adds live is identifiable on the next trip. `add_product` must always set a `vision_hint`; the agent writes one from the owner's description if they don't give one.
+- **Demo option:** `db.py reset-demo --without-deal d-parm-3off` starts the pitch without the Parmesan deal. The owner creates it live in the console, and the shopper's cart pops it within a second.
+
 **New trip / reset (v0.3; accepted by the backend in v0.4):** the iPad calls `reset_cart`. The Pi watches `carts.trip_id` (polling every ~2 s or over realtime) and clears its in-cart memory when the value changes. That way the iPad never has to reach the Pi over the network. The Pi's `POST :8080/reset` stays as a local fallback.
 
 ## 4. CV → backend
@@ -237,3 +246,4 @@ All three feature chats work in the **same main checkout**, so stay inside your 
 - v0.6 — P1–P10 accepted (P9 stays v2). P10's rule, agreed with the iPad: the price you saw is the price you pay, which covers ended deals too. The manager now pushes and pulls `main` at each check-in.
 - v0.7 — Dylan approved the iPad spec. §3a records the backend as built (`1955f3c`): additive fields, the `product_catalog` view, route-ordered plan, P5/P8-partial/P10 done. Hardware-lane handoff from CV (autostart command, install steps).
 - v0.8 — All of P2–P8 and P10 are built (`4feb9ba`). `checkout` returns the receipt and blocks on unresolved items. Env var name unified to `CARTESIA_AGENT_ID`; added `SUPABASE_PROJECT_REF` and `SUPABASE_ACCESS_TOKEN`.
+- v0.9 — Merchant agent built (`d5d3c2b`): it stages changes, the owner confirms, and every change has an audit log and undo. `suggestion.offered_at`: a newer store deal replaces the current suggestion. CV reads the catalog from Supabase at startup and on each trip change, with `store.json` as the fallback. Live-deal demo option added.
