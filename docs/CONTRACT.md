@@ -187,7 +187,7 @@ Spec: `docs/specs/2026-10-24-member-memory-design.md`. Flag: `member_memory`. Ro
 - **Privacy** (Visa trust): demo IDs only, guest by default, sign-in lasts one trip, a "What Kart remembers" sheet with a one-tap Forget per memory, and **Forget me** (touch-only, with a confirmation).
 
 ### "That's mine" / personal items: DROPPED (v0.16)
-Dylan decided physical edge cases like personal items aren't in scope. Nothing was built in the backend or iPad. CV's `personal_items` (off) and `edge_privacy` (**off**) flags stay in `pi/`, unused.
+Dylan decided physical edge cases like personal items aren't in scope. The backend's `mark_personal` RPC and `cart_events.resolution` were already deployed to hosted before the cancel. They're additive and **unused**. CV's watcher is gated behind `personal_items` (off), and `edge_privacy` is **off**. The iPad has no button.
 
 ### Shared hosted project rules (v0.11)
 
