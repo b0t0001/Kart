@@ -41,11 +41,10 @@ Test counts: backend unit 53, merchant 42, Edge Function 5, end-to-end 5. All pa
 
 1. **Which local keys go in `.env`.** `SUPABASE_ANON_KEY` is the legacy anon **JWT**, not the new
    `sb_publishable_` key. It works with voice-token's `verify_jwt` and with supabase-swift.
-2. **The CV and iPad chats were not messaged.** After 10 messages in a row with no input from you,
-   the app paused this session's cross-session messages. I didn't route around that pause. Instead
-   I wrote everything they need into `backend/docs/LOCAL_SUPABASE.md` and pointed the commit message
-   at it. **Please tell the CV and iPad chats (or the manager) to read that file.** It covers
-   endpoints, realtime, the iOS Simulator, ATS, and the LAN IP for real devices.
+2. **The CV and iPad chats got the local stack through the manager.** This session's own messages
+   were paused (the app stops a session after 10 cross-session messages with no input from you), so
+   I wrote `backend/docs/LOCAL_SUPABASE.md`. The manager relayed it at about 01:20, and both chats'
+   end-to-end tests passed against local Supabase.
 3. **The stack keeps running overnight.** The colima VM uses 4 CPUs and 6 GB. To free it:
    `supabase stop --workdir backend && colima stop`.
 4. **No made-up analytics.** The insights panel counts only real trips. The local stack has a few
