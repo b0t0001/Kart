@@ -20,7 +20,7 @@ def test_every_tool_streams_eagerly_and_has_a_schema():
     names = {t["name"] for t in TOOLS}
     assert names == {"search_catalog", "get_cart", "set_plan", "add_to_plan", "remove_from_plan", "dismiss_nudge", "get_deals", "set_location",
                      "dismiss_suggestion", "confirm_item", "start_checkout", "not_sold_here", "undo_last_edit",
-                     "set_budget"}
+                     "set_budget", "note_diet"}
     assert all(t["eager_input_streaming"] and t["input_schema"]["type"] == "object" for t in TOOLS)
 
 
@@ -326,3 +326,11 @@ async def test_an_edit_that_crosses_the_budget_says_so(backend):
     assert out["readback"] == "Added rao's sauce, Aisle 6. That puts you at $10.48, over your $10."
     out = json.loads(await run_tool("add_to_plan", {"product_id": "daisy-sour-cream", "reason": "tacos"}, ctx(backend)))
     assert out["readback"] == "Added sour cream, Aisle 8."            # already over: said once, not on every edit
+
+
+async def test_a_diet_is_kept_for_the_trip(backend):
+    c = {**ctx(backend), "diet": {}}
+    out = json.loads(await run_tool("note_diet", {"diet": "no dairy", "avoid_kinds": ["cheese", "dairy"],
+                                                  "avoid_products": ["queso"]}, c))
+    assert out == {"diet": "no dairy", "avoiding_kinds": ["cheese", "dairy"], "avoiding_products": ["queso"]}
+    assert c["diet"] == {"diet": "no dairy", "kinds": {"cheese", "dairy"}, "products": {"queso"}}

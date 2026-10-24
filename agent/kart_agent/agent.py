@@ -76,6 +76,7 @@ class KartAgent:
         self._quiet = False                       # "be quiet": Kart only answers; cards still show
         self._offered: list[str] = []             # deals Kart has offered this trip, for "what was that deal?"
         self._budget: float | None = None         # "keep it under $30" (carts.budget), and the bill so far
+        self._diet: dict[str, Any] = {}           # "no dairy": the kinds and products the cart offers no deals on
         self._total = 0.0
         self._offer: dict[str, Any] | None = None   # the deal Kart just asked about, until it's answered
         self._nudge: dict[str, Any] | None = None   # the quantity nudge Kart just said (v0.12 beta)
@@ -96,7 +97,7 @@ class KartAgent:
                 if meta.get("trip_id") and meta.get("trip_id") != self.trip_id:   # a new trip starts fresh
                     self._said, self._meal, self._offer, self._nudge = set(), None, None, None
                     self._undo, self._latest_added, self._unknown_open = [], None, False
-                    self._quiet, self._offered = False, []
+                    self._quiet, self._offered, self._diet = False, [], {}
                     self._digest, self._digest_asked, self._digest_due = None, set(), False
                 self.trip_id = meta.get("trip_id") or self.trip_id
                 self._context.set()
@@ -106,6 +107,8 @@ class KartAgent:
                 return False
             if key:
                 self._said.add(key)
+            if meta.get("type") == "suggestion" and self._avoided(meta.get("product_id")):
+                return True                              # off-diet: process dismisses it, nothing read out or offered
             if meta.get("type") == "suggestion" and self._digest:   # mid walk-through: Kart is reading them out
                 return False
             if meta.get("type") == "cart_changed" and meta.get("change") == "added":
@@ -266,6 +269,15 @@ class KartAgent:
             if meta.get("type") == "cart_changed" and meta.get("change") == "added":
                 await asyncio.sleep(self.coalesce_seconds)   # a paired deal suggestion arriving now replaces this line
             await self._refresh()
+            if meta.get("type") == "suggestion" and self._avoided(meta.get("product_id")):
+                await run_tool("dismiss_suggestion", {}, self._ctx())   # its card goes away; never offered again
+                add, self._last_add = self._last_add, None
+                got = proactive_line(add[0], self._catalog, self._plan, self._items, self._meal, self._nudges) \
+                    if add and time.monotonic() - add[1] < ADD_THEN_DEAL_SECONDS else None
+                if got:                                  # the deal cancelled the add's own line
+                    async for out in self._say([got], interruptible=False):
+                        yield out
+                return
             line = proactive_line(meta, self._catalog, self._plan, self._items, self._meal, self._nudges)
             if meta.get("type") == "cart_changed" and meta.get("change") == "added":
                 self._last_add = None                    # said (or nothing to say): a later deal stands alone
@@ -298,6 +310,8 @@ class KartAgent:
         for deal in deals:
             product = catalog.get(deal.get("product_id"))
             pairs = [plan.index(p) for p in deal.get("pairs_with") or [] if p in plan]
+            if self._avoided(deal.get("product_id")):
+                continue
             asked = deal.get("id") in self._digest_asked or f"suggestion|{deal.get('id')}" in self._said
             if product is None or product.get("in_stock") is False or deal["product_id"] in taken or not pairs or asked:
                 continue
@@ -458,7 +472,14 @@ class KartAgent:
 
     def _ctx(self) -> dict[str, Any]:
         """What the tools get: the backend, this cart and trip, and the trip's undo history."""
-        return {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id, "undo": self._undo}
+        return {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id, "undo": self._undo,
+                "diet": self._diet}
+
+    def _avoided(self, product_id: Any) -> bool:
+        """Off-diet for this trip ("no dairy" -> cheese and dairy): no deal on it is offered."""
+        product = next((p for p in self._catalog if p["id"] == product_id), None)
+        return product_id in (self._diet.get("products") or set()) or \
+            (product is not None and (product.get("category") or "").lower() in (self._diet.get("kinds") or set()))
 
     async def _refresh(self) -> None:
         try:

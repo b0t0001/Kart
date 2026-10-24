@@ -52,6 +52,11 @@ TOOLS: list[dict[str, Any]] = [
     _tool("set_budget", "The shopper gave a budget for the trip ('keep it under $30'). Returns the budget, what the "
           "trip will cost (the bill so far plus the rest of the list), and whether it fits.",
           {"amount": {"type": "number", "description": "dollars, e.g. 30"}}, ["amount"]),
+    _tool("note_diet", "The shopper's diet or allergy for this trip ('no dairy', 'vegetarian'). Pass the store kinds to "
+          "avoid, as the product list names them (cheese, dairy, meat), and any product whose name shows it (queso). "
+          "The cart then offers no deals on them.",
+          {"diet": {"type": "string"}, "avoid_kinds": {"type": "array", "items": {"type": "string"}},
+           "avoid_products": {"type": "array", "items": {"type": "string"}}}, ["diet"]),
     _tool("not_sold_here", "The shopper wants something that isn't in the store's product list. Returns in-stock "
           "products that could stand in (matching `like`) and nearby stores that might have it. Changes nothing.",
           {"item": {"type": "string", "description": "what they asked for, e.g. 'cilantro'"},
@@ -365,6 +370,15 @@ async def _dispatch(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> Any
         if not isinstance(amount, (int, float)) or isinstance(amount, bool) or amount <= 0:
             raise ValueError("'amount' must be a number of dollars above 0")
         return _budget_view(await backend.rpc("set_budget", p_cart_id=cart_id, p_amount=amount))
+    if name == "note_diet":
+        diet = _str(args, "diet")
+        kinds = sorted({k.strip().lower() for k in args.get("avoid_kinds") or [] if isinstance(k, str) and k.strip()})
+        products = sorted({p.strip() for p in args.get("avoid_products") or [] if isinstance(p, str) and p.strip()})
+        kept = ctx.get("diet")
+        if isinstance(kept, dict):                           # the agent keeps it for the trip
+            kept.update({"diet": diet, "kinds": set(kept.get("kinds") or set()) | set(kinds),
+                         "products": set(kept.get("products") or set()) | set(products)})
+        return {"diet": diet, "avoiding_kinds": kinds, "avoiding_products": products}
     if name == "undo_last_edit":
         stack = ctx.get("undo")
         if not stack:

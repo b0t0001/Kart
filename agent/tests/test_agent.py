@@ -589,3 +589,23 @@ async def test_kart_says_once_when_the_bill_gets_close_to_the_budget():
     assert await run(agent, added) == ["Got the Spaghetti."]
     backend.cart["total"] = 31.2
     assert await run(agent, added) == ["Got the Spaghetti. That's $31.20, over your $30."]
+
+
+def no_dairy(agent):
+    agent._diet.update({"diet": "no dairy", "kinds": {"cheese", "dairy"}, "products": set()})
+
+
+async def test_a_deal_that_breaks_the_diet_is_never_read_out_and_its_card_goes_away():
+    agent, backend = make()
+    await agent._refresh()
+    no_dairy(agent)
+    assert agent.run_filter(UserCustomSent(metadata=PARM_OFFER))         # handled, quietly
+    assert await run(agent, UserCustomSent(metadata=PARM_OFFER)) == []
+    assert ("dismiss_suggestion", {"p_cart_id": "7"}) in backend.calls and agent._offer is None
+
+
+async def test_the_deals_question_leaves_out_deals_that_break_the_diet():
+    agent, backend = planned_agent()
+    no_dairy(agent)
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    assert cards(outs) == []                                       # the only deal (Parmesan) is cheese
