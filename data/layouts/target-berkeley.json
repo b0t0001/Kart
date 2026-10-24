@@ -52,6 +52,11 @@
       "aisle": "A3",
       "price": 3.89,
       "target_product": "Hershey's Milk Chocolate Candy Bar XL, 4.4 oz"
+    },
+    "kids-scissors": {
+      "aisle": "not confirmed (far from the rest, per Dylan)",
+      "price": 2.79,
+      "target_product": "up&up 6\" Kids' Scissors, Pointed Tip (price from target.com, no receipt)"
     }
   },
   "store": {
@@ -129,6 +134,14 @@
       "h": 8
     },
     {
+      "id": "SCHOOL",
+      "name": "School & Office · aisle not confirmed",
+      "x": 19,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
       "id": "CK",
       "name": "Checkout",
       "x": 6,
@@ -148,6 +161,7 @@
     "ground-beef": "MEAT",
     "hershey-xl": "A3",
     "jalapenos": "A12",
+    "kids-scissors": "SCHOOL",
     "kirkland-batteries": "HOME",
     "kirkland-paper-towels": "HOME",
     "kirkland-parmesan": "A12",
@@ -171,6 +185,7 @@
     "black-beans": 0.99,
     "jalapenos": 2.29,
     "taco-seasoning": 0.99,
-    "hershey-xl": 3.89
+    "hershey-xl": 3.89,
+    "kids-scissors": 2.79
   }
 }

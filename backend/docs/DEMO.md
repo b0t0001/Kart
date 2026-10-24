@@ -12,14 +12,16 @@ commands run from the repo root. `P=backend/.venv/bin/python` is shorthand below
    http://localhost:8090.
 3. **The nudge beta** (if it's on for the demo): `$P backend/cart.py feature quantity_nudges on` (cart
    7), or use the iPad's demo switch.
-4. **Pre-judging, demo operator only, once, right before judging:** `backend/pre_judging.sh`
-   (add `--members` if the member-memory beta ships). It asks you to type `judging`, then runs, in
-   order:
-   1. `db.py sync-catalog --with-stock`: the real stock counts from `store.json`;
-   2. `db.py reset-demo`: re-seeds the catalog (stock included, so step 1 is belt and braces), clears
-      the merchant change log, and sets cart 7 to idle. The iPad goes to Welcome, and the Pi clears
-      its memory;
-   3. `members.py seed`, with `--members` only.
+4. **Pre-judging, demo operator only, before EACH judge group:** `backend/pre_judging.sh` (add
+   `--members` if the member-memory beta ships). It asks you to type `judging`, then runs, in order:
+   1. `db.py sync-catalog --with-stock`;
+   2. `db.py reset-demo`: re-seeds the catalog, clears the merchant change log, and sets cart 7 to
+      idle. The iPad goes to Welcome, and the Pi clears its memory;
+   3. `db.py judging-stock`: stock = the props Dylan bought, **1 each** of spaghetti, marinara,
+      Parmesan and kids' scissors (`data/judging_stock.json`). A paid trip sells those out, and a
+      sold-out Parmesan gets no deal card, so this runs **before every group**. Until pre-judging,
+      live stock stays at `store.json`'s placeholders (20);
+   4. `members.py seed`, with `--members` only.
 
    It affects every team, so nobody else runs it or `reset-demo` on hosted. Rehearsals reset only
    their own cart: `$P backend/cart.py reset --cart <id>`.
@@ -31,6 +33,23 @@ Edit `data/store.json` with the exact names, sizes, shelf prices and camera desc
 `$P backend/db.py sync-catalog`. Through rehearsals, live stock stays at the placeholder 20, because
 every paid rehearsal checkout takes items off stock. The real counts go in at pre-judging (step 4).
 `sync-catalog` changes things in place: no deletes, and carts and the change log are untouched.
+
+## The final script's route (DEMO_PLAN, top)
+
+The list is Spaghetti, Marinara and Garlic Bread. Garlic Bread is removed by voice, and **Kids'
+Scissors** (Aisle 9 · Household & School, the far aisle) is added by voice. The Parmesan comes from
+the deal card. The cart's Next stop through the script (tested in
+`test_trip.py::test_final_script_route`):
+
+1. Plan → **"Aisle 6 → Spaghetti"**.
+2. Spaghetti in → card **"Parmesan is $1 off in Aisle 4. Want it?"**.
+3. "Yes" → **"Aisle 6 → Marinara"**. The rest of Aisle 6 comes first; the card already named Aisle 4.
+4. Parmesan in (Aisle 4) → still **"Aisle 6 → Marinara"**.
+5. Marinara in → **"Aisle 9 → Kids' Scissors"**.
+6. Scissors in → **"All done → Checkout"**.
+
+So the walk is 6 → 4 → 6 → 9. The Hershey's bar stays in the catalog (Aisle 7) but is out of the
+demo.
 
 ## Meal A: pasta night for 4 (headline)
 

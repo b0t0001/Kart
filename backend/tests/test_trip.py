@@ -184,3 +184,23 @@ def test_rehearsal_carts_stay_out_of_the_numbers(cart, conn):
     assert (i["trips"], i["avg_basket"], i["deals_offered"]) == (1, 1.49, 0)
     parm = conn.execute("select offered from deal_performance where deal_id = 'd-parm-3off'").fetchone()[0]
     assert parm == 0
+
+
+def test_final_script_route(cart):
+    """DEMO_PLAN final script: list = spaghetti, marinara (+ scissors by voice); Parmesan via the deal card."""
+    row = cart("set_plan", p_plan=[{"product_id": "barilla-spaghetti"}, {"product_id": "rao-marinara"},
+                                   {"product_id": "french-baguette"}])
+    assert row["next_step"] == "Aisle 6 → Spaghetti"                          # first stop
+    cart("remove_from_plan", p_product_id="french-baguette")                  # "take the garlic bread off"
+    row = cart("add_to_plan", p_product_id="kids-scissors")                   # "…and kids' scissors"
+    assert row["next_step"] == "Aisle 6 → Spaghetti"
+    row = add(cart, "barilla-spaghetti")
+    assert row["suggestion"]["text"] == "Parmesan is $1 off in Aisle 4. Want it?"
+    row = cart("add_to_plan", p_product_id="kirkland-parmesan")              # "Yes"
+    assert row["next_step"] == "Aisle 6 → Marinara"                           # same aisle first
+    row = add(cart, "kirkland-parmesan")                                       # dropped in Aisle 4
+    assert row["next_step"] == "Aisle 6 → Marinara"
+    row = add(cart, "rao-marinara")
+    assert row["next_step"] == "Aisle 9 → Kids' Scissors"                     # the far aisle
+    row = add(cart, "kids-scissors")
+    assert row["next_step"] == "All done → Checkout"
