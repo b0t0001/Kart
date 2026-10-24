@@ -19,6 +19,15 @@ Talking points for the pitch, the Devpost write-up and judge Q&A. Owned by the m
 - **Two cameras, one decision.** The diagonal corners cover each other's blind spots, and one item seen by both counts once.
 - **The cameras only see the basket floor.** Each camera has a basket-floor outline. Anything outside it (the mesh walls, the store beyond, people walking by) is ignored for detection, and it's painted out of every crop before anything goes to Claude. Rolling the cart down an aisle doesn't fool it, and a passer-by's face never leaves the cart. This came from a real-cart test: the room moving behind the mesh walls fooled the first version, so we fixed it and turned that test into a regression.
 
+**Tested on real footage, not just simulations:** real-cart clips are replayed as regression tests, and every clip added to the folder becomes a test automatically.
+- The first 5 clips all pass.
+- Fixed from real footage so far:
+  - rolling the cart past the room;
+  - tall items mistaken for arms;
+  - a sun stripe through the window blinds;
+  - an apple's long shadow;
+  - the camera freezing during Claude calls.
+
 **Numbers to fill in after hardware testing** (from `tools/gallery_check.py` and `tools/cloud_smoke.py --gallery`):
 - local match accuracy on real props: ___
 - Claude accuracy on real props: ___ (12/12 on printed-name test crops, median 1.6 s)
