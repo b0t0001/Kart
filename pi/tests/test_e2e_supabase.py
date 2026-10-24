@@ -98,3 +98,25 @@ def test_replay_to_supabase_retry_and_trip_reset(tmp_path, sb):
     assert watcher.poll_once() not in (None, first)
     p.step(Script(Scene(items=[pasta])).still(0.1).ticks[0])
     assert len(p.cart.instances) == 0 and qty(cart_row(sb, cart_id), PASTA) == 0
+
+
+def test_unknown_added_then_removed_is_resolved_in_the_backend(tmp_path, sb):  # review C1(d)
+    url, key = sb
+    cart_id = f"cv-e2e-{uuid.uuid4().hex[:8]}"
+    catalog = fetch_catalog(url, key)
+    cfg = Config(features="hist", cart_id=cart_id)
+    gallery = Gallery(tmp_path / "gallery", HistogramFeatures())
+    gallery.load()
+    sink = HttpSink(url, key, tmp_path / "state/outbox.jsonl", start_thread=False)
+    mem = MemorySink()
+    p = Pipeline(cfg, [0, 1], HybridIdentifier(gallery, None, catalog, cfg), HistogramFeatures(), [sink, mem],
+                 tmp_path / "state")
+    for tick in Script(Scene(arm=False)).still(1.0).hand_rest(1.5).ticks:  # a hand that never reaches the edge
+        p.step(tick)
+    assert [(e.type, e.product_id) for e in mem.events] == [("added", None), ("removed", None)]
+    assert sink.flush_once(1e9) == 2
+    status, body = http.get(f"{url}/rest/v1/cart_events?cart_id=eq.{cart_id}&select=event_id,type,resolved_at&order=id",
+                            http.supabase_headers(key))
+    rows = json.loads(body)
+    added = next(r for r in rows if r["type"] == "added")
+    assert status == 200 and added["event_id"] == mem.events[0].event_id and added["resolved_at"] is not None
