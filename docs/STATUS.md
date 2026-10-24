@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 ~03:40 · check-in
+- Backend fixed the iPad's follow-up (`f6e41f3`): a Yes, which puts the product on the plan, now consumes the deal suggestion, so the next deal can be offered right away. Pushed. All three chats are idle and done.
+
 ### 2026-10-24 ~02:50 · check-in: all three chats finished their overnight work
 - **iPad: DONE overnight** (idle). The app, its Supabase backend and the Line voice agent are built. A fresh reviewer found 1 Critical and 7 Important problems, and all are fixed (`e7c30cd`, `f0acd3f`). Tests: iOS logic 100/100, agent 29 passed with 2 skipped, and both automated walkthroughs (offline and local Supabase) pass. **Voice has only run against fakes.** 35 rulings and the deferred minors are in `ios/docs/OVERNIGHT.md`. To check on the real iPad: chimes vs voice audio, turning Stage Manager off, and signing.
 - **One cross-team follow-up was sent to the backend:** after the shopper says Yes to a deal, the next suggestion shouldn't wait until that item is physically in the cart.
