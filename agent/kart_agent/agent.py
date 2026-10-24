@@ -178,6 +178,7 @@ class KartAgent:
                 offer, self._offer = self._offer, None
                 if answer == "yes":
                     await run_tool("add_to_plan", {"product_id": offer.get("product_id"), "reason": "deal"}, ctx)
+                    await self._refresh()                # on the list now: its add gets "Got the X."
                     line = accepted_line(self._catalog, offer.get("product_id"))
                 else:
                     await run_tool("dismiss_suggestion", {}, ctx)
@@ -193,6 +194,7 @@ class KartAgent:
             async for out in self._say(self._caption_first(text, self.brain.respond(heard, ctx)), interruptible=self.barge_in):
                 yield out
             self._meal = ctx.get("meal") or self._meal
+            await self._refresh()                        # Claude's tools may have changed the list
             if ctx.get("planned") and not self._digest_offered:     # a new list: ask about the deals, after a beat
                 async for out in self._offer_digest():
                     yield out
@@ -275,6 +277,7 @@ class KartAgent:
             name = entry["product"].get("short_name") or entry["product"]["name"]
             if answer == "yes":
                 await run_tool("add_to_plan", {"product_id": entry["product"]["id"], "reason": "deal"}, ctx)
+                await self._refresh()
                 prefix = f"Added {name} to your list. "
             else:
                 prefix = "Okay. "

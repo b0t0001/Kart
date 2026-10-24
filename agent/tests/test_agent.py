@@ -251,6 +251,17 @@ async def test_a_nudge_the_cart_still_shows_is_answered():
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Keep it.")])) == ["Okay, keeping it."]
 
 
+async def test_a_deal_said_yes_to_is_ticked_off_when_it_goes_in():
+    agent, backend = make()
+    agent.run_filter(UserCustomSent(metadata=PARM_OFFER))
+    assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Yes.")])) == ["Added Parmesan to your list."]
+    backend.cart["items"] = [{"product_id": "kirkland-parmesan", "qty": 1}]
+    added = UserCustomSent(metadata={"type": "cart_changed", "change": "added", "product_id": "kirkland-parmesan"})
+    assert agent.run_filter(added)                           # Kart knows the Parmesan is on the list now
+    agent.coalesce_seconds = 0
+    assert await run(agent, added) == ["Got the Parmesan."]
+
+
 async def test_the_last_question_asked_gets_the_answer():
     agent, backend = make()
     agent.run_filter(UserCustomSent(metadata=BEEF_NUDGE))
