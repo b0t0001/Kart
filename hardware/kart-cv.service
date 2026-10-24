@@ -1,0 +1,15 @@
+[Unit]
+Description=KART cart vision pipeline (pi/main.py live)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=jamwan
+WorkingDirectory=/home/jamwan/kart
+ExecStart=/home/jamwan/venv/bin/python pi/main.py live
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
