@@ -244,7 +244,7 @@ async def test_the_nudge_names_the_trips_meal():
     await run(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
     nudge = {"type": "nudge", "product_id": "barilla-spaghetti", "kind": "over", "have": 2, "need": 1, "text": "x"}
     assert await run(agent, UserCustomSent(metadata=nudge)) == [
-        "That's two pounds of spaghetti in the cart, and pasta night for 4 needs one. Keep the extra?"]
+        "That's two boxes of spaghetti in the cart, and pasta night for 4 needs one. Keep the extra?"]
 
 
 async def test_at_checkout_skip_it_or_go_get_it_by_voice():
@@ -349,12 +349,12 @@ async def test_yes_walks_the_deals_one_at_a_time():
     assert not agent.run_filter(UserCustomSent(metadata=PARM_OFFER))   # walked already: never read out again
 
 
-async def test_not_now_keeps_deals_quiet_for_the_trip_but_a_yes_to_a_card_still_works():
+async def test_not_now_means_kart_tells_you_at_the_shelf():
     agent, backend = planned_agent()
     await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
     outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="Not now.")]))
-    assert spoken(outs) == ["No problem."] and cards(outs) == [{"type": "digest_done"}]
-    assert not agent.run_filter(UserCustomSent(metadata=PARM_OFFER))   # the card shows on the iPad; Kart stays quiet
+    assert spoken(outs) == ["No problem. I'll tell you at the shelf."] and cards(outs) == [{"type": "digest_done"}]
+    assert agent.run_filter(UserCustomSent(metadata=PARM_OFFER))       # the spaghetti went in: Kart says the deal
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Yes.")])) == ["Added Parmesan to your list."]
 
 
@@ -375,3 +375,12 @@ async def test_no_question_when_no_deal_goes_with_the_list():
     backend.deals = []
     outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
     assert spoken(outs) == ["One sec.", " Spaghetti's on your list."] and cards(outs) == []
+
+
+
+async def test_paid_is_said_once_the_ipad_says_so():
+    agent, backend = make()
+    paid = UserCustomSent(metadata={"type": "ui_action", "action": "paid"})
+    assert agent.run_filter(paid)
+    assert await run(agent, paid) == ["Paid. Thanks for shopping!"]
+    assert not agent.run_filter(UserCustomSent(metadata={"type": "ui_action", "action": "checkout_tapped"}))

@@ -109,3 +109,12 @@ async def test_system_prompt_asks_for_the_math_behind_each_amount():
     llm = FakeLLM([Turn(chunks=["ok"])])
     await collect(Brain(llm=llm).respond("hi", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
     assert "basis" in llm.requests[0]["system"]
+
+
+
+async def test_the_demo_meals_have_exact_lists_in_the_prompt():
+    llm = FakeLLM([Turn(chunks=["ok"])])
+    await collect(Brain(llm=llm).respond("hi", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
+    system = llm.requests[0]["system"]
+    assert "barilla-spaghetti x1, rao-marinara x1, french-baguette x1" in system
+    assert "tostitos-chips x1, tostitos-salsa x1, queso x1, black-beans x1, jalapenos x1, daisy-sour-cream x1" in system

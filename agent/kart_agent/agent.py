@@ -13,7 +13,7 @@ from .lines import (DECLINED_LINE, KEEP_LINE, NUDGE_OK_LINE, accepted_line, nudg
 from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
-SPEAKING_EVENTS = {"suggestion", "nudge", "deal_changed", "cart_changed"}
+SPEAKING_EVENTS = {"suggestion", "nudge", "deal_changed", "cart_changed", "ui_action"}
 
 
 def _count_word(n: int) -> str:
@@ -52,7 +52,6 @@ class KartAgent:
         self.digest_delay_seconds = digest_delay_seconds   # the pause after reading the list before asking about deals
         self._digest: dict[str, Any] | None = None  # "N deals go with your list": asked, then walked one at a time
         self._digest_offered = False
-        self._deals_quiet = False                   # the shopper said "not now": deals show as cards, Kart stays quiet
         self._context = asyncio.Event()
         self._plan: list[dict[str, Any]] = []
         self._items: list[dict[str, Any]] = []
@@ -77,7 +76,7 @@ class KartAgent:
                 self.cart_id = str(meta.get("cart_id") or self.cart_id)
                 if meta.get("trip_id") and meta.get("trip_id") != self.trip_id:   # a new trip starts fresh
                     self._said, self._meal, self._offer, self._nudge = set(), None, None, None
-                    self._digest, self._digest_offered, self._deals_quiet = None, False, False
+                    self._digest, self._digest_offered = None, False
                 self.trip_id = meta.get("trip_id") or self.trip_id
                 self._context.set()
                 return False
@@ -86,9 +85,7 @@ class KartAgent:
                 return False
             if key:
                 self._said.add(key)
-            if meta.get("type") == "suggestion" and (self._digest or self._deals_quiet):
-                if not self._digest:                     # "not now": the card shows; a spoken yes to it still works
-                    self._offer, self._last_asked = meta, "offer"
+            if meta.get("type") == "suggestion" and self._digest:   # mid walk-through: Kart is reading them out
                 return False
             if meta.get("type") == "suggestion":
                 self._offer = meta                       # "Want it?" can now be answered with a plain yes or no
@@ -253,10 +250,10 @@ class KartAgent:
         digest = self._digest
         if digest is None:
             return
-        if digest["i"] < 0 and answer != "yes":                     # "not now": quiet about deals this trip
-            self._digest, self._deals_quiet = None, True
+        if digest["i"] < 0 and answer != "yes":                     # "not now": each deal is said at its shelf
+            self._digest = None
             yield AgentSendCustom(metadata={"type": "digest_done"})
-            async for out in self._say(["No problem."], interruptible=False):
+            async for out in self._say(["No problem. I'll tell you at the shelf."], interruptible=False):
                 yield out
             return
         prefix = ""

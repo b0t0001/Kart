@@ -29,6 +29,13 @@ def proactive_line(event: dict[str, Any], catalog: list[dict[str, Any]], plan: l
         return event.get("text") or None
     if kind == "nudge":
         return _nudge_line(event, catalog, meal)
+    if kind == "ui_action":                               # the iPad tells Kart what just happened on screen
+        if event.get("action") == "paid":
+            dish = re.sub(r"\s+for\s+\d+\s*$", "", meal or "").strip()
+            return f"Paid. Enjoy {dish}!" if dish else "Paid. Thanks for shopping!"
+        if event.get("action") == "unknown_item":
+            return "I'm not sure what that is. Can you check the screen?"
+        return None
     if kind == "deal_changed":
         return f"Heads up, {_short(catalog, product_id)} just went {event.get('label', 'on sale')}."
     if kind != "cart_changed":
@@ -73,9 +80,14 @@ def _unit(product_name: str) -> str | None:
     return None
 
 
+def _unit_of(product: dict[str, Any]) -> str | None:
+    """Pasta counts in boxes ("Barilla Spaghetti, 1 lb" is a box, not a pound); everything else by its name."""
+    return "box" if product.get("category") == "pasta" else _unit(product["name"])
+
+
 def _amount(n: int, product: dict[str, Any]) -> str:
     name = (product.get("short_name") or product["name"]).lower()
-    unit = _unit(product["name"])
+    unit = _unit_of(product)
     if unit is None:
         return f"{_words(n)} {name}"
     plural = unit + ("es" if unit.endswith(("x", "ch")) else "s")
@@ -84,7 +96,7 @@ def _amount(n: int, product: dict[str, Any]) -> str:
 
 def _list_amount(n: int, product: dict[str, Any]) -> str:
     """For a list of what's missing: "one pound of ground beef", but just "salsa" for a single plain item."""
-    if _unit(product["name"]) is None and n == 1:
+    if _unit_of(product) is None and n == 1:
         return (product.get("short_name") or product["name"]).lower()
     return _amount(n, product)
 
@@ -98,7 +110,8 @@ def _combined_line(items: list[dict[str, Any]], catalog: list[dict[str, Any]], m
     if not parts:
         return None
     listed = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
-    return f"Before you go: you still need {listed}{f' for {meal}' if meal else ''}. Want to grab them?"
+    one = len(items) == 1 and items[0].get("need", 1) - items[0].get("have", 0) == 1
+    return f"Before you go: you still need {listed}{f' for {meal}' if meal else ''}. Want to grab {'it' if one else 'them'}?"
 
 
 def _nudge_line(event: dict[str, Any], catalog: list[dict[str, Any]], meal: str | None) -> str | None:
@@ -108,7 +121,7 @@ def _nudge_line(event: dict[str, Any], catalog: list[dict[str, Any]], meal: str 
     product = next((p for p in catalog if p["id"] == event.get("product_id")), None)
     have, need = event.get("have"), event.get("need")
     items = event.get("items")
-    if event.get("kind") == "under" and isinstance(items, list) and len(items) > 1:
+    if event.get("kind") == "under" and isinstance(items, list) and items:   # the checkout list (even of one)
         return _combined_line(items, catalog, meal) or event.get("text") or None
     if product is None or not isinstance(have, int) or not isinstance(need, int):
         return event.get("text") or None
