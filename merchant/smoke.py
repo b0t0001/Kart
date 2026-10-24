@@ -131,8 +131,8 @@ def main() -> None:
         lambda ch: (p("barilla-spaghetti")["deal_label"] == "$1 off"
                     and p("barilla-spaghetti")["deal_ends_at"].astimezone(STORE_TZ).date() == sunday.date()),
         lambda ch, before: p("barilla-spaghetti")["deal_id"] == before["barilla-spaghetti"]["deal_id"])
-    latencies["out of Rao's"] = run_case(
-        console, store, "We're out of Rao's", "set_stock",
+    latencies["out of marinara"] = run_case(
+        console, store, "We're out of marinara", "set_stock",
         lambda ch: p("rao-marinara")["stock"] == 0,
         lambda ch, before: p("rao-marinara")["stock"] == before["rao-marinara"]["stock"])
     latencies["move parmesan"] = run_case(
@@ -147,7 +147,7 @@ def main() -> None:
         follow_up="20 in stock, go ahead and stage it")
 
     # The live beat on a throwaway cart
-    print("\n» live beat: 'parmesan $3 off' while a cart holds spaghetti")
+    print("\n» live beat: 'parmesan $1 off' while a cart holds spaghetti")
     cart = f"smoke-{uuid.uuid4().hex[:6]}"
     undo_ids = []
     try:
@@ -162,7 +162,7 @@ def main() -> None:
         store.q("select apply_cart_event(%s, 'added', 'barilla-spaghetti', 0.94, 'vision', 'smoke')", [cart])
         before = store.cart(cart)["suggestion"]
         console.post("/api/conversation/reset")
-        out, secs = console.chat("parmesan $3 off")
+        out, secs = console.chat("parmesan $1 off")
         print(f"  Claude ({secs:.1f}s): {out['reply']}")
         latencies["parmesan beat"] = f"{secs:.1f}s"
         staged = [c for c in out["staged"] if c["tool"] == "create_deal"]
@@ -174,7 +174,7 @@ def main() -> None:
             undo_ids.append(staged[0]["id"])
             sugg = store.cart(cart)["suggestion"]
             check("beat: cart suggestion switches to Parmesan",
-                  (sugg or {}).get("text") == "Parmesan is $3 off in Aisle 4. Want it?",
+                  (sugg or {}).get("text") == "Parmesan is $1 off in Aisle 4. Want it?",
                   f"before={before and before['text']!r}, confirm→row {time.perf_counter() - t:.2f}s")
     finally:
         for cid in reversed(undo_ids):            # newest first, so each undo sees its own "after"

@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent import STORE_TZ, MerchantAgent, ToolError
+from kartdb import STORE_JSON
 from server import create_app
 
 
@@ -68,9 +69,9 @@ def test_confirm_twice_is_refused(store, tools):
 
 def test_price_preview_reads_plainly(store, tools):
     add_to_cart(store, "kirkland-parmesan")
-    text, ch = tools.run("update_price", {"product_id": "kirkland-parmesan", "new_price": 11.99}, "test")
-    assert ch["summary"] == ("Change the price of Parmesan (Kirkland Signature Parmigiano Reggiano, 1.5 lb wedge) "
-                             "from $12.99 to $11.99. With its $3 off deal, shoppers pay $8.99. "
+    text, ch = tools.run("update_price", {"product_id": "kirkland-parmesan", "new_price": 3.99}, "test")
+    assert ch["summary"] == ("Change the price of Parmesan (Grated Parmesan Cheese, 8 oz shaker) "
+                             "from $4.99 to $3.99. With its $1 off deal, shoppers pay $2.99. "
                              "1 cart with it now gets the lower price right away.")
     assert "NOT applied" in text
 
@@ -83,18 +84,18 @@ def test_price_increase_preview_says_carts_keep_their_price(store, tools):
 
 def test_out_of_stock_preview(store, tools):
     ch = stage(tools, "set_stock", product_id="rao-marinara", stock=0)
-    assert ch["summary"].startswith("Set Rao's Sauce stock from 24 to 0 (out of stock).")
+    assert ch["summary"].startswith("Set Marinara stock from 24 to 0 (out of stock).")
 
 
 def test_deal_preview_with_end_date_and_pairing(store, tools):
     sunday = (datetime.now(STORE_TZ) + timedelta(days=2)).replace(hour=23, minute=59, second=59, microsecond=0)
-    ch = stage(tools, "create_deal", product_id="kirkland-parmesan", type="amount_off", value=4,
+    ch = stage(tools, "create_deal", product_id="kirkland-parmesan", type="amount_off", value=2,
                ends_at=sunday.isoformat(), pairs_with=["barilla-spaghetti", "rao-marinara"])
     s = ch["summary"]
-    assert s.startswith("New deal: Parmesan $4 off ($8.99 instead of $12.99), through ")
+    assert s.startswith("New deal: Parmesan $2 off ($2.99 instead of $4.99), through ")
     assert "11:59 PM" in s
-    assert "when a shopper picks up Spaghetti or Rao's Sauce" in s
-    assert "Replaces the current $3 off deal." in s
+    assert "when a shopper picks up Spaghetti or Marinara" in s
+    assert "Replaces the current $1 off deal." in s
 
 
 # ── Each tool, applied ──
@@ -102,7 +103,7 @@ def test_deal_preview_with_end_date_and_pairing(store, tools):
 def test_move_product_updates_directions(store, tools):
     store.q("""select set_plan('7', '[{"product_id": "kirkland-parmesan", "reason": "topping"}]')""")
     store.apply(stage(tools, "move_product", product_id="kirkland-parmesan", section="A6")["id"])
-    assert cart(store)["next_step"] == "Aisle 6 → Parmesan, $3 off"
+    assert cart(store)["next_step"] == "Aisle 6 → Parmesan, $1 off"
 
 
 def test_out_of_stock_reaches_plans(store, tools):
@@ -128,7 +129,7 @@ def test_new_deal_replaces_old_and_undo_restores_it(store, tools):
                ends_at=None, pairs_with=["barilla-spaghetti"])
     store.apply(ch["id"])
     p = product(store, "kirkland-parmesan")
-    assert (p["deal_label"], float(p["sale_price"])) == ("25% off", 9.74)
+    assert (p["deal_label"], float(p["sale_price"])) == ("25% off", 3.74)
     assert not store.one("select active from deals where id = 'd-parm-3off'")["active"]
     store.undo(ch["id"])
     assert product(store, "kirkland-parmesan")["deal_id"] == "d-parm-3off"
@@ -138,7 +139,7 @@ def test_end_deal_keeps_price_for_carts_that_have_it(store, tools):
     add_to_cart(store, "kirkland-parmesan")
     store.apply(stage(tools, "end_deal", deal_id="d-parm-3off")["id"])
     assert product(store, "kirkland-parmesan")["deal_id"] is None
-    assert cart(store)["items"][0]["price"] == 9.99           # P10: the price you saw
+    assert cart(store)["items"][0]["price"] == 3.99           # P10: the price you saw
 
 
 def test_undo_restores_price_and_is_logged(store, tools):
@@ -156,7 +157,7 @@ def test_staged_undo_tool(store, tools):
     ch = stage(tools, "set_stock", product_id="rao-marinara", stock=0)
     store.apply(ch["id"])
     u = stage(tools, "undo_change", change_id=ch["id"])
-    assert u["summary"].startswith(f"Undo change #{ch['id']}: Set Rao's Sauce stock")
+    assert u["summary"].startswith(f"Undo change #{ch['id']}: Set Marinara stock")
     store.apply(u["id"])
     assert product(store, "rao-marinara")["stock"] == 24
 
@@ -222,7 +223,7 @@ def test_search_finds_what_people_say(tools, query, first):
 
 
 def test_empty_search_lists_everything(tools):
-    assert len(json.loads(tools.search_products(""))) == 18
+    assert len(json.loads(tools.search_products(""))) == len(json.loads(STORE_JSON.read_text())["products"])
 
 
 # ── The agent loop (scripted fake Claude) ──
@@ -294,7 +295,7 @@ def test_console_notes_reach_the_next_turn(store, tools):
     system_msg = fake.calls[1]["messages"][-1]
     assert system_msg["role"] == "system" and "CONFIRMED change #1" in system_msg["content"]
     # the live catalog rides along each turn, so Claude can stage without a search round
-    assert "kirkland-parmesan | Parmesan (" in system_msg["content"] and "$3 off → $9.99" in system_msg["content"]
+    assert "kirkland-parmesan | Parmesan (" in system_msg["content"] and "$1 off → $3.99" in system_msg["content"]
     assert agent.notes == []
 
 
@@ -362,10 +363,10 @@ def test_replacing_the_deal_on_screen_shows_the_new_one(store, tools):
     """Ending the old deal re-offers another one in the same transaction; the new deal must still win."""
     add_to_cart(store, "barilla-spaghetti")
     assert cart(store)["suggestion"]["deal_id"] == "d-parm-3off"
-    ch = stage(tools, "create_deal", product_id="kirkland-parmesan", type="amount_off", value=4,
+    ch = stage(tools, "create_deal", product_id="kirkland-parmesan", type="amount_off", value=2,
                ends_at=None, pairs_with=["barilla-spaghetti"])
     store.apply(ch["id"])
-    assert cart(store)["suggestion"]["text"] == "Parmesan is $4 off in Aisle 4. Want it?"
+    assert cart(store)["suggestion"]["text"] == "Parmesan is $2 off in Aisle 4. Want it?"
 
 
 def test_insights_tool_and_state(store, tools):
