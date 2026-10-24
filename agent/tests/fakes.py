@@ -33,7 +33,7 @@ CATALOG.append({"id": "avocados", "name": "Hass Avocados, 5 ct bag", "short_name
                 "sale_price": 5.99, "deal_label": None, "aisle": "Aisle 1", "section": "A1", "in_stock": True, "stock": 28,
                 "category": "produce", "tags": ["tacos", "mexican"]})
 
-CATALOG.append({"id": "kids-scissors", "name": "Kids' Scissors, 5 in blunt tip", "short_name": "Kids' Scissors",
+CATALOG.append({"id": "kids-scissors", "name": "up&up Kids' Scissors, Pointed Tip, 2 ct", "short_name": "Kids' Scissors",
                 "price": 2.49, "sale_price": 2.49, "deal_label": None, "aisle": "Aisle 9", "section": "A9", "in_stock": True,
                 "stock": 12, "category": "school", "tags": ["school"]})
 

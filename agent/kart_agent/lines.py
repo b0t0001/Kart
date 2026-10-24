@@ -122,7 +122,7 @@ def _dish(meal: str | None) -> str:
 
 def _list_amount(n: int, product: dict[str, Any]) -> str:
     """For a list of what's missing: "one pound of ground beef", but just "salsa" for a single plain item."""
-    if _unit_of(product) is None and n == 1:
+    if n == 1 and _unit_of(product) in (None, "pack"):   # "kids' scissors", not "one pack of kids' scissors"
         return (product.get("short_name") or product["name"]).lower()
     return _amount(n, product)
 

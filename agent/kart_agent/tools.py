@@ -142,8 +142,12 @@ def _plan_lines(plan: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _package(qty: int, product: dict[str, Any]) -> str:
-    """ "one bag of five avocados" when the package has a count in it, else the amount ("two boxes of spaghetti")."""
+    """ "one bag of five avocados" / "a two-pack of kids' scissors" when the package has a count in it, else the
+    amount ("two boxes of spaghetti")."""
     count, unit = re.search(r"\b(\d+)\s*ct\b", product["name"].lower()), _unit_of(product)
+    if count and unit == "pack":                         # "a two-pack of kids' scissors", "two 20-packs of tortillas"
+        size = _words(int(count.group(1))) if int(count.group(1)) <= 10 else count.group(1)
+        return f"a {size}-pack of {_name(product)}" if qty == 1 else f"{_words(qty)} {size}-packs of {_name(product)}"
     if count and unit:
         units = unit if qty == 1 else unit + ("es" if unit.endswith(("x", "ch")) else "s")
         return f"{_words(qty)} {units} of {_words(int(count.group(1)))} {_name(product)}"

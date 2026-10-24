@@ -346,10 +346,15 @@ async def test_plural_items_read_back_with_they(backend):
 async def test_an_add_across_the_store_says_it_comes_last(backend):
     backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1, "done": False}]
     out = json.loads(await run_tool("add_to_plan", {"product_id": "kids-scissors", "reason": "school"}, ctx(backend)))
-    assert out["readback"] == "Added kids' scissors, Aisle 9. That's across the store, so we'll grab them last."
+    assert out["readback"] == "Added a two-pack of kids' scissors, Aisle 9. That's across the store, so we'll grab them last."
 
 
 async def test_an_add_a_couple_of_aisles_on_says_nothing_extra(backend):
     backend.cart["plan"] = [{"product_id": "barilla-spaghetti", "reason": "pasta", "qty": 1, "done": False}]
     out = json.loads(await run_tool("add_to_plan", {"product_id": "daisy-sour-cream", "reason": "tacos"}, ctx(backend)))
     assert out["readback"] == "Added sour cream, Aisle 8."      # last, but only two aisles on
+
+
+async def test_a_counted_pack_reads_the_way_people_say_it(backend):
+    out = json.loads(await run_tool("add_to_plan", {"product_id": "kids-scissors", "reason": "school", "qty": 2}, ctx(backend)))
+    assert out["readback"] == "Added two two-packs of kids' scissors, Aisle 9."
