@@ -70,7 +70,7 @@ def test_kart_says_a_nudge_in_words_not_digits():
              "text": "Before you go: 2 Parmesan short."}
     assert proactive_line(over, CATALOG, plan) == "That's three boxes of spaghetti in the cart, and your list needs one. Keep the extra?"
     assert proactive_line(under, CATALOG, plan, meal="pasta night for 4") == (
-        "Before you go: you're two wedges of parmesan short for pasta night for 4. They're in Aisle 4.")
+        "Before you go: you're two wedges of parmesan short for pasta night. They're in Aisle 4.")
     assert proactive_line({**under, "product_id": "unknown"}, CATALOG, plan) == "Before you go: 2 Parmesan short."
 
 
@@ -93,7 +93,7 @@ def test_the_combined_checkout_nudge_is_said_as_one_list():
                 "items": [{"product_id": "barilla-spaghetti", "have": 0, "need": 1, "aisle": "Aisle 6"},
                           {"product_id": "kirkland-parmesan", "have": 0, "need": 2, "aisle": "Aisle 4"}]}
     assert proactive_line(combined, CATALOG, [], meal="pasta night for 4") == (
-        "Before you go: you still need one box of spaghetti and two wedges of parmesan for pasta night for 4. "
+        "Before you go: you still need one box of spaghetti and two wedges of parmesan for pasta night. "
         "Want to grab them?")
 
 
@@ -104,7 +104,7 @@ def test_one_missing_item_at_checkout_is_said_like_the_list():
     one = {"type": "nudge", "product_id": "rao-marinara", "kind": "under", "have": 0, "need": 1, "text": "x",
            "items": [{"product_id": "rao-marinara", "have": 0, "need": 1, "aisle": "Aisle 6"}]}
     assert proactive_line(one, CATALOG, [], meal="pasta night for 4") == (
-        "Before you go: you still need rao's sauce for pasta night for 4. Want to grab it?")
+        "Before you go: you still need rao's sauce for pasta night. Want to grab it?")
 
 
 def test_kart_speaks_up_when_you_pay_and_when_the_camera_is_unsure():

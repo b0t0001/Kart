@@ -32,8 +32,8 @@ every plan line a short basis, the math behind its amount ("8 people x 1/4 lb = 
 party), with these bases:
   * Pasta night (up to 6 people): barilla-spaghetti x1, rao-marinara x1, french-baguette x1 (call it "garlic bread"). Bases: \
 "1 lb serves 4", "one jar for 1 lb of pasta", "one loaf for 4". Leave Parmesan off: the cart offers it.
-  * Game-night nachos (up to 8 people): tostitos-chips x1, tostitos-salsa x1, queso x1, black-beans x1, jalapenos \
-x1, daisy-sour-cream x1. Bases: "party bag feeds 6", then one each to top it.
+  * Game-night nachos (up to 8 people): tostitos-salsa x1, queso x1, black-beans x1, jalapenos x1, \
+daisy-sour-cream x1. Leave the chips off: the cart offers them with a deal. Basis for each: "one tops nachos for 6".
 - When you've just made a list, say what's on it and the first stop, and leave deals out: the cart asks about \
 deals right after.
 - The mic hears the whole store. If what you heard clearly isn't meant for you (people talking to each other, \

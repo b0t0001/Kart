@@ -31,7 +31,7 @@ def proactive_line(event: dict[str, Any], catalog: list[dict[str, Any]], plan: l
         return _nudge_line(event, catalog, meal)
     if kind == "ui_action":                               # the iPad tells Kart what just happened on screen
         if event.get("action") == "paid":
-            dish = re.sub(r"\s+for\s+\d+\s*$", "", meal or "").strip()
+            dish = _dish(meal)
             return f"Paid. Enjoy {dish}!" if dish else "Paid. Thanks for shopping!"
         if event.get("action") == "unknown_item":
             return "I'm not sure what that is. Can you check the screen?"
@@ -94,6 +94,11 @@ def _amount(n: int, product: dict[str, Any]) -> str:
     return f"{_words(n)} {unit if n == 1 else plural} of {name}"
 
 
+def _dish(meal: str | None) -> str:
+    """The meal without its head count: "pasta night for 4" -> "pasta night"."""
+    return re.sub(r"\s+for\s+\d+\s*$", "", meal or "").strip()
+
+
 def _list_amount(n: int, product: dict[str, Any]) -> str:
     """For a list of what's missing: "one pound of ground beef", but just "salsa" for a single plain item."""
     if _unit_of(product) is None and n == 1:
@@ -111,7 +116,8 @@ def _combined_line(items: list[dict[str, Any]], catalog: list[dict[str, Any]], m
         return None
     listed = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
     one = len(items) == 1 and items[0].get("need", 1) - items[0].get("have", 0) == 1
-    return f"Before you go: you still need {listed}{f' for {meal}' if meal else ''}. Want to grab {'it' if one else 'them'}?"
+    dish = _dish(meal)
+    return f"Before you go: you still need {listed}{f' for {dish}' if dish else ''}. Want to grab {'it' if one else 'them'}?"
 
 
 def _nudge_line(event: dict[str, Any], catalog: list[dict[str, Any]], meal: str | None) -> str | None:
@@ -129,7 +135,8 @@ def _nudge_line(event: dict[str, Any], catalog: list[dict[str, Any]], meal: str 
         return f"That's {_amount(have, product)} in the cart, and {meal or 'your list'} needs {_words(need)}. Keep the extra?"
     short = need - have
     where = (f" They're in {product['aisle']}." if short > 1 else f" It's in {product['aisle']}.") if product.get("aisle") else ""
-    return f"Before you go: you're {_amount(short, product)} short{f' for {meal}' if meal else ''}.{where}"
+    dish = _dish(meal)
+    return f"Before you go: you're {_amount(short, product)} short{f' for {dish}' if dish else ''}.{where}"
 
 
 _ACKS = {"okay", "ok", "alright", "right", "yeah", "yep", "cool", "nice", "sure", "thanks"}
