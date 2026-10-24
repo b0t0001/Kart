@@ -69,4 +69,13 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         }
         #expect(PostgRESTError(status: 400, message: "permission denied", code: "42501").unresolvedCount == nil)
     }
+
+    @MainActor @Test func backendSurfacesRowsItCannotDecode() async throws {
+        StubProtocol.reply = .init(status: 200, body: "{}")          // reset_cart is fine; a carts read of {} isn't an array
+        let backend = SupabaseKartBackend(url: URL(string: "http://127.0.0.1:54321")!, anonKey: "anon", cartId: "7",
+                                          layout: try Fixtures.catalog().layout, session: StubProtocol.session())
+        #expect(backend.lastError == nil)
+        try await backend.startTrip()
+        #expect(backend.lastError?.contains("carts") == true)
+    }
 }

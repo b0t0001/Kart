@@ -12,6 +12,8 @@ public final class SupabaseKartBackend: KartBackend {
     public private(set) var transcript: [TranscriptLine] = []
     public private(set) var connection: ConnectionState = .reconnecting
     public private(set) var receipt: Receipt?
+    /// The last read that failed (network or a row that didn't decode), for the debug panel. Cleared on success.
+    public private(set) var lastError: String?
 
     @ObservationIgnored private let rest: PostgREST
     @ObservationIgnored private let realtime: RealtimeSignals
@@ -165,8 +167,20 @@ public final class SupabaseKartBackend: KartBackend {
         }
     }
 
+    private func fetch<T: Decodable>(_ path: String, as type: T.Type) async -> [T]? {
+        do {
+            let rows = try await rest.select(path, as: type)
+            lastError = nil
+            return rows
+        } catch {
+            let table = path.prefix { $0 != "?" }
+            lastError = "\(table): \(error)"
+            return nil
+        }
+    }
+
     private func refreshCart(force: Bool = false) async {
-        guard let fresh = try? await rest.select("carts?cart_id=eq.\(cartId)", as: CartState.self).first else { return }
+        guard let fresh = await fetch("carts?cart_id=eq.\(cartId)", as: CartState.self)?.first else { return }
         let tripChanged = fresh.tripId != cart.tripId
         cart = fresh
         if tripChanged || force {
@@ -178,29 +192,29 @@ public final class SupabaseKartBackend: KartBackend {
 
     private func refreshEvents() async {
         guard let trip = cart.tripId?.uuidString.lowercased() else { events = []; return }
-        if let rows: [CartEvent] = try? await rest.select("cart_events?cart_id=eq.\(cartId)&trip_id=eq.\(trip)&order=id") {
+        if let rows = await fetch("cart_events?cart_id=eq.\(cartId)&trip_id=eq.\(trip)&order=id", as: CartEvent.self) {
             events = rows
         }
     }
 
     private func refreshTranscript() async {
         guard let trip = cart.tripId?.uuidString.lowercased() else { transcript = []; return }
-        if let rows: [TranscriptLine] = try? await rest.select(
-            "transcript?cart_id=eq.\(cartId)&trip_id=eq.\(trip)&order=id&select=id,role,text,created_at") {
+        if let rows = await fetch("transcript?cart_id=eq.\(cartId)&trip_id=eq.\(trip)&order=id&select=id,role,text,created_at",
+                                  as: TranscriptLine.self) {
             transcript = rows
         }
     }
 
     private func refreshReceipt() async {
         guard let trip = cart.tripId?.uuidString.lowercased() else { receipt = nil; return }
-        if let rows: [Receipt] = try? await rest.select("receipts?cart_id=eq.\(cartId)&trip_id=eq.\(trip)&order=id.desc&limit=1") {
+        if let rows = await fetch("receipts?cart_id=eq.\(cartId)&trip_id=eq.\(trip)&order=id.desc&limit=1", as: Receipt.self) {
             receipt = rows.first
         }
     }
 
     private func refreshCatalog() async {
-        guard let products: [Product] = try? await rest.select("products?active=is.true&order=sort"),
-              let deals: [Deal] = try? await rest.select("deals?active=is.true&order=sort") else { return }
+        guard let products = await fetch("products?active=is.true&order=sort", as: Product.self),
+              let deals = await fetch("deals?active=is.true&order=sort", as: Deal.self) else { return }
         catalog = Catalog(layout: catalog.layout, products: products, deals: deals)
     }
 }
