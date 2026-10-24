@@ -21,6 +21,7 @@ Product background: `project_context/claude_CLAUDE.md` and `project_context/clau
 | `ios/`, `agent/` | **iPad app** chat | Cart-mounted SwiftUI iPad app + Cartesia Line voice agent: navigation, cart, auto-checkout |
 | `backend/`, `data/`, `merchant/` | **Market backend** chat (Dylan is starting it) | Catalog, DB schema, RPCs, deal/route logic, and the merchant admin agent; publish `data/store.json` early, since CV needs it |
 | `hardware/` | **Hardware teammate's** chat (on his own computer, synced through GitHub) | Pi setup, autostart, camera/wiring checks; runs `pi/` on the real hardware and reports bugs |
+| `pi/tests/clips/` | **Hardware** chat writes, **CV** owns (v0.11) | Real half-size regression clips: 640×360, quality 80, 5 Hz, ≤ 3 MB each, ≤ 25 MB for the first batch, each with an `expected.json`. Full-res clips stay out of git |
 | `docs/CONTRACT.md`, root `.gitignore` | **Manager** | Propose changes, don't edit |
 
 **Hardware lane handoff from CV (v0.7):** CV ships no systemd unit; `hardware/` owns autostart.
