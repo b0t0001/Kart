@@ -23,8 +23,10 @@ from kartcv.identify.features import load_features  # noqa: E402
 from kartcv.identify.gallery import Gallery  # noqa: E402
 from kartcv.identify.hybrid import HybridIdentifier  # noqa: E402
 from kartcv.pipeline import Pipeline  # noqa: E402
+from kartcv.server import ControlServer  # noqa: E402
 from kartcv.sinks import ConsoleSink, HttpSink, JsonlSink  # noqa: E402
 from kartcv.sources import LiveCamera, iter_ticks, load_recording  # noqa: E402
+from kartcv.trip import TripWatcher  # noqa: E402
 
 log = logging.getLogger("kart")
 TICK_S = 0.1
@@ -103,8 +105,28 @@ def cmd_live(cfg, env, args) -> int:
 
 
 def start_extras(cfg, env, pipeline) -> list:
-    """Background helpers for live mode (control server, trip watcher). Filled in by later milestones."""
-    return []
+    """Live-mode helpers: the control server (status/reset/debug page) and the new-trip watcher."""
+    extras = []
+    try:
+        server = ControlServer(cfg.server_port, pipeline.status, pipeline.request_reset,
+                               frames_fn=pipeline.latest_frames, debug_view=cfg.debug_view,
+                               crops_dir=pipeline.crops_dir)
+        server.start()
+        extras.append(server)
+    except OSError as e:  # e.g. port taken: the cart keeps working without it
+        log.warning("control server not started on :%d (%s)", cfg.server_port, e)
+
+    url, key = env.get("SUPABASE_URL"), env.get("SUPABASE_ANON_KEY")
+    if url and key:
+        def on_new_trip():
+            pipeline.request_reset()
+            fresh = fetch_catalog(url, key)  # products the owner added live are known from the next trip
+            if fresh is not None:
+                pipeline.catalog.replace_with(fresh)
+                log.info("catalog refreshed: %d products", len(fresh.ids()))
+
+        extras.append(TripWatcher(url, key, cfg.cart_id, pipeline.state_dir / "trip.json", on_new_trip))
+    return extras
 
 
 def cmd_replay(cfg, env, args) -> int:
