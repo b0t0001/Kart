@@ -15,7 +15,7 @@
 | `Spacer` | Bar behind the iPad; slides into a socket on each bracket and is pinned by a zip tie at each end | 1, lying on its wide face |
 | `TEST_Profile` | 4 mm slice of the arch, web, leg and channel: checks the handle and wire fit, the bar clearance and the screen angle | first |
 | `TEST_Corner` | Bottom corner of one channel: checks the iPad fit | first |
-| `REF_*` | Handle, wire, middle bars and iPad envelopes for checking clearances | don't print |
+| `REF_*` | Handle, wire, middle bars, slanted mesh wires and iPad envelopes for checking clearances | don't print |
 
 ## Run it in Fusion
 
@@ -38,11 +38,11 @@ uv run --with manifold3d --with numpy --with matplotlib hardware/cad/check/check
 
 Add `name="value"` pairs to try other numbers, for example `check.py drop_tops="150 mm" tilt="20 deg"`, or `--script=path` to check another version of the script. It takes about half a minute and checks three things:
 
-1. **The script against a mock of Fusion's API** (`check/adsk/`). Every expression must evaluate and every sketch dimension must match its geometry. The fillet, chamfer and export code paths run too.
+1. **The script against a mock of Fusion's API** (`check/adsk/`). Every expression must evaluate with the right units (the mock rejects a unit mix-up the way Fusion does) and every sketch dimension must match its geometry. The fillet, chamfer and export code paths run too.
 2. **The same extrusions rebuilt as real solids:**
    - each part is one solid
-   - nothing overlaps the iPad, handle, wire, middle bars or another part
-   - the mount slides over the handle and wire and sits down on them, clear of the middle bars
+   - nothing overlaps the iPad, handle, wire, middle bars, mesh wires or another part
+   - the mount slides over the handle and wire and sits down on them, clear of the middle bars and mesh wires
    - it's captured: nudged in any direction or twisted about the handle or the wire, it hits the cart, except straight up
    - the iPad slides in and out from above
    - both zip-tie loops have room
@@ -65,10 +65,11 @@ Side view of the cart, measured with horizontal and vertical lines (your drawing
 | `rim_side` | 1 | wire is offset toward the basket (assumed; −1 = toward the shopper, not supported) |
 | `bar1_drop`, `bar1_w` × `bar1_h` | 63 mm, 8 × 3.5 mm | upper middle bar: really two wires side by side, modelled as a block |
 | `bar2_drop`, `bar2_d` | 110 mm, 3.5 mm | lower middle bar |
+| `mesh_x0`, `mesh_pitch`, `mesh_d` | 60, 43, 3.5 mm | slanted mesh wires in the handle-wire plane: the first 60 mm from the handle centre, then every 43 mm, mirrored each side |
 
 From these the script works out the wire's centre: **24 mm toward the basket and 143 mm below the handle's centre**, 145 mm apart and about 10° off vertical. The middle bars are assumed to sit on the line between the handle and the wire.
 
-**How accurate do these need to be?** The bracket keeps `bar_clear` (6 mm) away from the middle bars, so those can be off by a few mm. The handle-to-wire spacing (`drop_tops`, `gap_edges`) has to be right within about 1 mm, because the arch and the pad are both rigid. Print `TEST_Profile` first: if the pad misses the wire, correct `drop_tops` / `gap_edges` by the miss and re-run.
+**How accurate do these need to be?** The bracket keeps `bar_clear` (6 mm) away from the middle bars, so those can be off by a few mm. Each bracket's arch and pad sit between the mesh wires at 103 and 146 mm from the handle centre, about 6.5 mm clear of the inner one and 16 mm clear of the outer one. If the first mesh wire is really more than ~65 mm out, they touch: the popup warns, and narrowing `arm_w` buys room. The handle-to-wire spacing (`drop_tops`, `gap_edges`) has to be right within about 1 mm, because the arch and the pad are both rigid. Print `TEST_Profile` first: if the pad misses the wire, correct `drop_tops` / `gap_edges` by the miss and re-run.
 
 ## Parameters you'll touch
 
@@ -85,7 +86,7 @@ Every dimension is a User Parameter (Modify → Change Parameters), with a comme
 | `lip_w`, `lip_h` | 6 mm | How far the front lips reach over the bezel (bezel ≈ 9 mm) |
 | `win_lo`, `win_hi` | 20, 22 mm | Where the side-wall windows start and stop: they keep the speakers, buttons, port and front camera clear |
 | `grip` | 30 mm | How far the ledge and back plate reach under the iPad |
-| `arm_h`, `arm_t`, `arm_w`, `sad_t` | 16, 10, 24, 6 mm | Leg height, web/leg thickness, arch/pad width, arch wall |
+| `arm_h`, `arm_t`, `arm_w`, `sad_t` | 16, 8, 17, 6 mm | Leg height, web/leg thickness, arch/pad width (sized to fit between mesh wires), arch wall |
 | `sp_v` | 100 mm | Spacer height; keep it above the arch |
 | `fil_big` / `fil_med` / `fil_small`, `bed_ch` | 2 / 1 / 0.4, 0.4 mm | Fillet classes and bed chamfer (CAD rule 3). Set `AUTO_FILLET = False` to skip them |
 
