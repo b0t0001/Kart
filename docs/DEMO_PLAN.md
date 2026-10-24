@@ -78,8 +78,8 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 | 4 | Drop the **Parmesan shaker** | `kirkland-parmesan` | 1 add at the deal price | Bill shows the struck-through price and "saved $1" | "Added the Parmesan." |
 | 5 *(optional)* | Drop any **non-catalog item** you have on hand (e.g. a water bottle) | (unknown) | settle → Claude → "unknown" | **"Is this…?" card**; Pay blocked | "I'm not sure what that is. Can you check the screen?" |
 | 6 *(optional)* | Tap **"Not this"**, take it out | — | removal resolves it | Card clears | — |
-| 7 *(beta)* | Drop **spaghetti box 2** | `barilla-spaghetti` | 1 add (qty 2) | **"Too much" card** | **"That's two boxes of spaghetti, and pasta night for 4 needs one. Keep the extra?"** |
-| 8 *(beta)* | Say *"No"*, take box 2 out | — | 1 remove | Total drops; card clears | — |
+| 7 *(beta)* | Drop **spaghetti box 2** | `barilla-spaghetti` | 1 add (qty 2) | **"Too much" card** | **"That's two boxes of spaghetti in the cart, and pasta night for 4 needs one. Keep the extra?"** |
+| 8 *(beta)* | Say *"No"*, take box 2 out | — | 1 remove | Total drops; card clears | "Took the Spaghetti off your bill." |
 | 9 | Tap **Check out** | — | — | *(beta)* **"Before you go: you still need garlic bread (Aisle 2)"** | "Before you go: you still need garlic bread for pasta night. Want to grab it?" |
 | 10 | Say *"Skip"*, tap **Pay** | — | — | **Receipt:** items, saved $1, time in store | "Paid. Enjoy pasta night!" |
 
@@ -115,3 +115,5 @@ Everything else already in the catalog (tacos, breakfast, household) **stays**, 
 
 
 > **Beta nudges (2026-10-24):** only "Keep the extra?" (too much) and the single "Before you go" checkout list fire. Mid-trip "you're short" nudges are off.
+
+> **Rehearsed with real voice on hosted (2026-10-24, throwaway cart):** Meal A with the beta off and Meal B with the beta on run clean, line for line. Meal A with the beta on is being rerun now that mid-trip nudges are off.
