@@ -72,8 +72,26 @@ create table if not exists carts (
                    check (status in ('idle', 'shopping', 'checkout', 'paid')),
   trip_started_at  timestamptz,                       -- P2: set by reset_cart
   location         jsonb,                             -- P3: {section, source: "item"|"voice", at}; null = entrance
+  features         jsonb not null default '{}',       -- per-cart feature overrides, e.g. {"quantity_nudges": true}
+  nudge            jsonb,                             -- BETA quantity nudge: {product_id,name,kind,have,need,basis,text,savings?,aisle?,at}
+  nudged           text[] not null default '{}',      -- "over:<id>" / "under:<id>" already nudged this trip
   updated_at       timestamptz not null default now()
 );
+-- added after first deploy (v0.12): keep existing databases in step
+alter table carts add column if not exists features jsonb not null default '{}';
+alter table carts add column if not exists nudge jsonb;
+alter table carts add column if not exists nudged text[] not null default '{}';
+
+-- Feature flags (v0.12): a global default per feature; carts.features overrides it per cart.
+create table if not exists feature_flags (
+  name             text primary key,
+  enabled_default  boolean not null,
+  description      text not null default ''
+);
+-- on conflict do nothing: re-running migrations never flips a default someone already changed
+insert into feature_flags (name, enabled_default, description)
+values ('quantity_nudges', false, 'BETA: "right amount for the meal" nudges (CONTRACT: Quantity nudges)')
+on conflict (name) do nothing;
 
 create table if not exists cart_events (
   id            bigserial primary key,
@@ -156,7 +174,7 @@ do $$
 declare t text;
 begin
   foreach t in array array['store_info', 'sections', 'products', 'deals', 'carts', 'cart_events',
-                           'transcript', 'receipts'] loop
+                           'transcript', 'receipts', 'feature_flags'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists read_all on public.%I', t);
     execute format('create policy read_all on public.%I for select using (true)', t);

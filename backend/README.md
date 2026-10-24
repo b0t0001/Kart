@@ -47,6 +47,8 @@ Between demo runs: `backend/.venv/bin/python backend/db.py reset-demo` restores 
 | `set_location(p_cart_id, p_section)` | agent ("I'm at aisle 5") | Accepts `A5`, `5`, `aisle 5`. Adds set it too. Drives the route. |
 | `append_transcript(p_cart_id, p_role, p_text)` | agent | Captions; `reset_cart` deletes the cart's lines. |
 | `checkout(p_cart_id, p_provider)` | iPad Pay | Returns the `receipts` row (same one if called twice). Refuses while an unrecognized item is unresolved; resolve with `apply_cart_event(..., p_resolves_event_id)`. |
+| `set_feature(p_cart_id, p_feature, p_on)` | iPad demo switch | Per-cart override of a feature flag (`p_on` null = back to the default). |
+| `dismiss_nudge(p_cart_id, p_action)` | iPad, agent | `keep` (over: plan qty := what's in the cart) or `ok` (acknowledged). |
 | `POST /functions/v1/voice-token {cart_id}` | iPad | `{token, expires_at, agent_id, ws_url, cartesia_version}`; 400 unknown cart, 502 upstream. |
 
 Read with the anon key (realtime on `carts`, `cart_events`, `products`, `deals`, `sections`,
@@ -62,6 +64,19 @@ Read with the anon key (realtime on `carts`, `cart_events`, `products`, `deals`,
 - **Suggestion:** a live deal whose `pairs_with` matches something in the cart, product in stock and
   not in the cart, offered once per trip; the most recently added pairing wins. A deal the store
   creates after the current suggestion was offered replaces it, so new deals reach shoppers at once.
+
+## Quantity nudges (BETA, off by default)
+
+Feature `quantity_nudges` (CONTRACT v0.12). The global default lives in `feature_flags`, seeded
+**false**; `carts.features` overrides it per cart. With it off, cart outputs are identical to tag
+`stable-pre-nudges` (checked snapshot by snapshot). With it on, `carts.nudge` works like this:
+- It only nudges plan items. It's `over` when the cart has more than the plan's qty (with `savings`
+  = price × extra), and `under` when the shopper is short and has walked past the item's aisle or
+  gone to checkout.
+- One nudge shows at a time, and only when no deal card is up. Each product is nudged at most once
+  per direction per trip (`carts.nudged`), and a nudge clears itself when the counts match.
+- Plan lines carry the agent's `basis` either way.
+- To flip it for everyone: `update feature_flags set enabled_default = true where name = 'quantity_nudges'`.
 
 ## Tests
 

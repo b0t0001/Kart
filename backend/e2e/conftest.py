@@ -2,8 +2,9 @@
 
 They talk to it exactly like the clients do: PostgREST RPCs and realtime with the ANON key
 (the Pi and the iPad), and SQL with SUPABASE_DB_URL for the merchant side (merchant_apply is
-service-role only). Values come from the repo .env. Each run uses its own cart id, and the
-catalog is restored from data/store.json afterwards.
+service-role only). Values come from the repo .env. Each run uses its own cart id and undoes
+exactly the catalog changes it made, so it's safe on the shared hosted project (it never
+re-seeds the catalog or touches cart 7).
 """
 
 from __future__ import annotations
@@ -35,9 +36,16 @@ def db():
     if not CONFIGURED:
         pytest.skip("SUPABASE_DB_URL not set in .env")
     with kartdb.connect(DB_URL) as conn:
-        kartdb.seed(conn)
         yield conn
-        kartdb.seed(conn)                     # undo the merchant beat for whoever runs next
+
+
+@pytest.fixture
+def merchant_changes(db):
+    """Merchant changes a test applies; undone newest-first afterwards."""
+    applied: list[int] = []
+    yield applied
+    for cid in reversed(applied):
+        db.execute("select merchant_undo(%s)", [cid])
 
 
 @pytest.fixture

@@ -68,6 +68,31 @@ create or replace view product_catalog with (security_invoker = true) as
 
 grant select on live_deals, product_catalog to anon, authenticated, service_role;
 
+-- ── Feature flags (v0.12) ──
+
+-- A cart's override wins; otherwise the global default; unknown features are off.
+create or replace function feature_enabled(p_features jsonb, p_feature text)
+returns boolean language sql stable as $$
+  select coalesce((p_features->>p_feature)::boolean,
+                  (select enabled_default from feature_flags where name = p_feature),
+                  false)
+$$;
+
+-- Quantity nudges (BETA): one row per plan line with what the cart has against what the plan needs.
+create or replace function nudge_lines(p_items jsonb, p_plan jsonb)
+returns table (pid text, need int, have int, basis text, price numeric, got_at timestamptz,
+               short_name text, aisle text, section_x int, in_stock boolean, ord bigint)
+language sql stable as $$
+  select e->>'product_id', greatest(coalesce((e->>'qty')::int, 1), 1),
+         coalesce((i->>'qty')::int, 0), e->>'basis', (i->>'price')::numeric,
+         (i->>'last_added_at')::timestamptz, pc.short_name, pc.aisle, pc.section_x,
+         coalesce(pc.in_stock, false), t.ord
+  from jsonb_array_elements(p_plan) with ordinality as t(e, ord)
+  join product_catalog pc on pc.id = e->>'product_id'
+  left join lateral (select x as i from jsonb_array_elements(p_items) x
+                     where x->>'product_id' = e->>'product_id' limit 1) it on true
+$$;
+
 -- ── Recompute: everything derived on a cart row ──
 -- Reprices items from the live catalog, then totals, plan (done flags, route order),
 -- next_step, lcd_line1 and the moment-of-decision suggestion.
@@ -84,6 +109,12 @@ declare
   v_cand   record;
   v_cur    record;
   v_keep   boolean;
+  v_line   record;
+  v_kind   text;
+  v_at     timestamptz;
+  v_pos    int;
+  v_nudge  jsonb;
+  v_nudged text[];
   v_offered timestamptz;
   v_suggested text[];
 begin
@@ -154,6 +185,7 @@ begin
   select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
            'product_id', elem->>'product_id',
            'reason',     elem->>'reason',
+           'basis',      elem->>'basis',
            'qty',        want,
            'done',       coalesce(have, 0) >= want,
            'name',       coalesce(short_name, elem->>'name'),
@@ -239,6 +271,69 @@ begin
   c.suggestion := v_sugg;
   c.suggested_deals := v_suggested;
 
+  -- Quantity nudges (BETA, feature quantity_nudges, off by default). With the flag off, nothing
+  -- below runs: nudge stays null and nudged untouched. Only plan items are nudged. The current
+  -- nudge stays while its condition holds (it clears itself when the counts match); a new one is
+  -- picked only when no deal card is up, at most once per product per direction per trip.
+  v_nudge := null;
+  v_nudged := c.nudged;
+  if feature_enabled(c.features, 'quantity_nudges') then
+    select x into v_pos from sections where id = c.location->>'section';
+    v_kind := null;
+    if c.nudge is not null then
+      select * into v_line from nudge_lines(v_items, v_plan) l
+      where l.pid = c.nudge->>'product_id'
+        and ((c.nudge->>'kind' = 'over' and l.have > l.need)
+             or (c.nudge->>'kind' = 'under' and l.have < l.need));
+      if found then
+        v_kind := c.nudge->>'kind';
+        v_at := (c.nudge->>'at')::timestamptz;
+      end if;
+    end if;
+    if v_kind is null and v_sugg is null then
+      -- over: more in the cart than the plan needs (the most recent add first)
+      select * into v_line from nudge_lines(v_items, v_plan) l
+      where l.have > l.need and not ('over:' || l.pid = any(c.nudged))
+      order by l.got_at desc nulls last limit 1;
+      if found then
+        v_kind := 'over';
+      else
+        -- under: short, and the shopper has moved past its aisle or is checking out
+        select * into v_line from nudge_lines(v_items, v_plan) l
+        where l.have < l.need and l.in_stock and not ('under:' || l.pid = any(c.nudged))
+          and (c.status = 'checkout' or (v_pos is not null and v_pos > l.section_x))
+        order by l.ord limit 1;
+        if found then
+          v_kind := 'under';
+        end if;
+      end if;
+      if v_kind is not null then
+        v_at := now();
+        v_nudged := array_append(v_nudged, v_kind || ':' || v_line.pid);
+      end if;
+    end if;
+    if v_kind = 'over' then
+      v_nudge := jsonb_strip_nulls(jsonb_build_object(
+        'product_id', v_line.pid, 'name', v_line.short_name, 'kind', 'over',
+        'have', v_line.have, 'need', v_line.need, 'basis', v_line.basis,
+        'text', format('That''s %s %s in the cart, and your list needs %s%s. Keep the extra %s?',
+                       v_line.have, v_line.short_name, v_line.need,
+                       coalesce(' (' || v_line.basis || ')', ''), v_line.have - v_line.need),
+        'savings', round(coalesce(v_line.price, 0) * (v_line.have - v_line.need), 2),
+        'aisle', v_line.aisle, 'at', v_at));
+    elsif v_kind = 'under' then
+      v_nudge := jsonb_strip_nulls(jsonb_build_object(
+        'product_id', v_line.pid, 'name', v_line.short_name, 'kind', 'under',
+        'have', v_line.have, 'need', v_line.need, 'basis', v_line.basis,
+        'text', format('Before you go: you''re %s %s short%s. It''s in %s.',
+                       v_line.need - v_line.have, v_line.short_name,
+                       coalesce(' (' || v_line.basis || ')', ''), v_line.aisle),
+        'aisle', v_line.aisle, 'at', v_at));
+    end if;
+  end if;
+  c.nudge := v_nudge;
+  c.nudged := v_nudged;
+
   -- Human line for the iPad, and line 1 of the LCD (suggestion wins on the LCD).
   if v_next.product_id is not null then
     c.next_step := v_next.aisle || ' → ' || v_next.name
@@ -262,7 +357,8 @@ begin
   update carts set
     items = c.items, total = c.total, savings = c.savings, item_count = c.item_count,
     plan = c.plan, next_step = c.next_step, lcd_line1 = c.lcd_line1,
-    suggestion = c.suggestion, suggested_deals = c.suggested_deals, updated_at = now()
+    suggestion = c.suggestion, suggested_deals = c.suggested_deals,
+    nudge = c.nudge, nudged = c.nudged, updated_at = now()
   where cart_id = p_cart_id
   returning * into c;
   return c;
@@ -388,6 +484,7 @@ begin
            'product_id', elem->>'product_id',
            'reason',     elem->>'reason',
            'qty',        elem->'qty',
+           'basis',      elem->>'basis',
            'name',       elem->>'name')) order by ord), '[]'::jsonb)
     into v_plan
   from jsonb_array_elements(coalesce(p_plan, '[]'::jsonb)) with ordinality as t(elem, ord)
@@ -407,7 +504,7 @@ begin
   delete from transcript where cart_id = p_cart_id;
   update carts set items = '[]', plan = '[]', suggestion = null, suggested_deals = '{}',
                    trip_id = gen_random_uuid(), status = 'shopping', trip_started_at = now(),
-                   location = null
+                   location = null, nudge = null, nudged = '{}'
   where cart_id = p_cart_id;
   return recompute_cart(p_cart_id);
 end $$;
@@ -421,6 +518,45 @@ begin
   where c.cart_id = p_cart_id and o.cart_id = c.cart_id and o.trip_id = c.trip_id
     and o.deal_id = c.suggestion->>'deal_id' and o.dismissed_at is null;
   update carts set suggestion = null where cart_id = p_cart_id;
+  return recompute_cart(p_cart_id);
+end $$;
+
+-- Feature switch for one cart (the iPad's demo control). p_on null removes the override.
+create or replace function set_feature(p_cart_id text, p_feature text, p_on boolean)
+returns carts language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from feature_flags where name = p_feature) then
+    raise exception 'unknown feature: %', p_feature;
+  end if;
+  insert into carts (cart_id) values (p_cart_id) on conflict do nothing;
+  update carts set features = case when p_on is null then features - p_feature
+                                   else features || jsonb_build_object(p_feature, p_on) end
+  where cart_id = p_cart_id;
+  return recompute_cart(p_cart_id);
+end $$;
+
+-- The shopper answers a quantity nudge. keep (over): the plan now wants what's in the cart.
+-- ok: acknowledged; that product/direction isn't nudged again this trip either way.
+create or replace function dismiss_nudge(p_cart_id text, p_action text)
+returns carts language plpgsql security definer set search_path = public as $$
+declare c carts;
+begin
+  if p_action not in ('keep', 'ok') then
+    raise exception 'action must be keep or ok, got %', p_action;
+  end if;
+  select * into c from carts where cart_id = p_cart_id for update;
+  if not found then
+    raise exception 'unknown cart: %', p_cart_id;
+  end if;
+  if c.nudge is not null and p_action = 'keep' and c.nudge->>'kind' = 'over' then
+    update carts set plan = (
+      select jsonb_agg(case when e->>'product_id' = c.nudge->>'product_id'
+                            then e || jsonb_build_object('qty', (c.nudge->>'have')::int) else e end
+                       order by ord)
+      from jsonb_array_elements(c.plan) with ordinality as t(e, ord))
+    where cart_id = p_cart_id;
+  end if;
+  update carts set nudge = null where cart_id = p_cart_id;
   return recompute_cart(p_cart_id);
 end $$;
 
@@ -469,3 +605,5 @@ grant execute on function apply_cart_event(text, text, text, real, text, text, i
 grant execute on function set_plan(text, jsonb)          to anon, authenticated, service_role;
 grant execute on function reset_cart(text)               to anon, authenticated, service_role;
 grant execute on function dismiss_suggestion(text)       to anon, authenticated, service_role;
+grant execute on function set_feature(text, text, boolean)  to anon, authenticated, service_role;
+grant execute on function dismiss_nudge(text, text)         to anon, authenticated, service_role;

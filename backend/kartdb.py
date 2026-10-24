@@ -16,7 +16,7 @@ STORE_JSON = REPO / "data" / "store.json"
 SHIM = DB_DIR / "local_supabase_shim.sql"
 
 # Tables we own; --fresh drops these (never the whole schema: Supabase owns public's grants).
-OUR_TABLES = ["merchant_changes", "receipts", "transcript", "cart_events", "carts", "deals", "products", "sections", "store_info"]
+OUR_TABLES = ["feature_flags", "deal_offers", "merchant_changes", "receipts", "transcript", "cart_events", "carts", "deals", "products", "sections", "store_info"]
 
 
 def load_env() -> None:
@@ -70,6 +70,7 @@ RPC_PARAM_TYPES = {
     "p_source": "text", "p_label": "text", "p_camera": "int", "p_snapshot_url": "text",
     "p_event_id": "uuid", "p_method": "text", "p_plan": "jsonb", "p_resolves_event_id": "uuid",
     "p_status": "text", "p_section": "text", "p_role": "text", "p_text": "text", "p_provider": "text",
+    "p_feature": "text", "p_on": "boolean", "p_action": "text",
 }
 
 

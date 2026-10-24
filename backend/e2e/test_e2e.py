@@ -37,11 +37,12 @@ def cv_to_rpc(ev):
             "p_event_id": ev["event_id"], "p_method": ev["method"]}
 
 
-def merchant(db, tool, args, summary):
-    """What the console does on Confirm: a staged change, then merchant_apply."""
+def merchant(db, applied, tool, args, summary):
+    """What the console does on Confirm: a staged change, then merchant_apply (undone after the test)."""
     cid = db.execute("insert into merchant_changes (tool, args, summary, request) values (%s, %s, %s, 'e2e') "
                      "returning id", [tool, Jsonb(args), summary]).fetchone()[0]
     db.execute("select merchant_apply(%s)", [cid])
+    applied.append(cid)
     return cid
 
 
@@ -49,11 +50,14 @@ def qty(cart, pid):
     return next((i["qty"] for i in cart["items"] if i["product_id"] == pid), 0)
 
 
-def test_full_trip_with_the_merchant_beat(rest, db, cart_id):
+def test_full_trip_with_the_merchant_beat(rest, db, cart_id, merchant_changes):
     watch = Watch(URL, ANON, "carts", f"cart_id=eq.{cart_id}")
+    parm_deal = f"d-e2e-parm-{uuid.uuid4().hex[:6]}"
     try:
         # The pitch opens without a Parmesan deal; the owner will create it live.
-        merchant(db, "end_deal", {"deal_id": "d-parm-3off"}, "End the Parmesan deal")
+        running = db.execute("select deal_id from product_catalog where id = 'kirkland-parmesan'").fetchone()[0]
+        if running:
+            merchant(db, merchant_changes, "end_deal", {"deal_id": running}, "End the Parmesan deal")
 
         # iPad: Welcome tap, then the voice agent's plan
         c = rest.rpc("reset_cart", p_cart_id=cart_id)
@@ -81,16 +85,16 @@ def test_full_trip_with_the_merchant_beat(rest, db, cart_id):
         assert c["suggestion"] is None and "d-baguette-1off" in c["suggested_deals"]
 
         # Merchant: "parmesan $3 off" confirmed in the console → the cart's card switches live
-        merchant(db, "create_deal", {"deal_id": "d-e2e-parm", "product_id": "kirkland-parmesan",
+        merchant(db, merchant_changes, "create_deal", {"deal_id": parm_deal, "product_id": "kirkland-parmesan",
                                      "type": "amount_off", "value": 3, "label": "$3 off", "ends_at": None,
                                      "pairs_with": ["barilla-spaghetti", "rao-marinara"]}, "Parmesan $3 off")
-        rec = watch.wait_for(lambda r: (r.get("suggestion") or {}).get("deal_id") == "d-e2e-parm")
+        rec = watch.wait_for(lambda r: (r.get("suggestion") or {}).get("deal_id") == parm_deal)
         assert rec["suggestion"]["text"] == "Parmesan is $3 off in Aisle 4. Want it?"
 
         # iPad: "Yes" puts it on the plan, which consumes the card (nothing else is eligible now)
         c = rest.rpc("set_plan", p_cart_id=cart_id,
                      p_plan=PASTA + [{"product_id": "kirkland-parmesan", "reason": "said yes to the deal"}])
-        assert c["suggestion"] is None and "d-e2e-parm" in c["suggested_deals"]
+        assert c["suggestion"] is None and parm_deal in c["suggested_deals"]
         parm_row = next(p for p in c["plan"] if p["product_id"] == "kirkland-parmesan")
         assert parm_row["deal_label"] == "$3 off" and parm_row["aisle"] == "Aisle 4"
 
@@ -184,3 +188,46 @@ def test_yes_moves_on_to_the_next_deal(rest, cart_id):
     assert rest.rpc("apply_cart_event", **ev("mission-tortillas"))["suggestion"]["product_id"] == "tostitos-chips"
     c = rest.rpc("set_plan", p_cart_id=cart_id, p_plan=[{"product_id": "tostitos-chips", "reason": "said yes"}])
     assert c["suggestion"]["text"] == "Sour Cream is 20% off in Aisle 8. Want it?"
+
+
+def test_quantity_nudges_beta_on_a_throwaway_cart(rest, cart_id):
+    """CONTRACT v0.12: tacos for 4 → 3 bags of avocados → over nudge → keep → move past the tortillas → under."""
+    watch = Watch(URL, ANON, "carts", f"cart_id=eq.{cart_id}")
+    try:
+        rest.rpc("reset_cart", p_cart_id=cart_id)
+        c = rest.rpc("set_feature", p_cart_id=cart_id, p_feature="quantity_nudges", p_on=True)
+        assert c["features"] == {"quantity_nudges": True}
+        assert rest.get("/carts", cart_id=f"eq.{cart_id}", select="features")[0]["features"] == {"quantity_nudges": True}
+        rest.rpc("set_plan", p_cart_id=cart_id, p_plan=[
+            {"product_id": "mission-tortillas", "qty": 1, "basis": "4 people × 2 tacos ≈ 8 tortillas → 1 pack of 20"},
+            {"product_id": "avocados", "qty": 1, "basis": "taco night for 4 → 1 bag of 5"},
+            {"product_id": "tostitos-salsa", "qty": 1},
+            {"product_id": "tostitos-chips", "qty": 1}])
+        for _ in range(3):
+            c = rest.rpc("apply_cart_event", **cv_to_rpc(cv_event(cart_id, "added", "avocados", "Hass Avocados")))
+        n = c["nudge"]
+        assert (n["kind"], n["have"], n["need"], n["savings"]) == ("over", 3, 1, 11.98)
+        assert n["text"].startswith("That's 3 Avocados in the cart, and your list needs 1")
+        seen = watch.wait_for(lambda r: (r.get("nudge") or {}).get("kind") == "over")
+        assert seen["nudge"]["product_id"] == "avocados"              # the iPad gets it over realtime
+
+        c = rest.rpc("dismiss_nudge", p_cart_id=cart_id, p_action="keep")
+        assert c["nudge"] is None
+        assert next(p for p in c["plan"] if p["product_id"] == "avocados")["qty"] == 3
+
+        c = rest.rpc("set_location", p_cart_id=cart_id, p_section="aisle 3")   # past the tortillas (Aisle 2)
+        n = c["nudge"]
+        assert (n["kind"], n["product_id"], n["have"], n["need"], n["aisle"]) == ("under", "mission-tortillas", 0, 1, "Aisle 2")
+        assert c["nudged"] == ["over:avocados", "under:mission-tortillas"]
+        c = rest.rpc("dismiss_nudge", p_cart_id=cart_id, p_action="ok")
+        assert c["nudge"] is None
+    finally:
+        watch.close()
+
+
+def test_quantity_nudges_are_off_by_default(rest, cart_id):
+    rest.rpc("reset_cart", p_cart_id=cart_id)
+    rest.rpc("set_plan", p_cart_id=cart_id, p_plan=[{"product_id": "avocados", "qty": 1}])
+    for _ in range(3):
+        c = rest.rpc("apply_cart_event", **cv_to_rpc(cv_event(cart_id, "added", "avocados", "Hass Avocados")))
+    assert (c["nudge"], c["nudged"], c["features"]) == (None, [], {})
