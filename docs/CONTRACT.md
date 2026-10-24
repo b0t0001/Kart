@@ -162,7 +162,13 @@ Spec: `docs/specs/2026-10-24-member-memory-design.md`. Flag: `member_memory`. Ro
   - `member_remember(...)`
   - `member_save_for_later(...)`
   - `member_forget(p_member_id, p_memory_id?)`: null forgets everything.
-- **Seed (CLI):** `backend/members.py seed --member 1029 --name Dylan` rebuilds only that member: ten weeks of history relative to today, plus Leo's soccer party. Run it right before judging.
+- **Seed (CLI):** `backend/members.py seed --member 1029 --name Dylan` rebuilds only that member: ten weeks of history relative to today, plus Leo's soccer party. Run it right before judging, through `backend/pre_judging.sh --members`.
+  - Leo's party saved list = Meal B **without the chips** (`tostitos-salsa`, `queso`, `black-beans`, `jalapenos`, `daisy-sour-cream`, qty 1 each), so the chips deal card still fires.
+  - Preference seeded on `rao-marinara` as "Likes the {short_name} here".
+  - The seed looks everything up by product id.
+- **Picks** never include a product with a live deal, so deals stay with the deal cards. Kinds are `event` | `due` | `usual`.
+- `member_forget` returns `{"forgotten": n | "all"}`.
+- **Agent tool `shop_saved_list(memory_id)`:** puts a saved list on today's plan in one `set_plan`, keeping what's already there. Greeting example: *"Welcome back, Dylan! Leo's soccer party is tomorrow. Want the nachos list?"*
 - **Agent:**
   - `trip_context.member_id` (additive). When it's present, Kart fetches the profile before greeting ("Welcome back, Dylan!").
   - The tools `remember` / `save_for_later` / `forget` are offered only to signed-in members.
