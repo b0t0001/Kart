@@ -21,27 +21,24 @@
 3. It's warm, not creepy: one or two memories per greeting at most, everything Kart remembers is visible on screen, and one tap forgets it.
 4. With the flag off, the stable demo is byte-for-byte unchanged.
 
-## 2. The demo beat (adds ~75 s to the pitch)
+## 2. The demo beat: memory made live, then a fast-forward (v2, Dylan, 2026-10-24)
 
-Before judging, `backend/members.py seed` loads member **1029, "Dylan"**: a household of 4 with ten weeks of believable trips, plus Leo's soccer party tomorrow. The seed is relative to the day it runs, so the demo day is always one of his usual shopping days.
+Before judging, `backend/members.py seed` loads member **1029, "Dylan"**: a household of 4 with ten weeks of believable trips and **no party**. The party is created live. The seed is relative to the day it runs, so the demo day is always one of his usual shopping days (`--with-party` pre-creates the party for rehearsals that skip Act 1). The demo is one meal, pasta night: the props are spaghetti, marinara and a Parmesan shaker.
 
-1. Welcome screen → **"Member? Sign in"** → type `1029` on the member card. Kart waves: *"Welcome back, Dylan!"* and then, from memory: *"Leo's soccer party is tomorrow. Want the nachos list?"* "Yes" puts the saved nachos list on today's plan, and that flows straight into Meal B (`docs/DEMO_PLAN.md`). The chips stay off the list, so the chips deal card still fires.
-2. The **For you** card shows three picks, each with its reason:
-   - Salsa: *Leo's soccer party · tomorrow*
-   - Milk: *every week · last Sat*
-   - Tortillas: *your Saturday usual*
-   One tap adds a pick to the list.
-3. Mid-trip the shopper says *"Hey Kart."* Kart: *"Hey Dylan! Any fun plans coming up I can help you shop for?"* Shopper: *"I'm hosting Friendsgiving next Saturday, ten people."* Kart: *"Ooh, fun. I'll remember that. Want me to start a list for it?"* "Sure." The list is saved for next time, and Kart says plainly what the store doesn't carry.
-4. Check out → the receipt says *"Saved to Dylan's history."*
-5. **Fast-forward.** In the demo controls (three-finger long press), tap **Jump to the day before Friendsgiving**.
-   - The Welcome screen's date chip flips to *"Friday, Oct 30 · demo date"*.
-   - From then on the cart's "today" is that date for everything memory touches: picks, how many days until an event, Kart's date math, and the purchase dates of a member checkout.
-6. Sign in again as 1029 → *"Welcome back, Dylan! Friendsgiving's tomorrow, and your list is ready. Want to shop it now?"*
-   - The For you card leads with the Friendsgiving list.
-   - Milk is due again: it was last bought in step 4, "a week ago".
-   - Kart may ask how Leo's party went.
-7. The member chip → **What Kart remembers**: Friendsgiving, Leo's party (past), "likes the marinara here", his usuals. Tap **Forget** on any row; **Forget me** wipes everything.
-8. After the pitch: demo controls → **Back to today**.
+**Act 1: memory, made live** (mid-trip, signed in as Dylan):
+1. Welcome → **Member? Sign in** → `1029` → **That's me**. Kart: *"Welcome back, Dylan!"*, then a line from his history ("your usual milk and tortillas…").
+2. Dylan: *"Oh, next Saturday is Leo's soccer team party, we'll need pasta for 12."* Kart remembers it, dated next Saturday against the cart's real or demo date: *"Got it, I'll remember Leo's soccer team party on Saturday. Want me to save a list for it?"*
+3. *"Yes."* Kart saves pasta for 12 from the live catalog: *"Saved: three boxes of spaghetti and two jars of marinara for Leo's soccer team party."* The Parmesan stays off the list, so its deal card still fires.
+
+**Act 2: the fast-forward:**
+1. Demo controls → **Fast-forward to Fri, Oct 30 (day before Leo's soccer team party)**. That sets the demo date and starts a new trip, which signs the member out (the one-trip rule), and the iPad goes back to Welcome with the date chip showing.
+2. Sign in as 1029. Kart: *"Welcome back, Dylan!"*, then, as a fixed line: *"Leo's soccer team party is tomorrow. Want the list you saved?"*
+3. *"Yes."* The saved list goes on the plan: *"Done, it's on your list. First stop: Aisle 6 → Spaghetti."* From here it's the pasta demo, with the Parmesan card on the spaghetti.
+4. Optional: *"What do you know about me?"* opens **What Kart remembers**, with **Forget** on every row.
+
+**Verified in-process with real Claude** (`agent/scripts/member_demo.py`, local Supabase, test member). Kart's lines:
+- Act 1: *"Got it, I'll remember Leo's soccer team party on Saturday. Want me to save a list for it?"*, then *"Saved: three boxes of spaghetti and two jars of marinara for Leo's soccer team party."*
+- Act 2: *"Leo's soccer team party is tomorrow. Want the list you saved?"*, then *"Done, it's on your list. First stop: Aisle 6 → Spaghetti."*
 
 ## 3. Experience
 
