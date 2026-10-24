@@ -24,6 +24,11 @@ Talking points for the pitch, the Devpost write-up and judge Q&A. Owned by the m
 - Claude accuracy on real props: ___ (12/12 on printed-name test crops, median 1.6 s)
 - drop → iPad latency: ___ (expected ~1.5 s local, ~3 s with Claude)
 
+**Demo handling tips from the real cart:**
+- Drop items and pull the hand out.
+- Tall items (an upright bottle) bill about 4 s after they settle, because the cart waits to tell a tall item from an arm.
+- A hand left resting in the basket for more than 3 s may briefly show an "Is this…?" card. It clears by itself when the hand leaves.
+
 ## Voice (Cartesia track: voice is the main interface, not an add-on)
 - Kart is a **Cartesia Line** hosted agent with **Claude** inside. Your hands stay on the cart: you just talk, and you can interrupt.
 - **About 2 s from the moment you stop talking to Kart's first words** (measured on hosted; it was 9–10 s before tuning). Kart opens with a few words while it plans, and the catalog is in its prompt, so it can plan without searching first.
