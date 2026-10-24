@@ -22,11 +22,13 @@ struct ShoppingView: View {
         }
         .padding(Theme.xxl)
         .overlay(alignment: .top) { ReconnectingBanner(connection: model.backend.connection) }
+        .overlay(alignment: .top) { StillHereBanner(model: model) }
         .overlay { StillShoppingPrompt(model: model) }
         .task {                                               // member memory beta: a quiet minute → Kart's one question
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 model.sendLullIfDue(now: .now)
+                await model.handleMemberIdle(now: .now)       // 3 min: "Still shopping, Dylan?"; 5 min: signed out
             }
         }
     }
@@ -76,5 +78,31 @@ private struct StillShoppingPrompt: View {
                 .transition(.opacity)
             }
         }
+    }
+}
+
+/// Member memory beta: after 3 quiet minutes signed in, "Still shopping, Dylan?"; at 5 the cart signs out.
+private struct StillHereBanner: View {
+    let model: AppModel
+
+    var body: some View {
+        ZStack {
+            if model.stillThereAsked, let member = model.member {
+                HStack(spacing: Theme.l) {
+                    Text("Still shopping, \(member.member.name ?? "there")?").font(Theme.headline).foregroundStyle(Theme.ink)
+                    Button("Sign out") { Task { await model.signOut() } }.buttonStyle(SecondaryButtonStyle())
+                    Button("Still here") { model.noteActivity() }.buttonStyle(PrimaryButtonStyle())
+                }
+                .padding(.horizontal, Theme.xl).padding(.vertical, Theme.m)
+                .background(Theme.surface, in: Capsule())
+                .overlay(Capsule().stroke(Theme.hairline, lineWidth: 1))
+                .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
+                .padding(.top, Theme.l)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("member.stillHere")
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(Theme.spring, value: model.stillThereAsked)
     }
 }

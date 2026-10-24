@@ -18,6 +18,10 @@ public enum VoiceEvent: Sendable, Equatable {
     case uiAction(String)
     /// v0.14 beta: a quiet minute while a member shops; Kart may ask its one question for the trip.
     case lull
+    /// v0.14 beta: "Forget me" on the screen; Kart drops what it knew at once.
+    case memberForgotten
+    /// v0.14 beta: 3 quiet minutes while signed in ("Still shopping, Dylan?").
+    case memberIdle
 }
 
 /// What Kart is asking right now that the iPad shows as a card (the agent's `custom` messages): deals first get a
@@ -25,6 +29,8 @@ public enum VoiceEvent: Sendable, Equatable {
 public enum AgentPrompt: Sendable, Equatable {
     case dealDigest(count: Int)
     case digestDeal(dealId: String, productId: String, text: String)
+    /// v0.14 beta: "what do you know about me?" opens the memory screen.
+    case showMemories
 }
 
 /// The hands-free conversation with Kart. `MockVoiceSession` now; `LineVoiceSession` in milestone 3.

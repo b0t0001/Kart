@@ -4,12 +4,11 @@ import SwiftUI
 /// Who's signed in (member memory beta); a tap opens what Kart remembers.
 struct MemberChip: View {
     let model: AppModel
-    @State private var showMemories = false
 
     var body: some View {
         if let member = model.member {
             let name = member.member.name ?? "Member \(member.member.memberId)"
-            Button { showMemories = true } label: {
+            Button { model.openMemories() } label: {
                 HStack(spacing: Theme.s) {
                     Text(String(name.prefix(1)).uppercased())
                         .font(.system(size: 18, weight: .bold, design: .rounded)).foregroundStyle(.white)
@@ -25,7 +24,9 @@ struct MemberChip: View {
             .buttonStyle(.plain)
             .accessibilityLabel("\(name). What Kart remembers")
             .accessibilityIdentifier("member.chip")
-            .sheet(isPresented: $showMemories) { MemoryView(model: model) }
+            .sheet(isPresented: Binding(get: { model.showingMemories }, set: { if !$0 { model.closeMemories() } })) {
+                MemoryView(model: model)                       // also opened by Kart: "what do you know about me?"
+            }
         }
     }
 }

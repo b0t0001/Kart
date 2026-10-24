@@ -17,6 +17,7 @@ public final class MockKartBackend: KartBackend {
     @ObservationIgnored private var nextEventId: Int64 = 1
     @ObservationIgnored private var nextTranscriptId: Int64 = 1
     @ObservationIgnored private var members: [String: MockMemberStore] = [:]
+    @ObservationIgnored private var forgotten: Set<String> = []   // "Forget me": 1029 doesn't come back seeded
     @ObservationIgnored private var nextMemoryId = 100
 
     public init(catalog: Catalog, cartId: String = "7", clock: @escaping @MainActor () -> Date = { .now }) {
@@ -136,7 +137,8 @@ public final class MockKartBackend: KartBackend {
     public func signIn(memberId: String) async throws {
         guard cart.memberMemoryOn else { throw KartBackendError.featureOff }
         if members[memberId] == nil {
-            members[memberId] = memberId == "1029" ? .dylan(today: memberToday, catalog: catalog) : .empty(today: memberToday)
+            members[memberId] = memberId == "1029" && !forgotten.contains(memberId)
+                ? .dylan(today: memberToday, catalog: catalog) : .empty(today: memberToday)
         }
         cart.memberId = memberId
         cart.updatedAt = now
@@ -165,7 +167,8 @@ public final class MockKartBackend: KartBackend {
 
     public func forgetMember() async throws {
         guard let member = cart.memberId else { return }
-        members[member] = .empty(today: memberToday)          // like a deleted member signing up again
+        members[member] = nil                                  // deleted, like the backend's row
+        forgotten.insert(member)
         try await signOut()
     }
 
@@ -174,6 +177,11 @@ public final class MockKartBackend: KartBackend {
         cart.demoDate = date
         cart.updatedAt = now
         await refreshMemberProfile()
+    }
+
+    public func lookUpMember(_ id: String) async -> MemberLookup? {
+        if let store = members[id] { return MemberLookup(exists: true, name: store.name) }
+        return id == "1029" && !forgotten.contains(id) ? MemberLookup(exists: true, name: "Dylan") : MemberLookup(exists: false)
     }
 
     /// What the agent's `remember` + `save_for_later` do (the scripted mock voice uses it).

@@ -32,7 +32,7 @@ struct MemoryView: View {
                 Section {
                     Button("Sign out") {
                         dismiss()
-                        Task { try? await model.backend.signOut() }
+                        Task { await model.signOut() }
                     }
                     .accessibilityIdentifier("memory.signOut")
                     Button("Forget me", role: .destructive) { confirmForgetAll = true }
@@ -47,7 +47,7 @@ struct MemoryView: View {
             .confirmationDialog("Forget everything Kart knows about you?", isPresented: $confirmForgetAll, titleVisibility: .visible) {
                 Button("Forget me", role: .destructive) {
                     dismiss()
-                    Task { try? await model.backend.forgetMember() }
+                    Task { await model.forgetMember() }
                 }
             } message: {
                 Text("Your purchase history, plans and name are deleted. You'll shop as a guest.")
@@ -68,7 +68,7 @@ struct MemoryView: View {
                             }
                         }
                         Spacer()
-                        Button("Forget") { Task { try? await model.backend.forgetMemory(id: memory.id) } }
+                        Button("Forget") { Task { await model.forgetMemory(id: memory.id) } }
                             .buttonStyle(.borderless)
                             .accessibilityIdentifier("memory.forget.\(memory.id)")
                     }

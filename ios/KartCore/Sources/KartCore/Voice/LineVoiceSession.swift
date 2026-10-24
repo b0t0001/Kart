@@ -61,6 +61,7 @@ public enum LineCodec {
                   let text = meta["text"] as? String else { return .other }
             return .prompt(.digestDeal(dealId: dealId, productId: productId, text: text))
         case "digest_done": return .prompt(nil)
+        case "show_memories": return .prompt(.showMemories)
         default: return .other
         }
     }
@@ -86,6 +87,10 @@ public enum LineCodec {
             return meta
         case .lull:
             return ["type": "lull"]
+        case .memberForgotten:
+            return ["type": "member_forgotten"]
+        case .memberIdle:
+            return ["type": "member_idle"]
         case .cartChanged(.added(let productId)):
             return ["type": "cart_changed", "change": "added", "product_id": productId]
         case .cartChanged(.removed(let productId)):

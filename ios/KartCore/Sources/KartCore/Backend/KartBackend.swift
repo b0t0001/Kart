@@ -62,4 +62,6 @@ public enum KartBackendError: Error, Equatable {
     func forgetMember() async throws
     /// The demo fast-forward (`YYYY-MM-DD`, nil = real today).
     func setDemoDate(_ date: String?) async throws
+    /// `member_lookup`: the sign-in card's confirm step. Never creates a member; nil when the read fails.
+    func lookUpMember(_ id: String) async -> MemberLookup?
 }

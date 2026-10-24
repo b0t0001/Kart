@@ -98,7 +98,7 @@ public enum CardDeriver {
         case .digestDeal(let dealId, let productId, let text):
             return [Card(id: "digest-deal-\(dealId)", kind: .digestDeal(dealId: dealId, productId: productId),
                          title: text, actions: [.yes, .no])]
-        case nil:
+        case .showMemories, nil:                               // the memory sheet isn't a card
             return []
         }
     }

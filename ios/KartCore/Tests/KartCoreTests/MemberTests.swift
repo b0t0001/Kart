@@ -218,3 +218,77 @@ struct MemberContractTests {
     #expect(member.transcript.contains { $0.text.hasPrefix("Welcome back, Dylan!") })
     #expect(TripRouter.screen(cart: member.cart, transcript: member.transcript) == .shopping)
 }
+
+/// Edge cases (spec §3.9): Kart lets go at once, the cart signs out when left, "what do you know about me".
+@MainActor struct MemberEdgeCaseTests {
+    func signedIn() async throws -> TestRig {
+        let t = try make()
+        t.clock.now = Date(timeIntervalSince1970: 1_792_868_400)
+        try await t.backend.setFeature("member_memory", on: true)
+        await t.model.startTrip(memberId: "1029")
+        t.voice.sent = []
+        return t
+    }
+
+    @Test func forgetMemberSendsMemberForgotten() async throws {
+        let t = try await signedIn()
+        await t.model.forgetMember()
+        #expect(t.backend.cart.memberId == nil && t.voice.sent == [.memberForgotten])
+    }
+
+    @Test func forgetOneMemoryResendsTripContext() async throws {
+        let t = try await signedIn()
+        let party = try #require(t.model.member?.memories.first)
+        await t.model.forgetMemory(id: party.id)
+        #expect(t.model.member?.memories.contains { $0.id == party.id } == false)
+        #expect(t.voice.sent == [.tripContext(cartId: "7", tripId: try #require(t.backend.cart.tripId), memberId: "1029")])
+    }
+
+    @Test func signOutSendsTripContextWithoutMember() async throws {
+        let t = try await signedIn()
+        await t.model.signOut()
+        #expect(t.backend.cart.memberId == nil)
+        #expect(t.voice.sent == [.tripContext(cartId: "7", tripId: try #require(t.backend.cart.tripId))])
+    }
+
+    @Test func memberIdleAsksAt180SignsOutAt300() async throws {
+        let t = try await signedIn()
+        #expect(t.model.memberIdleStage(now: t.clock.now + 179) == .none)
+        await t.model.handleMemberIdle(now: t.clock.now + 181)
+        await t.model.handleMemberIdle(now: t.clock.now + 200)
+        #expect(t.voice.sent == [.memberIdle] && t.model.stillThereAsked)
+        t.model.noteActivity()
+        #expect(!t.model.stillThereAsked)
+        await t.model.handleMemberIdle(now: t.clock.now + 301)
+        #expect(t.backend.cart.memberId == nil && t.backend.cart.status == .shopping)   // the trip stays; the member goes
+    }
+
+    @Test func idleRulesIgnoreGuests() async throws {
+        let t = try make()
+        await t.model.startTrip()
+        #expect(t.model.memberIdleStage(now: t.clock.now + 600) == .none)
+    }
+
+    @Test func showMemoriesPromptOpensTheSheet() async throws {
+        let t = try await signedIn()
+        #expect(!t.model.showingMemories)
+        t.voice.agentPrompt = .showMemories
+        #expect(t.model.showingMemories)
+        t.model.closeMemories()
+        #expect(!t.model.showingMemories && t.voice.agentPrompt == nil)
+        if case .prompt(.showMemories) = LineCodec.prompt(["type": "show_memories"]) {} else { Issue.record("show_memories isn't parsed") }
+    }
+
+    @Test func lookupMock() async throws {
+        let t = try await signedIn()
+        #expect(await t.model.lookUpMember("1029") == MemberLookup(exists: true, name: "Dylan"))
+        #expect(await t.model.lookUpMember("4321") == MemberLookup(exists: false))
+        await t.model.forgetMember()
+        #expect(await t.model.lookUpMember("1029") == MemberLookup(exists: false))
+    }
+
+    @Test func idleAndForgottenMetadata() {
+        #expect(LineCodec.metadata(.memberForgotten)["type"] as? String == "member_forgotten")
+        #expect(LineCodec.metadata(.memberIdle)["type"] as? String == "member_idle")
+    }
+}

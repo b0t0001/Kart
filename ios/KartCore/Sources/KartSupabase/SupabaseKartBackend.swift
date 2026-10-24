@@ -174,6 +174,10 @@ public final class SupabaseKartBackend: KartBackend {
         await refreshCart(force: true)
     }
 
+    public func lookUpMember(_ id: String) async -> MemberLookup? {
+        try? await rest.rpc("member_lookup", ["p_member_id": .string(id)], as: MemberLookup.self)
+    }
+
     /// A member RPC; the backend's `feature_off: member_memory` becomes `.featureOff`.
     private func memberRPC(_ name: String, _ params: [String: JSONValue]) async throws {
         do {

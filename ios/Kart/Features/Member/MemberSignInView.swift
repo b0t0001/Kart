@@ -1,17 +1,23 @@
 import KartCore
 import SwiftUI
 
-/// The member card (member memory beta): four digits on a big keypad. A demo sign-in, not real authentication;
-/// the fourth digit starts the trip as that member.
+/// The member card (member memory beta): four digits on a big keypad, then "Dylan?" to confirm. A demo sign-in,
+/// not real authentication; nothing is created by a typo, and Kart greets only after "That's me".
 struct MemberSignInView: View {
     let model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var digits = ""
+    @State private var found: MemberLookup?
 
     var body: some View {
         VStack(spacing: Theme.xl) {
             MemberCard(store: model.backend.catalog.layout.store.name, digits: digits)
-            Keypad(onDigit: press, onDelete: { if !digits.isEmpty { digits.removeLast() } })
+            if let found {
+                Confirm(memberId: digits, found: found, onYes: start, onNo: { self.found = nil; digits = "" })
+                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+            } else {
+                Keypad(onDigit: press, onDelete: { if !digits.isEmpty { digits.removeLast() } })
+            }
             Button("Shop as guest") {
                 dismiss()
                 Task { await model.startTrip() }
@@ -28,8 +34,40 @@ struct MemberSignInView: View {
         digits.append(String(digit))
         guard digits.count == 4 else { return }
         let memberId = digits
+        Task {
+            let lookup = await model.lookUpMember(memberId) ?? MemberLookup(exists: false)
+            withAnimation(Theme.spring) { found = lookup }
+        }
+    }
+
+    private func start() {
+        let memberId = digits
         dismiss()
         Task { await model.startTrip(memberId: memberId) }
+    }
+}
+
+/// "Dylan?" for a known number (first name only), or "start a new membership?" for one Kart doesn't know.
+private struct Confirm: View {
+    let memberId: String
+    let found: MemberLookup
+    let onYes: () -> Void
+    let onNo: () -> Void
+
+    var body: some View {
+        VStack(spacing: Theme.l) {
+            Text(found.exists ? "\(found.name ?? "Member \(memberId)")?" : "We don't know \(memberId). Start a new membership?")
+                .font(Theme.title).foregroundStyle(Theme.ink).multilineTextAlignment(.center)
+            HStack(spacing: Theme.l) {
+                Button(found.exists ? "Not me" : "No", action: onNo)
+                    .buttonStyle(SecondaryButtonStyle())
+                    .accessibilityIdentifier("member.notMe")
+                Button(found.exists ? "That's me" : "Yes", action: onYes)
+                    .buttonStyle(PrimaryButtonStyle())
+                    .accessibilityIdentifier(found.exists ? "member.confirm" : "member.create")
+            }
+        }
+        .frame(height: 360)
     }
 }
 

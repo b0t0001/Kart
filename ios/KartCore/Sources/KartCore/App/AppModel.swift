@@ -48,6 +48,9 @@ public final class AppModel {
     /// Member memory beta: the lull was sent this trip / the For you card was dismissed this trip.
     @ObservationIgnored private var lullSent = false
     private var forYouDismissed = false
+    /// "Still shopping, Dylan?" was asked (3 quiet minutes while signed in); any activity clears it.
+    public private(set) var stillThereAsked = false
+    private var memoriesOpenedByTap = false
     @ObservationIgnored private var bindings: [Task<Void, Never>] = []
 
     public static let dealAnnouncementGrace: TimeInterval = 1.5
@@ -344,6 +347,7 @@ public final class AppModel {
 
     public func noteActivity() {
         lastActivity = clock()
+        stillThereAsked = false
     }
 
     // MARK: Member memory (v0.14 beta)
@@ -402,6 +406,71 @@ public final class AppModel {
         guard lullDue(now: now) else { return }
         lullSent = true
         voice.send(.lull)
+    }
+
+    /// Signed in on this cart (the profile may still be loading).
+    private var signedIn: Bool { backend.cart.memberMemoryOn && backend.cart.memberId != nil }
+
+    private func resendTripContext() {
+        guard let tripId = backend.cart.tripId else { return }
+        voice.send(.tripContext(cartId: backend.cart.cartId, tripId: tripId, memberId: backend.cart.memberId))
+    }
+
+    public func lookUpMember(_ id: String) async -> MemberLookup? {
+        await backend.lookUpMember(id)
+    }
+
+    /// Signed out (the memory sheet, or walking away); Kart drops the member silently.
+    public func signOut() async {
+        try? await backend.signOut()
+        stillThereAsked = false
+        resendTripContext()
+    }
+
+    /// "Forget me": everything goes, and Kart lets go at once (and says so).
+    public func forgetMember() async {
+        try? await backend.forgetMember()
+        voice.send(.memberForgotten)
+    }
+
+    public func forgetMemory(id: Int) async {
+        try? await backend.forgetMemory(id: id)
+        resendTripContext()                                     // same member, same trip: Kart reloads what it knows
+    }
+
+    public enum MemberIdle: Sendable, Equatable {
+        case none, ask, signOut
+    }
+
+    /// Walking away signed in: ask at 3 quiet minutes, sign out at 5 (the trip stays).
+    public func memberIdleStage(now: Date) -> MemberIdle {
+        guard signedIn, backend.cart.status == .shopping else { return .none }
+        let quiet = now.timeIntervalSince(lastActivity)
+        return quiet >= 300 ? .signOut : quiet >= 180 ? .ask : .none
+    }
+
+    public func handleMemberIdle(now: Date) async {
+        switch memberIdleStage(now: now) {
+        case .ask where !stillThereAsked:
+            stillThereAsked = true
+            voice.send(.memberIdle)
+        case .signOut:
+            await signOut()
+        default:
+            break
+        }
+    }
+
+    /// The memory sheet: opened by the member chip, or by Kart ("what do you know about me?").
+    public var showingMemories: Bool { memoriesOpenedByTap || voice.agentPrompt == .showMemories }
+
+    public func openMemories() {
+        memoriesOpenedByTap = true
+    }
+
+    public func closeMemories() {
+        memoriesOpenedByTap = false
+        if voice.agentPrompt == .showMemories { voice.clearAgentPrompt() }
     }
 
     /// "Fri, Oct 30 · demo date" while the demo fast-forward is set.
