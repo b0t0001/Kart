@@ -364,3 +364,13 @@ def test_replacing_the_deal_on_screen_shows_the_new_one(store, tools):
                ends_at=None, pairs_with=["barilla-spaghetti"])
     store.apply(ch["id"])
     assert cart(store)["suggestion"]["text"] == "Parmesan is $4 off in Aisle 4. Want it?"
+
+
+def test_insights_tool_and_state(store, tools):
+    add_to_cart(store, "barilla-spaghetti")            # the cart offers Parmesan
+    data = json.loads(tools.run("store_insights", {}, "how are deals doing")[0])
+    parm = next(d for d in data["deals"] if d["deal_id"] == "d-parm-3off")
+    assert parm["offered"] >= 1 and "avg_basket" in data["store"]
+    api = TestClient(create_app(store, MerchantAgent(store, client=FakeClaude())))
+    state = api.get("/api/state").json()
+    assert "deals_offered" in state["insights"] and state["deal_performance"]

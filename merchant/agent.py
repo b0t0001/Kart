@@ -135,6 +135,13 @@ class Store:
     def cart(self, cart_id: str) -> dict | None:
         return self.one("select * from carts where cart_id = %s", [cart_id])
 
+    # anonymous analytics (06_analytics.sql)
+    def insights(self) -> dict:
+        return self.one("select * from store_insights")
+
+    def deal_performance(self, limit: int = 8) -> list[dict]:
+        return self.q("select * from deal_performance where offered > 0 or live limit %s", [limit])
+
     # change log
     def stage(self, tool: str, args: dict, summary: str, request: str | None) -> dict:
         return self.one("insert into merchant_changes (tool, args, summary, request) "
@@ -172,6 +179,13 @@ def build_tools(section_ids: list[str]) -> list[dict]:
         {
             "name": "list_deals",
             "description": "List every deal: running, scheduled, expired and ended, with its id. Read-only.",
+            "input_schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        },
+        {
+            "name": "store_insights",
+            "description": "Anonymous store numbers: paid trips, average basket and items, average time in store, "
+                           "savings, and for each deal how often the cart offered it at the moment of decision, "
+                           "how often shoppers took it, and units sold. Read-only.",
             "input_schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
         },
         {
@@ -306,6 +320,9 @@ class Tools:
             return self.list_deals(), None
         if name == "recent_changes":
             return self.recent_changes(), None
+        if name == "store_insights":
+            return json.dumps({"store": self.store.insights(), "deals": self.store.deal_performance()},
+                              default=str), None
         if name not in WRITE_TOOLS:
             raise ToolError(f"Unknown tool {name}.")
         tool, args, summary = getattr(self, "stage_" + name)(inp)
@@ -501,6 +518,9 @@ shopper buys together, since that's when the cart suggests the deal. "Through Su
 that Sunday, store time.
 - Shoppers keep the price they saw: price drops and new deals reach carts right away; increases and \
 ended deals only affect items added afterwards. Mention it when it matters.
+
+Questions like "how are the deals doing?" or "how big are baskets?": use store_insights and answer \
+with the two or three numbers that matter. The numbers are anonymous totals; there is no shopper data.
 
 Write like a helpful store clerk: plain words, no ids, no JSON, no jargon.
 

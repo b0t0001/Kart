@@ -44,6 +44,8 @@ def create_app(store: Store, agent: MerchantAgent | None = None, cart_id: str | 
             "deals": store.deals(),
             "changes": store.changes(30),
             "cart": store.cart(cart_id),
+            "insights": store.insights(),
+            "deal_performance": store.deal_performance(),
         }
 
     @app.post("/api/chat")

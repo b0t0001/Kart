@@ -130,3 +130,42 @@ def test_checkout_blocks_on_unresolved_items(cart):
     cart("apply_cart_event", p_type="removed", p_product_id=None, p_confidence=1.0,
          p_source="manual", p_label="not an item", p_resolves_event_id=eid)
     assert cart("checkout", p_provider="simulated")["total"] == 1.49
+
+
+# ── Analytics (06_analytics.sql) ──
+
+def offers(conn):
+    return conn.execute("select o.deal_id, o.accepted_at is not null, o.dismissed_at is not null "
+                        "from deal_offers o join carts c using (cart_id) "
+                        "where o.cart_id = '7' and o.trip_id = c.trip_id order by o.id").fetchall()
+
+
+def test_offers_are_logged_with_their_outcome(cart, conn):
+    add(cart, "barilla-spaghetti")                    # offers Parmesan
+    add(cart, "kirkland-parmesan")                    # taken → offers Baguette
+    cart("dismiss_suggestion")                        # "No thanks" to Baguette
+    assert offers(conn) == [("d-parm-3off", True, False), ("d-baguette-1off", False, True)]
+
+
+def test_store_insights_after_a_paid_trip(cart, conn):
+    conn.execute("delete from receipts; delete from deal_offers")
+    add(cart, "barilla-spaghetti")
+    add(cart, "kirkland-parmesan")
+    cart("checkout", p_provider="simulated")
+    i = conn.execute("select to_jsonb(s) from store_insights s").fetchone()[0]
+    assert (i["trips"], i["avg_basket"], i["avg_items"], i["deals_offered"], i["deals_accepted"]) == \
+        (1, 11.98, 2.0, 2, 1)
+    assert (i["deal_conversion_pct"], i["deal_revenue"]) == (50, 9.99)
+    parm = conn.execute("select to_jsonb(d) from deal_performance d where deal_id = 'd-parm-3off'").fetchone()[0]
+    assert (parm["offered"], parm["accepted"], parm["conversion_pct"], parm["units_sold"]) == (1, 1, 100, 1)
+
+
+def test_analytics_are_not_public(db_url):
+    with psycopg.connect(db_url) as c:
+        c.execute("set local role anon")
+        for sql in ["select * from store_insights", "select * from deal_offers"]:
+            c.execute("savepoint s")
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                c.execute(sql)
+            c.execute("rollback to savepoint s")
+        c.rollback()
