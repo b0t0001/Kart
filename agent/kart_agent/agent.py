@@ -11,6 +11,7 @@ from line.events import AgentSendCustom, AgentSendText, CallEnded, CallStarted, 
 from .brain import Brain
 from .lines import (DECLINED_LINE, KEEP_LINE, NUDGE_OK_LINE, accepted_line, nudge_answer, only_ack, only_filler,
                     proactive_line, yes_or_no)
+from .memory import GREETING_TURN, PROFILE_FAILED_LINE, member_section, only_greeting, question, welcome_line
 from .tools import run_tool
 
 GREETING = "Hi, I'm Kart. What are we shopping for today?"
@@ -43,7 +44,8 @@ class KartAgent:
     """One per call. `run_filter` decides which events start a turn (a new turn cuts off the current one)."""
 
     def __init__(self, backend: Any, brain: Brain, cart_id: str = "7", coalesce_seconds: float = 0.6,
-                 context_wait_seconds: float = 1.0, barge_in: bool = True, digest_delay_seconds: float = 2.5):
+                 context_wait_seconds: float = 1.0, barge_in: bool = True, digest_delay_seconds: float = 2.5,
+                 profile_timeout_seconds: float = 1.0):
         self.backend = backend
         self.brain = brain
         self.cart_id = cart_id                      # the default; the iPad's trip_context names the real one
@@ -67,6 +69,14 @@ class KartAgent:
         self._said: set[str] = set()                # deals and nudges already said this trip (repeats are dropped)
         self._meal: str | None = None               # "taco night for 4", from Claude's set_plan
         self._nudges = False                        # the cart's quantity_nudges beta (carts.features)
+        # Member memory beta (CONTRACT v0.14): set only when the iPad's trip_context names a member.
+        self.member_id: str | None = None
+        self.profile_timeout_seconds = profile_timeout_seconds   # the greeting never waits longer on memory
+        self._profile: dict[str, Any] | None = None
+        self._profile_tried = False                 # one read per trip (a failed read isn't retried every turn)
+        self._asked = False                         # Kart's one question this trip ("Hey Kart" or a lull)
+        self._questions = 0                         # which question in the rotation comes next
+        self._question: str | None = None           # a lull question still waiting for its answer
 
     # Line filters --------------------------------------------------------------------------------
 
@@ -80,9 +90,14 @@ class KartAgent:
                 if meta.get("trip_id") and meta.get("trip_id") != self.trip_id:   # a new trip starts fresh
                     self._said, self._meal, self._offer, self._nudge = set(), None, None, None
                     self._digest, self._digest_offered = None, False
+                    self._profile, self._profile_tried, self._asked, self._question = None, False, False, None
+                self.member_id = meta.get("member_id") or None
                 self.trip_id = meta.get("trip_id") or self.trip_id
                 self._context.set()
                 return False
+            if meta.get("type") == "lull":              # the iPad saw a quiet minute: Kart's one question
+                return bool(self.member_id and not self._asked and not self._speaking and not self._offer
+                            and not self._nudge and not self._digest)
             key = _said_key(meta)
             if key in self._said:                        # the same deal or nudge again (a burst, a second screen)
                 return False
@@ -130,16 +145,39 @@ class KartAgent:
             await self._refresh()
             if self._plan or self._items:                # rejoining a trip in progress (app relaunch, reconnect)
                 return
+            if self.member_id:                           # a signed-in member: welcome back, then what Kart remembers
+                await self._load_profile()
+                if self._profile is None:
+                    async for out in self._say([PROFILE_FAILED_LINE], interruptible=False):
+                        yield out
+                    return
+                welcome = welcome_line(self._profile)
+                async for out in self._say([welcome], interruptible=False):
+                    yield out
+                cue = GREETING_TURN.format(welcome=welcome)
+                async for out in self._say(self.brain.respond(cue, self._ctx()), interruptible=self.barge_in):
+                    yield out
+                return
             async for out in self._say([GREETING], interruptible=False):   # chatter can't wipe the greeting
                 yield out
         elif isinstance(event, UserTurnEnded):
             text = " ".join(part.content for part in event.content if hasattr(part, "content") and part.content).strip()
+            if text and self.member_id and not self._asked and not (self._offer or self._nudge or self._digest) \
+                    and only_greeting(text):             # a bare "Hey Kart" (filler for a guest): the trip's one question
+                await self._ensure_profile()
+                await self._caption("user", text)
+                line = self._next_question()
+                self.brain.remember(text, line)
+                async for out in self._say([line], interruptible=False):
+                    yield out
+                return
             if not text or only_filler(text):            # "Um." gets no answer and no caption
                 return
             if not self._offer and not self._nudge and not self._digest and only_ack(text):   # nothing asked
                 return
             await self._refresh()
-            ctx = {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id}
+            await self._ensure_profile()
+            ctx = self._ctx()
             digest_reply = _digest_answer(text) if self._digest and self._last_asked == "digest" else None
             if digest_reply:                             # "yes" / "not now" to the deals walk-through
                 await self._caption("user", text)
@@ -191,15 +229,27 @@ class KartAgent:
             if self._offer:                              # more than a yes/no: Claude still needs to know what was asked
                 heard = f'(Kart just asked: "{self._offer.get("text", "")}") {text}'
                 self._offer = None
+            elif self._question:                         # the answer to Kart's lull question
+                heard = f'(Kart just asked: "{self._question}") {text}'
+            self._question = None
             async for out in self._say(self._caption_first(text, self.brain.respond(heard, ctx)), interruptible=self.barge_in):
                 yield out
             self._meal = ctx.get("meal") or self._meal
+            if ctx.get("memory_changed"):                # remember / save_for_later / forget: reload what Kart knows
+                await self._load_profile()
             await self._refresh()                        # Claude's tools may have changed the list
             if ctx.get("planned") and not self._digest_offered:     # a new list: ask about the deals, after a beat
                 async for out in self._offer_digest():
                     yield out
         elif isinstance(event, UserCustomSent):
             meta = event.metadata or {}
+            if meta.get("type") == "lull":
+                await self._ensure_profile()
+                line = self._next_question()
+                self._question = line
+                async for out in self._say([line], interruptible=False):
+                    yield out
+                return
             if meta.get("type") == "card_response" and str(meta.get("card_id", "")).startswith("digest"):
                 answer = "yes" if meta.get("action") == "yes" else "no"
                 ctx = {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id}
@@ -339,6 +389,34 @@ class KartAgent:
             await self.backend.rpc("append_transcript", p_cart_id=self.cart_id, p_role=role, p_text=text)
         except Exception:
             pass                                          # captions must never break the conversation
+
+    # Member memory -------------------------------------------------------------------------------
+
+    def _ctx(self) -> dict[str, Any]:
+        return {"backend": self.backend, "cart_id": self.cart_id, "trip_id": self.trip_id,
+                "member_id": self.member_id, "profile": self._profile}
+
+    def _next_question(self) -> str:
+        line = question(self._profile, self._questions)
+        self._asked = True
+        if self._profile and (self._profile.get("member") or {}).get("name"):
+            self._questions += 1                         # the name question doesn't use up the rotation
+        return line
+
+    async def _ensure_profile(self) -> None:
+        if self.member_id and not self._profile_tried:
+            await self._load_profile()
+
+    async def _load_profile(self) -> None:
+        """What Kart remembers about the signed-in member; a slow or failed read leaves it out (never blocks)."""
+        self._profile_tried = True
+        try:
+            self._profile = await asyncio.wait_for(
+                self.backend.rpc("member_profile", p_member_id=self.member_id, p_cart_id=self.cart_id),
+                self.profile_timeout_seconds)
+        except Exception:
+            self._profile = None
+        self.brain.set_member(member_section(self._profile))
 
     async def _refresh(self) -> None:
         try:

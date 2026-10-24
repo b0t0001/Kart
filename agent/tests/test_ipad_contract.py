@@ -6,6 +6,9 @@ from fakes import CATALOG
 
 IPAD = {
     "trip_context": {"type": "trip_context", "cart_id": "7", "trip_id": "6f9619ff-8b86-d011-b42d-00c04fc964ff"},
+    "trip_context_member": {"type": "trip_context", "cart_id": "7", "trip_id": "6f9619ff-8b86-d011-b42d-00c04fc964ff",
+                            "member_id": "1029"},
+    "lull": {"type": "lull"},
     "added": {"type": "cart_changed", "change": "added", "product_id": "rao-marinara"},
     "removed": {"type": "cart_changed", "change": "removed", "product_id": "barilla-spaghetti"},
     "price_dropped": {"type": "cart_changed", "change": "price_dropped", "product_id": "kirkland-parmesan",
@@ -25,6 +28,8 @@ def test_every_ipad_event_is_understood():
     said = {name: proactive_line(meta, CATALOG, plan) for name, meta in IPAD.items()}
     assert said == {
         "trip_context": None,
+        "trip_context_member": None,
+        "lull": None,
         "added": "Got the Rao's Sauce.",
         "removed": "Took the Spaghetti off your bill.",
         "price_dropped": "Good news, Parmesan just dropped to $9.99.",

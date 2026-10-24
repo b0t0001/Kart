@@ -79,7 +79,9 @@ def welcome_line(profile: dict[str, Any] | None) -> str:
 
 def question(profile: dict[str, Any] | None, n: int) -> str:
     """Kart's one question for the trip: their name first, else the next in the rotation."""
-    return QUESTIONS[n % len(QUESTIONS)] if _name(profile) else NAME_QUESTION
+    if profile is not None and not _name(profile):   # a member Kart can't name yet (an unknown profile: don't ask)
+        return NAME_QUESTION
+    return QUESTIONS[n % len(QUESTIONS)]
 
 
 def _when(days: int | None) -> str:
@@ -104,8 +106,11 @@ def _items(memory: dict[str, Any]) -> str:
     return ", ".join(f"{i['short_name']} x{i['qty']}" for i in items) or "none yet"
 
 
-def member_section(profile: dict[str, Any]) -> str:
+def member_section(profile: dict[str, Any] | None) -> str:
     """What Kart remembers, for Claude's system prompt, followed by the rules for using it."""
+    if profile is None:                              # the profile didn't load: no facts, but remember still works
+        return ("About this shopper: a signed-in member. Kart's memory didn't load this time, so don't mention "
+                "anything you remember.\n\n" + MEMBER_RULES)
     member = profile.get("member") or {}
     lines = [f"About this shopper, from Kart's memory (today is {profile['weekday']}, {profile['today']}):"]
     who = f"- Name: {member['name']}" if member.get("name") else "- Name: not known yet"
