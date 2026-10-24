@@ -48,6 +48,7 @@ class Item:
     h: int = 90
     seed: int = 0
     tall: int = 0  # how far (image px) the item rises above its footprint: an upright bottle near rim height
+    shadow: int = 0  # length (image px) of the dark shadow it casts toward the bottom of the frame (low sun)
 
     @property
     def center(self) -> tuple[int, int]:
@@ -131,6 +132,13 @@ def _warped(cam: int, items: tuple[Item, ...], hand: tuple[int, int] | None, arm
     out = np.roll(_BG, (room_shift[1], room_shift[0]), axis=(0, 1)) if room_shift != (0, 0) else _BG.copy()
     out[_MASK[cam]] = view[_MASK[cam]]
     for it in items:
+        if it.shadow:  # a long soft-edged shadow, same surface just darker (blinds / low sun)
+            x, y, w, h = item_box(cam, it, pad=0.0)
+            sh = np.zeros(out.shape[:2], np.float32)
+            cv2.rectangle(sh, (x + w // 4, y + h // 2), (x + w - w // 4, min(CAM_SIZE[1], y + h + it.shadow)), 1.0, -1)
+            sh = cv2.GaussianBlur(sh, (0, 0), 6)
+            out = (out.astype(np.float32) * (1.0 - 0.6 * sh[..., None])).astype(np.uint8)
+    for it in items:
         if it.tall:  # its body rises in the image, over the wall and possibly to the top edge
             x, y, w, h = item_box(cam, it, pad=0.0)
             hsv = np.uint8([[[(it.seed * 47) % 180, 200, 200]]])
@@ -157,6 +165,7 @@ class Scene:
     arm: bool = True                                                 # draw a sleeve from the hand to the frame edge
     edge_object: bool = False                                        # something static over the rim (a strap)
     room_shift: tuple[int, int] = (0, 0)                             # the room behind the mesh slides (cart rolling)
+    sun: tuple | None = None  # (x, y, w, h, gain) image-px patch of sunlight through blinds, soft-edged
 
     def copy(self) -> Scene:
         return copy.deepcopy(self)
@@ -181,6 +190,13 @@ class Scene:
                 ramp[w // 2:] = 1.0 - self.shade * (3 * t ** 2 - 2 * t ** 3)  # smoothstep
                 f *= ramp[None, :, None]
             img = np.clip(f, 0, 255).astype(np.uint8)
+
+        if self.sun is not None:
+            x, y, w, h, gain = self.sun
+            patch = np.zeros(img.shape[:2], np.float32)
+            cv2.rectangle(patch, (x, y), (x + w, y + h), 1.0, -1)
+            patch = cv2.GaussianBlur(patch, (0, 0), 8)
+            img = np.clip(img.astype(np.float32) * (1.0 + (gain - 1.0) * patch[..., None]), 0, 255).astype(np.uint8)
 
         dx, dy = self.shift.get(cam, (0, 0))
         if dx or dy:

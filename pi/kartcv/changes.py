@@ -20,6 +20,20 @@ def lab_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.sqrt((d * d).sum(axis=2))
 
 
+def lighting_only(ref: np.ndarray, cur: np.ndarray, chroma: float, structure: float) -> np.ndarray:
+    """Pixels whose change is just light or shadow: same color (Δab small) and the same texture showing
+    through, only brighter or darker. Measured on the real cart: sun stripes and shadows Δab ≈ 4–5,
+    texture ≈ 2; items Δab 18–47 (a printed label also changes texture ≈ 20)."""
+    lr = cv2.cvtColor(cv2.GaussianBlur(ref, (5, 5), 0), cv2.COLOR_BGR2LAB).astype(np.float32)
+    lc = cv2.cvtColor(cv2.GaussianBlur(cur, (5, 5), 0), cv2.COLOR_BGR2LAB).astype(np.float32)
+    dab = np.hypot(lc[..., 1] - lr[..., 1], lc[..., 2] - lr[..., 2])
+    gr = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    gc = cv2.cvtColor(cur, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    br, bc = cv2.GaussianBlur(gr, (0, 0), 5), cv2.GaussianBlur(gc, (0, 0), 5)
+    texture = cv2.GaussianBlur(np.abs((gc - bc) - (bc / np.maximum(br, 1.0)) * (gr - br)), (5, 5), 0)
+    return (dab < chroma) & (texture < structure)
+
+
 def match_gain(img: np.ndarray, target: np.ndarray, mask: np.ndarray | None = None) -> np.ndarray:
     """Scale each BGR channel of `img` so its median matches `target`'s.
 
@@ -86,6 +100,7 @@ class ChangeResult:
     frame: np.ndarray | None = None
     reference: np.ndarray | None = None
     moved: bool = False  # the whole view shifted (verified): the camera itself moved
+    deferred: list = field(default_factory=list)  # boxes held back this settle (edge-touching: arm or tall item)
 
 
 def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg, roi=None) -> ChangeResult:
@@ -135,9 +150,11 @@ def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg, ro
     dist = lab_distance(ref_b, cv2.GaussianBlur(match_gain(cur_s, ref_s, m), (7, 7), 0))
     rough = cv2.dilate((dist > cfg.change_thresh).astype(np.uint8), _CLOSE)
     steady = floor & (rough == 0)
-    if steady.sum() > 0.05 * floor.sum():
-        dist = lab_distance(ref_b, cv2.GaussianBlur(match_gain(cur_s, ref_s, steady.astype(np.uint8)), (7, 7), 0))
-    mask = (dist > cfg.change_thresh).astype(np.uint8) * 255
+    cur_m = match_gain(cur_s, ref_s, steady.astype(np.uint8) if steady.sum() > 0.05 * floor.sum() else m)
+    dist = lab_distance(ref_b, cv2.GaussianBlur(cur_m, (7, 7), 0))
+    # Light and shadow (sun through blinds, an item's long shadow) change brightness, not the surface.
+    light = lighting_only(ref_s, cur_m, cfg.lighting_chroma, cfg.lighting_structure)
+    mask = ((dist > cfg.change_thresh) & ~light).astype(np.uint8) * 255
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, _OPEN)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, _CLOSE)
     full = mask > 0

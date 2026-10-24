@@ -20,6 +20,8 @@
     360
   ],
   "change_thresh": 30.0,
+  "lighting_chroma": 10.0,
+  "lighting_structure": 10.0,
   "min_blob_frac": 0.004,
   "disturbed_frac": 0.6,
   "max_shift_px": 4.0,

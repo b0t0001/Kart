@@ -167,3 +167,45 @@ def test_removal_next_to_a_big_item_after_an_exposure_change_is_a_removal(tmp_pa
     r = detect_changes(0, before.render(0, 1), after.render(0, 2), w.cfg, roi=w.cfg.roi["0"])
     [b] = r.blobs
     assert classify_blob(b, r, w.empties[0], w.cart, w.features, w.cfg) == "removed"
+
+
+def _held_back(rs, cam):
+    """cam's change was held back this settle (an arm reached its edge): no blobs, just a deferred spot."""
+    r = rs[cam]
+    held = ChangeResult(cam, "none", [], 0.0, (0.0, 0.0), r.frame, r.reference)
+    held.deferred = [b.box for b in r.blobs]
+    rs[cam] = held
+    return rs
+
+
+def _quiet(rs, cam):
+    r = rs[cam]
+    rs[cam] = ChangeResult(cam, "none", [], 0.0, (0.0, 0.0), r.frame, r.reference)
+    return rs
+
+
+def test_a_late_view_from_a_held_back_camera_attaches_instead_of_billing_twice(tmp_path):
+    w = world(tmp_path)
+    ds = decide(_held_back(settle(Scene(), Scene(items=[RED]), w.cfg), 1), w.empties, w.cart, w.identifier,
+                w.features, w.cfg)
+    assert [(d.kind, d.cameras) for d in ds] == [("added", [0])]
+    for d in ds:
+        apply_decision(w.cart, d)
+    later = _quiet(settle(Scene(), Scene(items=[RED]), w.cfg), 0)  # the arm left: now cam1 sees the item
+    ds = decide(later, w.empties, w.cart, w.identifier, w.features, w.cfg)
+    assert [d.kind for d in ds] == ["moved"]
+    for d in ds:
+        apply_decision(w.cart, d)
+    [inst] = w.cart.instances.values()
+    assert set(inst.views) == {0, 1}
+
+
+def test_the_held_back_spot_expires_after_one_clean_look(tmp_path):
+    w = world(tmp_path)
+    for d in decide(_held_back(settle(Scene(), Scene(items=[RED]), w.cfg), 1), w.empties, w.cart, w.identifier,
+                    w.features, w.cfg):
+        apply_decision(w.cart, d)
+    clean = _quiet(_quiet(settle(Scene(), Scene(), w.cfg), 0), 1)  # cam1 looked and saw nothing there
+    decide(clean, w.empties, w.cart, w.identifier, w.features, w.cfg)
+    later = _quiet(settle(Scene(), Scene(items=[RED]), w.cfg), 0)
+    assert [d.kind for d in decide(later, w.empties, w.cart, w.identifier, w.features, w.cfg)] == ["added"]

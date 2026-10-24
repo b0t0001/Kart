@@ -219,6 +219,7 @@ class Pipeline:
                         x, y, w, h = b.box
                         new_ref[y:y + h, x:x + w] = old_ref[y:y + h, x:x + w]
                     r.blobs = [b for b in r.blobs if b not in edge]
+                    r.deferred = [b.box for b in edge]
                     if not r.blobs:
                         r.status = "none"
             self.references[c] = new_ref

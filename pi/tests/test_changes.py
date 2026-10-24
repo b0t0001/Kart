@@ -103,3 +103,16 @@ def test_gain_matching_uses_the_unchanged_floor_only():  # a big colored item mu
     skewed = float(lab_distance(match_gain(cur, floor)[:, 70:], floor[:, 70:]).mean())
     right = float(lab_distance(match_gain(cur, floor, unchanged)[:, 70:], floor[:, 70:]).mean())
     assert right < 3 < skewed
+
+
+def test_sunlight_patch_is_lighting_not_an_item():  # real cart: sun stripes through blinds brightened
+    cfg = roi_cfg()
+    sunny = Scene(sun=(420, 0, 220, 300, 1.45))  # reaches the top edge, like the real stripe
+    assert detect_changes(1, Scene().render(1, 1), sunny.render(1, 2), cfg, roi=cfg.roi["1"]).status == "none"
+
+
+def test_an_items_long_shadow_is_not_part_of_the_item():  # real cart: the apple's shadow reached the frame edge
+    cfg = roi_cfg()
+    apple = Item("red-box", 330, 120, seed=1, shadow=600)
+    r = detect_changes(1, Scene().render(1, 1), Scene(items=[apple]).render(1, 2), cfg, roi=cfg.roi["1"])
+    assert len(r.blobs) == 1 and not r.blobs[0].edge  # just the item, billed now, not held back as an "arm"

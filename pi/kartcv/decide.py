@@ -35,6 +35,7 @@ class Decision:
     blobs: list[Blob] = field(default_factory=list)
     views: dict[int, View] = field(default_factory=dict)  # after-crop fingerprints (added / moved)
     instance_id: str | None = None                       # removed / moved
+    awaiting: dict[int, list] = field(default_factory=dict)  # added: cameras whose view was held back
 
 
 def _iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
@@ -258,13 +259,33 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
                 added.setdefault(r.cam, []).append(b)
             elif kind == "removed":
                 removed.setdefault(r.cam, []).append(b)
+    # A camera held back when an item was billed (an arm in its view) now sees that spot: the same unit,
+    # seen late. Attach the view instead of billing it twice.
+    late = []
+    for cam, bs in list(added.items()):
+        for inst in list(cart.instances.values()):
+            spots = inst.awaiting.get(cam) or []
+            b = next((b for b in bs if any(_coverage(b.box, s) >= 0.5 or _iou(b.box, s) >= 0.2 for s in spots)), None)
+            if b is not None:
+                bs.remove(b)
+                late.append(Decision("moved", inst.product_id, 1.0, "memory", inst.label, [cam], [b],
+                                     _views([b], features), inst.instance_id))
+        if not bs:
+            del added[cam]
+    # cameras that had a clean look this settle: earlier held-back spots in them have had their chance
+    cart.expire_awaiting({r.cam for r in results if r.status in ("blobs", "none") and not r.deferred})
+
     decisions = _decide_added(added, identifier, features) + _decide_removed(removed, cart, features, cfg)
-    return _cancel_nudges(decisions, cart, cfg)
+    held = {r.cam: list(r.deferred) for r in results if r.deferred}
+    for d in decisions:
+        if d.kind == "added":
+            d.awaiting = {c: boxes for c, boxes in held.items() if c not in d.cameras}
+    return late + _cancel_nudges(decisions, cart, cfg)
 
 
 def apply_decision(cart: CartMemory, d: Decision) -> Instance | None:
     if d.kind == "added":
-        return cart.add(d.product_id, d.label, d.views)
+        return cart.add(d.product_id, d.label, d.views, d.awaiting)
     if d.kind == "removed":
         return cart.remove(d.instance_id) if d.instance_id in cart.instances else None
     if d.kind == "moved":

@@ -34,6 +34,8 @@ class Config:
     # change detection (spec §5.2)
     diff_size: tuple[int, int] = (640, 360)
     change_thresh: float = 30.0
+    lighting_chroma: float = 10.0     # a change with less color shift than this (Δab) and
+    lighting_structure: float = 10.0  # less texture change than this is light or shadow, not an item
     min_blob_frac: float = 0.004
     disturbed_frac: float = 0.60
     max_shift_px: float = 4.0

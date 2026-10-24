@@ -26,6 +26,9 @@ class Instance:
     added_ts: str
     views: dict[int, View] = field(default_factory=dict)
     event_id: str = ""  # the "added" event this unit was billed by
+    # spots where another camera's view of this unit was held back when it was billed (an arm was in the
+    # way): that camera's next look there is this unit, seen late, not a second one
+    awaiting: dict[int, list] = field(default_factory=dict)
 
 
 class CartMemory:
@@ -34,8 +37,9 @@ class CartMemory:
         self.instances: dict[str, Instance] = {}
 
     # --- mutations (each one saves) ---
-    def add(self, product_id: str | None, label: str, views: dict[int, View]) -> Instance:
-        inst = Instance(uuid.uuid4().hex, product_id, label, utc_now_iso(), dict(views))
+    def add(self, product_id: str | None, label: str, views: dict[int, View], awaiting: dict | None = None) -> Instance:
+        inst = Instance(uuid.uuid4().hex, product_id, label, utc_now_iso(), dict(views),
+                        awaiting={int(c): [tuple(b) for b in bs] for c, bs in (awaiting or {}).items()})
         self.instances[inst.instance_id] = inst
         self.save()
         return inst
@@ -50,8 +54,20 @@ class CartMemory:
         self.save()
 
     def update_views(self, instance_id: str, views: dict[int, View]) -> None:
-        self.instances[instance_id].views.update(views)
+        inst = self.instances[instance_id]
+        inst.views.update(views)
+        for c in views:
+            inst.awaiting.pop(c, None)
         self.save()
+
+    def expire_awaiting(self, cams) -> None:
+        """Those cameras had a clean look: any late view of an earlier unit would have shown up by now."""
+        changed = False
+        for inst in self.instances.values():
+            for c in cams:
+                changed |= inst.awaiting.pop(c, None) is not None
+        if changed:
+            self.save()
 
     def shift_views(self, cam: int, dx: float, dy: float) -> None:
         for inst in self.instances.values():
@@ -88,6 +104,7 @@ class CartMemory:
                 views = {int(c): View(int(v["cam"]), tuple(v["box"]), list(v["fingerprint"]), v.get("crop_path", ""))
                          for c, v in d["views"].items()}
                 inst = Instance(d["instance_id"], d["product_id"], d["label"], d["added_ts"], views,
-                                d.get("event_id", ""))
+                                d.get("event_id", ""),
+                                {int(c): [tuple(b) for b in bs] for c, bs in d.get("awaiting", {}).items()})
                 mem.instances[inst.instance_id] = inst
         return mem
