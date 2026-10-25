@@ -11,3 +11,10 @@ venv/
 node_modules/
 .claude/scheduled_tasks.lock
 pi/gallery/index.npz
+# repo-wide fallbacks (each component also ignores its own outputs)
+.venv/
+.pytest_cache/
+*.py[cod]
+.build/
+DerivedData/
+Thumbs.db

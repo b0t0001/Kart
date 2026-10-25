@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Morning go-live: point everything at the HOSTED Supabase project in one command.
 #
-#   backend/go_live.sh            # after the hosted values are in /Users/dylan/Documents/GitHub/kart/.env
+#   backend/go_live.sh            # after the hosted values are in <repo>/.env
 #
 # Needs in .env: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL,
 # SUPABASE_PROJECT_REF, SUPABASE_ACCESS_TOKEN, CARTESIA_API_KEY (CARTESIA_AGENT_ID optional).

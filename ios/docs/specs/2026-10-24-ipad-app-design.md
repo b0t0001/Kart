@@ -1,7 +1,7 @@
 # Kart iPad App: Design Spec
 
 > Cal Hacks 13.0 · 2026-10-24 · Status: **draft for review** · Owner: the iPad app chat ("Smart shopping cart iPad app")
-> This is the cart-mounted iPad app and its voice agent. It plugs into the shared integration contract at `/Users/dylan/Documents/GitHub/kart/docs/CONTRACT.md` (v0.5): the market backend chat owns Supabase and `data/store.json`, and the CV chat owns `pi/`. Anything this app needs beyond the contract's accepted shapes is listed as a **contract proposal** in §9 (mirrored in contract §5a as "pending Dylan's approval") and is not built until it's accepted.
+> This is the cart-mounted iPad app and its voice agent. It plugs into the shared integration contract at `<repo>/docs/CONTRACT.md` (v0.5): the market backend chat owns Supabase and `data/store.json`, and the CV chat owns `pi/`. Anything this app needs beyond the contract's accepted shapes is listed as a **contract proposal** in §9 (mirrored in contract §5a as "pending Dylan's approval") and is not built until it's accepted.
 
 ---
 
@@ -163,7 +163,7 @@ A trip runs from the Welcome tap (`reset_cart`, which issues a new `trip_id`) th
   - `VoiceSession`: `start(cartId:tripId:)`, `stop()`, `setMuted(_:)`, `send(_ event:)`; publishes `state` (idle, connecting, listening, userSpeaking, thinking, agentSpeaking, offline) and `outputLevel` (0–1, drives the mouth). Implementations: `LineVoiceSession`, `MockVoiceSession` (scripted lines with synthetic loudness). Fallback if Line fails us: `DirectVoiceSession` (Cartesia speech-to-text and text-to-speech directly, Claude through a server function).
   - `PaymentProvider`: `pay(amount:tripId:) async throws -> PaymentResult`. Implementation: `SimulatedPaymentProvider` (realistic delay; failure can be forced from the debug panel).
 - **Audio:** `AVAudioSession` `.playAndRecord`, mode `.voiceChat`, `.defaultToSpeaker`; `AVAudioEngine` with voice processing on the input node (echo cancellation, so Kart doesn't hear itself); 16 kHz mono PCM16 sent in ~40 ms chunks; playback through `AVAudioPlayerNode`; on Line's `clear` event, flush queued audio immediately (barge-in).
-- **Config:** `ios/Config.xcconfig` (gitignored in `ios/.gitignore`; `Config.example.xcconfig` committed) holds `SUPABASE_URL`, `SUPABASE_ANON_KEY` (public by design), and `CART_ID`, filled from the shared `/Users/dylan/Documents/GitHub/kart/.env` by a small script. **No secret keys on the device:** the Cartesia access token is short-lived and fetched per trip (P7).
+- **Config:** `ios/Config.xcconfig` (gitignored in `ios/.gitignore`; `Config.example.xcconfig` committed) holds `SUPABASE_URL`, `SUPABASE_ANON_KEY` (public by design), and `CART_ID`, filled from the shared `<repo>/.env` by a small script. **No secret keys on the device:** the Cartesia access token is short-lived and fetched per trip (P7).
 - **Debug panel** (three-finger long-press anywhere): fire any catalog item as an added/removed vision event (with a confidence slider and an "unrecognized" option), reset the trip, force a payment failure, switch to **offline demo mode** (`MockKartBackend` + `MockVoiceSession` running a scripted pasta-dinner conversation).
 - **Third-party packages:** `supabase-swift` (required); `RiveRuntime` and `lottie-ios` (optional, §3.3). Exact versions pinned.
 

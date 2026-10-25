@@ -3,7 +3,7 @@
 > **Draft status:** this was written before the manager knew about the two existing chats. Their design decisions win; the manager folds them in here. Known change pending: the cart's screen is an **iPad app mounted on the cart** (voice agent, navigation, auto-checkout), which replaces the phone web app (§5) and probably the LCD. §5 will be rewritten from the iPad chat's design.
 
 **Owner: the manager session.** This file is the single source of truth for how the three workstreams fit together. It lives at
-`/Users/dylan/Documents/GitHub/kart/docs/CONTRACT.md` (the main checkout). **Read it by that absolute path; never copy or edit it in your worktree.** To change it, see §8.
+`<repo>/docs/CONTRACT.md` (the main checkout). **Read it by that absolute path; never copy or edit it in your worktree.** To change it, see §8.
 
 Product background: `project_context/claude_CLAUDE.md` and `project_context/claude_SCOPE.md`. North star = the 2-minute demo in those docs.
 
@@ -301,7 +301,7 @@ All additive; nothing already built breaks. **Accepted at the contract level (v0
 
 ## 6. Secrets & env
 
-One shared env file: **`/Users/dylan/Documents/GitHub/kart/.env`** (gitignored, main checkout). Load it by that absolute path from your worktree; never copy secrets into tracked files. Each owner adds the variable *names* they need to a `.env.example` in their own directory.
+One shared env file: **`<repo>/.env`** (gitignored, main checkout). Load it by that absolute path from your worktree; never copy secrets into tracked files. Each owner adds the variable *names* they need to a `.env.example` in their own directory.
 
 | var | used by |
 |---|---|
@@ -326,13 +326,13 @@ Use the id in the **SendMessage `to`** column.
 
 | Workstream | SendMessage `to` | Branch | Status |
 |---|---|---|---|
-| Manager | `local_9709c9d7-0b42-465c-83b4-9f3afef31131` | `main` (owns this file) | live |
-| CV: "Smart cart computer vision algorithms" | `local_29c5fd35-ed9b-489b-afd7-0d9218b68080` | main checkout | designing |
-| iPad app: "Smart shopping cart iPad app" | `local_2d2c60e6-9a47-4c86-843c-3422096c55ea` | main checkout | designing |
-| Market backend + merchant agent: "KART market backend setup" | `local_b3d0cb4c-d827-42fe-8bdc-d43c97941c95` | main checkout | started; `data/store.json` due first |
+| Manager | `local_…` | `main` (owns this file) | live |
+| CV: "Smart cart computer vision algorithms" | `local_…` | main checkout | designing |
+| iPad app: "Smart shopping cart iPad app" | `local_…` | main checkout | designing |
+| Market backend + merchant agent: "KART market backend setup" | `local_…` | main checkout | started; `data/store.json` due first |
 
-| Member sign-in + recommendations (design, beta): "Demo sign-in with personalized recommendations" | `local_c7c1d3e7-6cea-4053-8883-ffca3adab452` | main checkout | designing with Dylan; it sends its proposal to the manager |
-| Hardware: "KART hardware (James's PC)" | `bridge:session_01GrmSjBkjtmFyNZogHAUYmG` (Remote Control, cross-machine) | GitHub `main` | Pi at `192.168.137.127` (`smartcart.local` can drop when the hotspot restarts) |
+| Member sign-in + recommendations (design, beta): "Demo sign-in with personalized recommendations" | `local_…` | main checkout | designing with Dylan; it sends its proposal to the manager |
+| Hardware: "KART hardware (James's PC)" | `bridge:session_…` (Remote Control, cross-machine) | GitHub `main` | Pi at `192.168.137.127` (`smartcart.local` can drop when the hotspot restarts) |
 
 From James's PC, the Mac chats are reachable **by session name** over Remote Control. The manager is "Multi-feature project management".
 
