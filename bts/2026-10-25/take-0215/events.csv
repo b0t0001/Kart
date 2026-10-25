@@ -1,0 +1,11 @@
+time,type,product_id,label,method,confidence,cameras,clip
+02:16:03,added,barilla-spaghetti,"Barilla Spaghetti, 1 lb",cloud,0.93,[0],021603_added_barilla-spaghetti.mp4
+02:16:10,added,barilla-spaghetti,"Barilla Spaghetti, 1 lb",cloud,0.97,[0],021610_added_barilla-spaghetti.mp4
+02:16:31,removed,barilla-spaghetti,"Barilla Spaghetti, 1 lb",memory,0.988,[0],021631_removed_barilla-spaghetti.mp4
+02:16:57,added,rao-marinara,"Good & Gather Marinara Pasta Sauce, 23 oz",cloud,0.93,[0],021657_added_rao-marinara.mp4
+02:18:21,added,kirkland-parmesan,"Market Pantry Grated Parmesan Cheese, 8 oz",cloud,0.93,[0],021821_added_kirkland-parmesan.mp4
+02:18:28,removed,kirkland-parmesan,"Market Pantry Grated Parmesan Cheese, 8 oz",memory,0.953,[0],021828_removed_kirkland-parmesan.mp4
+02:18:34,added,kirkland-parmesan,"Market Pantry Grated Parmesan Cheese, 8 oz",cloud,0.93,[0],021834_added_kirkland-parmesan.mp4
+02:20:08,removed,kirkland-parmesan,"Market Pantry Grated Parmesan Cheese, 8 oz",memory,0.881,[0],022008_removed_kirkland-parmesan.mp4
+02:20:11,removed,barilla-spaghetti,"Barilla Spaghetti, 1 lb",memory,0.896,[0],022011_removed_barilla-spaghetti.mp4
+02:20:11,removed,rao-marinara,"Good & Gather Marinara Pasta Sauce, 23 oz",memory,0.531,[0],022011_removed_rao-marinara.mp4
