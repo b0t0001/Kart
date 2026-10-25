@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-25 01:30 · repo presentation branch
+- `repo-presentation` pushed (README rewrite with architecture diagrams, docs/ARCHITECTURE.md, MIT LICENSE, root .env.example); merge after the demo, after a privacy scrub (project ref, Pi IPs, session IDs, third-party PDFs). bts-clips is still pending from the hardware chat.
+
 ### 2026-10-25 00:40 · end-to-end passed, BTS recording
 - Dylan's 00:14 live end-to-end (real voice, tap-to-pay) billed right at checkout ($7.37); 1 phantom from a nudged jar, removed on the iPad. Agent fix deployed: natural declines clear the deals question (75ac548). BTS: James's laptop grabs /cam/0 overlay frames at 5 Hz; clips go to the bts-clips branch; CV added tools/bts_record.py.
 
