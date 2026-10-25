@@ -1,0 +1,160 @@
+{
+ "what_happened": "empty cart; the four demo props added one at a time, ~5 s apart: barilla-spaghetti (blue box, flat), rao-marinara (jar, placed gently), kirkland-parmesan (shaker), kids-scissors (closed 2-pair card). Then removed one at a time, ~5 s apart: scissors, parmesan, marinara, spaghetti.",
+ "expected": [
+  {
+   "type": "added",
+   "product_id": "barilla-spaghetti"
+  },
+  {
+   "type": "added",
+   "product_id": "rao-marinara"
+  },
+  {
+   "type": "added",
+   "product_id": "kirkland-parmesan"
+  },
+  {
+   "type": "added",
+   "product_id": "kids-scissors"
+  },
+  {
+   "type": "removed",
+   "product_id": "kids-scissors"
+  },
+  {
+   "type": "removed",
+   "product_id": "kirkland-parmesan"
+  },
+  {
+   "type": "removed",
+   "product_id": "rao-marinara"
+  },
+  {
+   "type": "removed",
+   "product_id": "barilla-spaghetti"
+  }
+ ],
+ "live": [
+  "ADDED ? \"gray fabric or cloth surface, quilted texture, no grocery item visible\" (none 0.47)",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "ADDED barilla-spaghetti (local 0.71)",
+  "RECHECK: the edge-touching change stayed still 3 s more: judging it as an item",
+  "ADDED ? \"blurry blue-lavender surface, no identifiable product\" (none 0.43)",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "INTRUSION: cam1 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "RECHECK: the edge-touching change stayed still 3 s more: judging it as an item",
+  "ADDED rao-marinara (cloud 0.90)",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "INTRUSION: cam1 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "ADDED kirkland-parmesan (cloud 0.60)",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "RECHECK: the edge-touching change stayed still 3 s more: judging it as an item",
+  "ADDED kids-scissors (cloud 0.60)",
+  "(recording 1 ended with all 4 in the cart; recording 2 starts with all 4 in the cart)",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "REMOVED kirkland-parmesan (memory 0.96)",
+  "RECHECK: the edge-touching change stayed still 3 s more: judging it as an item",
+  "REMOVED barilla-spaghetti (memory 0.50)",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "REMOVED rao-marinara (memory 0.98)",
+  "RECHECK: the edge-touching change stayed still 3 s more: judging it as an item",
+  "REMOVED ? \"blurry blue-lavender surface, no identifiable product\" (memory 0.35)",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "REMOVED ? \"gray fabric or cloth surface, quilted texture, no grocery item visible\" (memory 0.46)",
+  "RECHECK: the edge-touching change stayed still 3 s more: judging it as an item"
+ ],
+ "notes": "two recordings stitched (adds, then removes; the scene is identical at the seam, still with all 4 items in). LIVE result: all 4 adds named correctly (spaghetti local 0.71, marinara cloud 0.90, parmesan cloud 0.60, scissors cloud 0.60) PLUS 2 phantom adds: 'gray fabric ... quilted' = the black paper liner's fold creases shifting when the first item landed (cam1); 'blurry blue-lavender surface' = cam0's late RECHECK view of the spaghetti box billed as a NEW unknown instead of attaching to cam1's spaghetti. Removals: parmesan (memory 0.96) and marinara (0.98) right; the scissors' removal was matched to barilla-spaghetti (0.50) and the spaghetti's to the phantom (0.35), so the cart ended holding a phantom kids-scissors. Gallery: 4 products enrolled on this layout (spaghetti/marinara/parmesan on the T-shirt liner, scissors on the paper); features switched to auto (ONNX) per gallery_check.",
+ "roi": {
+  "0": [
+   [
+    0.01,
+    0.99
+   ],
+   [
+    0.01,
+    0.25
+   ],
+   [
+    0.1,
+    0.19
+   ],
+   [
+    0.3,
+    0.18
+   ],
+   [
+    0.6,
+    0.18
+   ],
+   [
+    0.86,
+    0.19
+   ],
+   [
+    0.92,
+    0.25
+   ],
+   [
+    0.99,
+    0.42
+   ],
+   [
+    0.99,
+    0.99
+   ]
+  ],
+  "1": [
+   [
+    0.04,
+    0.99
+   ],
+   [
+    0.04,
+    0.83
+   ],
+   [
+    0.11,
+    0.68
+   ],
+   [
+    0.22,
+    0.53
+   ],
+   [
+    0.36,
+    0.36
+   ],
+   [
+    0.41,
+    0.29
+   ],
+   [
+    0.47,
+    0.27
+   ],
+   [
+    0.66,
+    0.33
+   ],
+   [
+    0.82,
+    0.41
+   ],
+   [
+    0.81,
+    0.6
+   ],
+   [
+    0.79,
+    0.8
+   ],
+   [
+    0.77,
+    0.99
+   ]
+  ]
+ },
+ "setup": "final 2-camera layout: cam0 Brio mid-front looking back; cam1 wide Aoozi at the top-basket end (USB port 1.3). Floor liner: black paper sheet (fold creases), corners taped; thin grate strips at the edges are outside the ROI.",
+ "recording": "640x360, 5 Hz, re-encoded JPEG q55; still stretches trimmed by hardware/trim_clip.py (timestamps kept)"
+}
