@@ -6,7 +6,7 @@ for you.
 
 ## Morning checklist (about 15 minutes)
 
-1. **Hosted Supabase.** Create the project, then put its values in `/Users/dylan/Documents/GitHub/kart/.env`.
+1. **Hosted Supabase.** Create the project, then put its values in `<repo>/.env`.
    Replace the LOCAL block at the top: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
    `SUPABASE_DB_URL`. Add `SUPABASE_PROJECT_REF` and `SUPABASE_ACCESS_TOKEN`, which is a personal
    access token; revoke it after the hackathon.

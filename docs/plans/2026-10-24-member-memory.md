@@ -28,7 +28,7 @@
 - **Lull:** 40 s with no activity, while shopping, signed in, with no visible card. Once per trip, shared with the "Hey Kart" trigger.
 - **Hosted:** apply additive migrations only, never run `reset-demo`, and test on throwaway carts (`it-mem-*`) and `it-` members.
 - **Branch:** work in the worktree `.claude/worktrees/member-memory`, on branch `member-memory`. Merge `main` into it before each part (backend, agent, iPad) and before the end, never rebase. Commit only on this branch.
-- **Env and venvs:** export `KART_ENV_FILE=/Users/dylan/Documents/GitHub/kart/.env`. The venvs live in the main checkout: `/Users/dylan/Documents/GitHub/kart/backend/.venv/bin/python` and `/Users/dylan/Documents/GitHub/kart/agent/.venv/bin/python`. The test Postgres runs at `KART_TEST_PG=postgresql://postgres@localhost:54329/postgres`, which is already up.
+- **Env and venvs:** export `KART_ENV_FILE=<repo>/.env`. The venvs live in the main checkout: `<repo>/backend/.venv/bin/python` and `<repo>/agent/.venv/bin/python`. The test Postgres runs at `KART_TEST_PG=postgresql://postgres@localhost:54329/postgres`, which is already up.
 
 ## Review Focus
 
@@ -45,9 +45,9 @@
 
 ### Task 0: Worktree
 
-- [ ] **Step 1: Create the worktree.** From `/Users/dylan/Documents/GitHub/kart`, run `git worktree add .claude/worktrees/member-memory -b member-memory main`. Then work in it.
+- [ ] **Step 1: Create the worktree.** From `<repo>`, run `git worktree add .claude/worktrees/member-memory -b member-memory main`. Then work in it.
 - [ ] **Step 2: Check the baseline.**
-  - Run `KART_TEST_PG=postgresql://postgres@localhost:54329/postgres /Users/dylan/Documents/GitHub/kart/backend/.venv/bin/python -m pytest backend/tests -q`.
+  - Run `KART_TEST_PG=postgresql://postgres@localhost:54329/postgres <repo>/backend/.venv/bin/python -m pytest backend/tests -q`.
   - Expected: all pass. Record the count.
 
 ### Task 1: Schema, flag, `set_member`, `set_demo_date`, triggers
@@ -342,7 +342,7 @@ Merge `main` into the branch first. `agent.py`, `brain.py` and the tests change 
   - `test_forget_requires_memory_id`
   - `test_shop_saved_list_one_set_plan_keeps_existing`
   - `test_member_tools_need_a_member`
-- [ ] **Step 2: Run** `/Users/dylan/Documents/GitHub/kart/agent/.venv/bin/python -m pytest tests/test_memory.py -q` from `agent/`. Expected: FAIL.
+- [ ] **Step 2: Run** `<repo>/agent/.venv/bin/python -m pytest tests/test_memory.py -q` from `agent/`. Expected: FAIL.
 - [ ] **Step 3: Implement** `memory.py` and the dispatch line.
 - [ ] **Step 4: Run** the whole agent suite. Expected: all pass.
 - [ ] **Step 5: Commit** `agent: member memory helpers and tools (beta)`.
@@ -730,7 +730,7 @@ Merge `main` into the branch first. Run `cd ios && xcodegen generate` after merg
 - [ ] **Step 3: Hosted.** Run `backend/db.py apply` (additive; no `reset-demo`), then `members.py seed --member it-hosted`, then the same check on cart `it-mem-hosted`.
   - **Leave the flag off globally**, and don't seed `1029` (the demo operator does that before judging).
   - Delete `it-hosted` afterwards with `member_forget`.
-- [ ] **Step 4: Report to the manager** (SendMessage to `local_9709c9d7-0b42-465c-83b4-9f3afef31131`):
+- [ ] **Step 4: Report to the manager** (SendMessage to `local_…`):
   - the branch `member-memory`;
   - a summary;
   - test counts per suite;

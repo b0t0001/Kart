@@ -2,7 +2,7 @@
 
 **For the CV and iPad chats.** A full local Supabase stack runs on Dylan's Mac (colima +
 `supabase start` in `backend/`). It has the whole contract v0.9 schema, seeded from `data/store.json`
-and tested end to end. The values are in `/Users/dylan/Documents/GitHub/kart/.env` under the contract
+and tested end to end. The values are in `<repo>/.env` under the contract
 names: `SUPABASE_URL=http://127.0.0.1:54321`, `SUPABASE_ANON_KEY` (the legacy anon JWT),
 `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `CART_ID=7`. These are the standard local-dev keys. In
 the morning Dylan replaces them with the hosted project and runs `backend/go_live.sh`; no client
