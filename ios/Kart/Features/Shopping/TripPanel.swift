@@ -26,35 +26,45 @@ struct TripPanel: View {
     }
 }
 
+/// Where to go next. No map and no "you're in…": the cart doesn't know where it is yet (no indoor location), so the card
+/// only says where the shopper is headed. A tile on the left carries the state at a glance.
 private struct NextStopCard: View {
     let model: AppModel
 
     var body: some View {
         let cart = model.backend.cart
         let stop = model.nextStop
+        let done = stop == nil && !cart.plan.isEmpty
         HStack(spacing: Theme.xl) {
-            StoreMapView(layout: model.backend.catalog.layout, highlight: stop?.sectionId, here: cart.location?.section)
-                .frame(width: 240, height: 144)
-            VStack(alignment: .leading, spacing: Theme.s) {
+            Image(systemName: stop != nil ? "signpost.right.fill" : done ? "checkmark" : "basket.fill")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(done ? Theme.greenInk : Theme.brandDeep)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 80, height: 80)
+                .background(done ? Theme.greenSoft : Theme.brandSoft,
+                            in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            VStack(alignment: .leading, spacing: Theme.xs) {
                 if let stop {
                     Text("Next stop").font(Theme.caption).foregroundStyle(Theme.inkSecondary)
                     Text(stop.text).font(Theme.title).foregroundStyle(Theme.ink)
+                        .lineLimit(2).minimumScaleFactor(0.8)
                         .contentTransition(.opacity)
-                } else if cart.plan.isEmpty {
-                    Text("Next stop").font(Theme.caption).foregroundStyle(Theme.inkSecondary)
-                    Text("Tell Kart what you're shopping for").font(Theme.headline).foregroundStyle(Theme.ink)
+                } else if done {
+                    Text("All done").font(Theme.caption).foregroundStyle(Theme.inkSecondary)
+                    Text("Everything on your list is in the cart").font(Theme.title).foregroundStyle(Theme.greenInk)
+                        .lineLimit(2).minimumScaleFactor(0.8)
                 } else {
-                    Label("Everything on your list is in the cart", systemImage: "checkmark.circle.fill")
-                        .font(Theme.headline).foregroundStyle(Theme.greenInk)
+                    Text("Next stop").font(Theme.caption).foregroundStyle(Theme.inkSecondary)
+                    Text("Tell Kart what you're shopping for").font(Theme.title).foregroundStyle(Theme.ink)
+                        .lineLimit(2).minimumScaleFactor(0.8)
                 }
-                Text(NextStop.hereText(cart: cart, catalog: model.backend.catalog))
-                    .font(Theme.caption).foregroundStyle(Theme.inkSecondary)
             }
             Spacer(minLength: 0)
         }
         .padding(Theme.xl)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
         .animation(Theme.spring, value: stop)
+        .animation(Theme.spring, value: done)
     }
 }
 

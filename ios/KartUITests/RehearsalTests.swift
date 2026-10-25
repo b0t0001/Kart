@@ -19,6 +19,9 @@ final class RehearsalTests: XCTestCase {
         debug("debug.say.0")
         expectText("Love it. Spaghetti, marinara, garlic bread, and a Caesar kit. I'll walk you through it.")
         expectText("Aisle 1 → Caesar Salad Kit")
+        // No GPS yet: the next-stop card says where to go, never where the cart is.
+        let whereYouAre = NSPredicate(format: "label BEGINSWITH %@ OR label == %@", "You're in", "Starting at the entrance")
+        XCTAssertEqual(app.staticTexts.matching(whereYouAre).count, 0)
         shot("rehearsal-1-plan")
 
         debug("debug.add.barilla-spaghetti")
