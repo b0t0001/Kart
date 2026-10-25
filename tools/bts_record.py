@@ -42,38 +42,65 @@ def pick_cam(cams: list[int]) -> int:
     return 1 if 1 in cams else cams[0]
 
 
-def caption(ev: dict) -> str:
+def caption_parts(ev: dict) -> list[str]:
+    """[what happened, which item, how it was decided]; "->" inside a part is drawn as an arrow."""
     kind = str(ev.get("type", "")).upper()
     method = "memory" if kind == "REMOVED" else ev.get("method", "")
     name = "unrecognized item" if method == "none" else str(ev.get("label") or ev.get("product_id") or "item")
+    name = name.split(",")[0].strip()[:34]  # "Barilla Spaghetti, 1 lb" -> "Barilla Spaghetti"
     how = HOW.get(method, "").format(c=float(ev.get("confidence") or 0.0))
-    return "  |  ".join(x for x in (kind, name[:44], how) if x)
+    return [x for x in (kind, name, how) if x]
 
 
-def burn(img: np.ndarray, text: str, inset: np.ndarray | None = None, inset_label: str = "") -> np.ndarray:
-    """A dark lower-third with the decision, and the event's crop as a small inset, top right."""
+def caption(ev: dict) -> str:
+    return "  |  ".join(caption_parts(ev))
+
+
+def burn(img: np.ndarray, parts, inset: np.ndarray | None = None, inset_label: str = "") -> np.ndarray:
+    """A dark lower-third with the decision ("ADDED · Barilla Spaghetti · named by Claude 0.97": OpenCV's
+    fonts have no · or →, so those are drawn), and the event's crop as a small inset, top right."""
+    parts = [parts] if isinstance(parts, str) else list(parts)
     out = img.copy()
     h, w = out.shape[:2]
     band = max(28, int(h * 0.11))
     shade = out.copy()
     cv2.rectangle(shade, (0, h - band), (w, h), (0, 0, 0), -1)
     out = cv2.addWeighted(shade, 0.65, out, 0.35, 0)
-    scale = 0.45 * band / 28
     font = cv2.FONT_HERSHEY_DUPLEX
-    while scale > 0.3 and cv2.getTextSize(text, font, scale, 1)[0][0] > w * 0.94:
+    pieces = [[p.strip() for p in part.split("->")] for part in parts]
+
+    def width(scale):
+        gap, arrow = int(28 * scale), int(34 * scale)
+        tw = sum(cv2.getTextSize(t, font, scale, 1)[0][0] for ps in pieces for t in ps)
+        return tw + gap * (len(pieces) - 1) + sum((arrow + gap // 2) * (len(ps) - 1) for ps in pieces)
+
+    scale = 0.5 * band / 28
+    while scale > 0.3 and width(scale) > w * 0.94:
         scale -= 0.05
     thick = max(1, int(round(scale * 1.6)))
-    cv2.putText(out, text, (int(w * 0.03), h - int(band * 0.32)), font, scale, (255, 255, 255), thick, cv2.LINE_AA)
+    gap, arrow = int(28 * scale), int(34 * scale)
+    x, base = int(w * 0.03), h - int(band * 0.34)
+    mid = base - int(cv2.getTextSize("x", font, scale, 1)[0][1] * 0.5)
+    for k, ps in enumerate(pieces):
+        if k:  # a middle dot, centered between parts
+            cv2.circle(out, (x + gap // 2, mid), max(2, int(3 * scale)), (255, 255, 255), -1, cv2.LINE_AA)
+            x += gap
+        for j, t in enumerate(ps):
+            if j:  # an arrow inside a part ("unsure → asks the shopper"), with room on both sides
+                cv2.arrowedLine(out, (x + gap // 4, mid), (x + gap // 4 + arrow, mid), (255, 255, 255),
+                                thick, cv2.LINE_AA, tipLength=0.3)
+                x += arrow + gap // 2
+            cv2.putText(out, t, (x, base), font, scale, (255, 255, 255), thick, cv2.LINE_AA)
+            x += cv2.getTextSize(t, font, scale, 1)[0][0]
     if inset is not None and inset.size:
         iw = int(w * 0.26)
-        ih = max(1, int(inset.shape[0] * iw / inset.shape[1]))
-        ih = min(ih, int(h * 0.45))
+        ih = min(max(1, int(inset.shape[0] * iw / inset.shape[1])), int(h * 0.45))
         small = cv2.resize(inset, (iw, ih), interpolation=cv2.INTER_AREA)
-        x, y = w - iw - int(w * 0.02), int(h * 0.04)
-        cv2.rectangle(out, (x - 2, y - 2), (x + iw + 1, y + ih + 1), (255, 255, 255), 2)
-        out[y:y + ih, x:x + iw] = small
+        ix, iy = w - iw - int(w * 0.02), int(h * 0.04)
+        cv2.rectangle(out, (ix - 2, iy - 2), (ix + iw + 1, iy + ih + 1), (255, 255, 255), 2)
+        out[iy:iy + ih, ix:ix + iw] = small
         if inset_label:
-            cv2.putText(out, inset_label, (x, y + ih + int(18 * scale / 0.45)), font, scale * 0.8, (255, 255, 255),
+            cv2.putText(out, inset_label, (ix, iy + ih + int(18 * scale / 0.45)), font, scale * 0.8, (255, 255, 255),
                         1, cv2.LINE_AA)
     return out
 
@@ -170,7 +197,7 @@ class BtsRecorder:
             n += 1
             name = f"{stamp}_{e.get('type')}_{product}_{n}.mp4"
         writer = open_writer(self.out / name, self.fps, self.size)
-        text = caption(e)
+        text = caption_parts(e)
         label = INSET.get("memory" if e.get("type") == "removed" else e.get("method"), "")
         frames = list(self.frames)
         for k in range(int(round((self.pre + self.post) * self.fps))):

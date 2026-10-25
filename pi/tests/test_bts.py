@@ -71,7 +71,7 @@ def test_one_clip_per_add_or_remove_plus_full_and_csv(tmp_path):
 
 def test_lower_third_says_how_it_was_decided():
     assert bts.caption(ev(1, "added", "cloud", "Barilla Spaghetti, 1 lb", "barilla-spaghetti", 0.97)) == \
-        "ADDED  |  Barilla Spaghetti, 1 lb  |  named by Claude 0.97"
+        "ADDED  |  Barilla Spaghetti  |  named by Claude 0.97"  # the name without its size
     assert bts.caption(ev(1, "added", "local", "Kids' Scissors", "kids-scissors", 0.72)).endswith("recognized on-cart 0.72")
     assert bts.caption(ev(1, "added", "none", "gray fabric, no grocery item visible", None, 0.4)) == \
         "ADDED  |  unrecognized item  |  unsure -> asks the shopper"
@@ -81,3 +81,33 @@ def test_lower_third_says_how_it_was_decided():
 
 def test_picks_cam1_when_there_are_two_and_the_only_one_otherwise():
     assert bts.pick_cam([0, 1]) == 1 and bts.pick_cam([0]) == 0
+
+
+cut_spec = importlib.util.spec_from_file_location("bts_cut", REPO_ROOT / "tools/bts_cut.py")
+cut = importlib.util.module_from_spec(cut_spec)
+cut_spec.loader.exec_module(cut)
+
+
+def test_cutting_clips_from_saved_frames_and_the_carts_event_log(tmp_path):
+    from datetime import datetime, timezone
+    frames = REPO_ROOT / "pi/tests/clips/count-add2-remove1/cam1"  # <epoch_ms>.jpg at 5 Hz, as the laptop saves
+    stamps = sorted(int(p.stem) for p in frames.glob("*.jpg"))
+    at = lambda ms: datetime.fromtimestamp(ms / 1000, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
+    t_add, t_rem = stamps[len(stamps) // 3], stamps[2 * len(stamps) // 3]
+    log = tmp_path / "events.jsonl"
+    rows = [ev(0, "added", "cloud", "Barilla Spaghetti, 1 lb", "barilla-spaghetti", 0.9) | {"ts": "2020-01-01T00:00:00Z"},
+            ev(1, "added", "cloud", "Barilla Spaghetti, 1 lb", "barilla-spaghetti", 0.97,
+               ["state/crops/e1_cam0.jpg"]) | {"ts": at(t_add)},
+            ev(2, "removed", "memory", "Barilla Spaghetti, 1 lb", "barilla-spaghetti", 0.98) | {"ts": at(t_rem)}]
+    log.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    crops = tmp_path / "crops"
+    crops.mkdir()
+    cv2.imwrite(str(crops / "e1_cam0.jpg"), np.full((60, 80, 3), 90, np.uint8))
+    out = tmp_path / "out"
+    made = cut.cut(frames, log, out, crops_dir=crops, fps=5, pre=3, post=5)
+    assert [p.name.split("_", 1)[1] for p in made] == ["added_barilla-spaghetti.mp4", "removed_barilla-spaghetti.mp4"]
+    assert int(cv2.VideoCapture(str(made[0])).get(cv2.CAP_PROP_FRAME_COUNT)) == 40  # 3 s + 5 s at 5 fps
+    span = (stamps[-1] - stamps[0]) / 1000
+    assert abs(int(cv2.VideoCapture(str(out / "full.mp4")).get(cv2.CAP_PROP_FRAME_COUNT)) - span * 5) <= 6
+    rows = list(csv.DictReader(open(out / "events.csv")))
+    assert [r["type"] for r in rows] == ["added", "removed"]  # the 2020 event is from another session
