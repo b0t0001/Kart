@@ -275,13 +275,19 @@ def test_a_spot_that_changed_but_is_not_bare_keeps_its_unit(tmp_path):  # someth
 
 
 def test_a_late_view_of_the_unit_just_billed_is_that_unit_not_a_second(tmp_path):  # live: drop 1 billed twice
-    for placement, kinds in (("p1", ["moved"]), ("p2", ["added"])):  # p2: a new hand went in meanwhile
-        w = world(tmp_path / placement)
+    # p1: cam0 looks late in the same hand-in. p2/held: the next item's hand-in came before cam0, which was
+    # held back (an arm at the edge) when this was billed: still that unit (pasta run 4, items 3 s apart).
+    # p2/blind: cam0 simply hadn't seen it, and a second identical box is possible: billed (counting).
+    for name, placement, held, kinds in (("p1", "p1", False, ["moved"]), ("held", "p2", True, ["moved"]),
+                                         ("blind", "p2", False, ["added"])):
+        w = world(tmp_path / name)
         rs = settle(Scene(), Scene(items=[RED]), w.cfg)
         [d] = decide([rs[1]], w.empties, w.cart, w.identifier, w.features, w.cfg, placement="p1")  # cam1 bills it
+        if held:
+            d.awaiting = {0: [b.box for b in rs[0].blobs]}
         apply_decision(w.cart, d)
         ds = decide([rs[0]], w.empties, w.cart, w.identifier, w.features, w.cfg, placement=placement)  # cam0, later
-        assert [d.kind for d in ds] == kinds, placement
+        assert [d.kind for d in ds] == kinds, name
 
 
 def test_a_box_set_beside_one_already_billed_is_a_second_unit_even_if_its_hand_went_unseen(tmp_path):  # counting
@@ -333,3 +339,47 @@ def test_an_unknown_billed_first_is_replaced_when_the_other_camera_names_it(tmp_
         apply_decision(w.cart, d)
     [inst] = w.cart.instances.values()
     assert inst.product_id == "red-box" and set(inst.views) == {0, 1}  # one unit, named, seen by both
+
+
+
+def test_a_late_view_next_to_the_piece_already_seen_is_that_item(tmp_path):  # run 4: the jar body, judged late
+    w = world(tmp_path)
+    rs = settle(Scene(), Scene(items=[RED]), w.cfg)
+    b0, b1 = rs[0].blobs[0], rs[1].blobs[0]
+    x, y, bw, bh = b0.box
+    lid = View(0, (x, max(0, y - bh // 2), bw, bh // 2), w.features(b0.after_core).tolist())  # just above it
+    w.cart.add("red-box", "Red Box", {0: lid, 1: View(1, b1.box, w.features(b1.after_core).tolist())},
+               placement="p1")
+    for b in rs[0].blobs:
+        b.placement = "p1"  # it waited on an intrusion since the jar's hand-in; judged during the next one
+    ds = decide([rs[0]], w.empties, w.cart, w.identifier, w.features, w.cfg, placement="p2")
+    assert [d.kind for d in ds] == ["moved"] and len(w.cart.instances) == 1
+
+
+def test_a_pending_view_keeps_the_hand_in_it_started_in(tmp_path):  # run 4: judged during the next placement
+    w = world(tmp_path)
+    rs = settle(Scene(), Scene(items=[LID_UNKNOWN]), w.cfg)
+    [d] = decide([rs[1]], w.empties, w.cart, w.identifier, w.features, w.cfg, placement="p1")  # cam1 bills it
+    apply_decision(w.cart, d)
+    for b in rs[0].blobs:
+        b.placement = "p1"  # cam0 had to wait (an arm at the edge) when this was put in
+    ds = decide([rs[0]], w.empties, w.cart, w.identifier, w.features, w.cfg, placement="p2")
+    assert [d.kind for d in ds] == ["moved"] and len(w.cart.instances) == 1
+
+
+def test_an_item_moved_by_a_hand_in_belongs_to_it(tmp_path):  # single-drops 61 s, every box named
+    w = world(tmp_path)
+    here, there = Item("red-box", 150, 100, seed=1), Item("red-box", 560, 330, seed=1)
+    [d] = decide([settle(Scene(), Scene(items=[here]), w.cfg)[1]], w.empties, w.cart, w.identifier, w.features,
+                 w.cfg, placement="p1")  # billed from cam1 only
+    apply_decision(w.cart, d)
+    # hand-in p2 takes it from one spot and puts it down at another; cam1 sees the move, cam0 is held back
+    [d] = decide([settle(Scene(items=[here]), Scene(items=[there]), w.cfg)[1]], w.empties, w.cart, w.identifier,
+                 w.features, w.cfg, placement="p2")
+    assert d.kind == "moved"
+    apply_decision(w.cart, d)
+    r0 = settle(Scene(), Scene(items=[there]), w.cfg)[0]  # cam0's first look at it, after it waited
+    for b in r0.blobs:
+        b.placement = "p2"
+    ds = decide([r0], w.empties, w.cart, w.identifier, w.features, w.cfg, placement="p2")
+    assert [d.kind for d in ds] == ["moved"] and w.cart.count("red-box") == 1

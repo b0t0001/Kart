@@ -207,6 +207,36 @@ def test_a_lone_unknown_that_stays_is_billed_after_the_recheck(tmp_path):
         [("added", "red-box"), ("removed", "red-box"), ("added", None)]
 
 
+def _asked_cloud_pipeline(tmp_path, answer):
+    from kartcv.identify.hybrid import HybridIdentifier
+    w = world(tmp_path)
+
+    class Cloud:  # Claude looks at whatever no enrolled photo matches
+        def identify(self, crops):
+            return answer
+
+    ident = HybridIdentifier(w.gallery, Cloud(), w.catalog, w.cfg)
+    sink = MemorySink()
+    return Pipeline(w.cfg, [0, 1], ident, w.features, [sink], tmp_path / "state"), sink
+
+
+def _cam0_only_ghost_appears():
+    sc = Script(Scene()).still(1.0).drop(RED).still(1.0)
+    return sc.set(items=[RED, GHOST], hidden={1: {"ghost"}}).still(6.0)  # cam1 sees nothing new there, ever
+
+
+def test_a_lone_unknown_claude_looked_at_is_never_billed_if_the_other_camera_saw_nothing(tmp_path):  # run 4
+    from kartcv.identify.cloud import CloudAnswer
+    p, _ = _asked_cloud_pipeline(tmp_path, CloudAnswer(None, 0.4, "dark grey surface"))
+    assert run(p, _cam0_only_ghost_appears()) == [("added", "red-box")]
+
+
+def test_a_lone_unknown_is_still_billed_when_claude_could_not_answer(tmp_path):  # a timeout is no verdict
+    from kartcv.identify.cloud import CloudAnswer
+    p, _ = _asked_cloud_pipeline(tmp_path, CloudAnswer(None, 0.0, "error: timeout"))
+    assert run(p, _cam0_only_ghost_appears()) == [("added", "red-box"), ("added", None)]
+
+
 def test_reset_restart_and_missing_camera(tmp_path):
     p, _ = make(tmp_path)
     sc = Script(Scene()).still(1.0).drop(RED)

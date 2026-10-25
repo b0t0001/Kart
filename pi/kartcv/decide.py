@@ -50,6 +50,7 @@ class Decision:
     personal: bool = False  # the shopper's own belonging: memory only, no event
     private: bool = False   # came in from the frame edge: its photos never leave the cart (edge_privacy)
     placement: str = ""     # added: the hand-in that brought it
+    asked: bool = False     # added unknown: Claude looked and couldn't name it (not a timeout)
 
 
 def _iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
@@ -221,7 +222,7 @@ def _decide_added(added: dict[int, list[Blob]], identifier, features, cfg) -> li
                                     allow_cloud=not private)
         return [Decision("added", ident.product_id, ident.confidence, ident.method, ident.label,
                          sorted(b.cam for b in blobs), blobs, _views(blobs, features), count=max(1, ident.count),
-                         personal=ident.personal, private=private)]
+                         personal=ident.personal, private=private, asked=getattr(ident, "asked", False))]
 
     idents = {id(b): identifier.identify([b.after_core], cloud_crops=[b.ident_crop],
                                          allow_cloud=not (cfg.edge_privacy and b.edge))
@@ -254,7 +255,8 @@ def _decide_added(added: dict[int, list[Blob]], identifier, features, cfg) -> li
     for b in [b for b in added[busiest] if id(b) not in used][: n - len(decisions)]:
         ident = idents[id(b)]
         decisions.append(Decision("added", None, ident.confidence, ident.method, ident.label, [b.cam], [b],
-                                  _views([b], features), personal=ident.personal, private=cfg.edge_privacy and b.edge))
+                                  _views([b], features), personal=ident.personal, private=cfg.edge_privacy and b.edge,
+                                  asked=getattr(ident, "asked", False)))
     return decisions
 
 
@@ -416,7 +418,7 @@ def _cancel_nudges(decisions: list[Decision], cart: CartMemory, cfg) -> list[Dec
             continue
         adds.remove(match)
         out.append(Decision("moved", rem.product_id, match.confidence, match.method, rem.label,
-                            match.cameras, match.blobs, match.views, rem.instance_id))
+                            match.cameras, match.blobs, match.views, rem.instance_id, placement=match.placement))
     return adds + out
 
 
@@ -449,29 +451,44 @@ def _one_per_placement(decisions: list[Decision], cart: CartMemory, placement: s
     if placement is None:
         return decisions
     leaving = {d.instance_id for d in decisions if d.kind == "removed"}
-    units: list = [i for i in cart.instances.values() if i.placement == placement and i.instance_id not in leaving]
+    billed = [i for i in cart.instances.values() if i.instance_id not in leaving]
+    new: list[Decision] = []
     out = [d for d in decisions if d.kind != "added"]
     for d in sorted((d for d in decisions if d.kind == "added"), key=lambda d: -len(set(d.cameras))):
         lone = len(set(d.cameras)) == 1
+        # a change that waited on an intrusion belongs to the hand-in it started in, not today's
+        place = next((b.placement for b in d.blobs if b.placement), placement)
         twin = None
-        for u in reversed(units):  # newest first
+        for u in reversed([i for i in billed if i.placement == place] + [n for n in new if n.placement == place]):
             same_product = d.product_id is None or u.product_id is None or u.product_id == d.product_id
             shared = [b for b in d.blobs if b.cam in u.views]
             if isinstance(u, Decision):  # pieces seen in this same settle: next to each other is enough
                 near = any(_near(b.box, u.views[b.cam].box, NEAR * widths.get(b.cam, 1280)) for b in shared)
                 explained = bool(set(u.views) - set(d.cameras))  # another camera saw it but not this piece
                 ok = (same_product and (not shared or near)) or (lone and near and explained)
-            else:  # a unit billed earlier: a view of it from a camera that hadn't seen it, or one lying on it
-                late = not shared
-                on_it = any(_coverage(b.box, u.views[b.cam].box) >= 0.5 for b in shared)
-                ok = (same_product and (late or on_it)) or (lone and late)
+            else:  # a unit billed earlier in this hand-in: a camera's first view of it, one lying on it, or a
+                late = not shared  # lone view that waited on an intrusion, right next to the piece already seen
+                on_it = any(_coverage(b.box, u.views[b.cam].box) >= 0.5 for b in shared)  # (jar body, its lid)
+                near = any(_near(b.box, u.views[b.cam].box, NEAR * widths.get(b.cam, 1280)) for b in shared)
+                waited = any(b.placement for b in d.blobs)
+                ok = (same_product and (late or on_it or (lone and near and waited))) or (lone and late)
             if ok:
                 twin = u
                 break
+        if twin is None and lone and d.product_id is not None:
+            # A named view from ONE camera, of a product billed in an earlier hand-in while this very camera
+            # was held back (an arm at the edge) and still has no view of it: that item, seen late, never a
+            # second one, even if its held-back spot doesn't line up. Only then: identical boxes each seen
+            # by one camera (cam0's blind zone) stay separate units.
+            cam = d.cameras[0]
+            for u in sorted(billed, key=lambda i: i.added_ts, reverse=True):
+                if u.product_id == d.product_id and cam not in u.views and u.awaiting.get(cam):
+                    twin = u
+                    break
         if twin is None:
-            d.placement = placement
+            d.placement = place
             out.append(d)
-            units.append(d)
+            new.append(d)
             continue
         views = {c: _join_view(twin.views[c], v) if c in twin.views else v for c, v in d.views.items()}
         if isinstance(twin, Decision):  # an add earlier in this settle: fold this one into it
@@ -486,7 +503,7 @@ def _one_per_placement(decisions: list[Decision], cart: CartMemory, placement: s
             out.append(Decision("removed", None, 1.0, "memory", twin.label, sorted(twin.views), [], {},
                                 twin.instance_id, personal=twin.personal))
             out.append(Decision("added", d.product_id, d.confidence, d.method, d.label, sorted(merged), d.blobs,
-                                merged, count=d.count, private=d.private, placement=placement))
+                                merged, count=d.count, private=d.private, placement=place))
         else:
             log.info("ONE UNIT: %s again in the same placement: more of the same unit, not a second one", d.label)
             out.append(Decision("moved", twin.product_id, d.confidence, d.method, twin.label, d.cameras, d.blobs,
@@ -551,6 +568,24 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
     decided = {d.instance_id for d in late + settled + decisions if d.instance_id}
     faint = _faint_removals(results, empties, cart, cfg, matched_by_cam, decided)
     out = late + settled + _cancel_nudges(decisions, cart, cfg) + faint
+    # A lone unknown that Claude looked at and couldn't name, while every other camera had a clean look
+    # and saw nothing new: one camera's glimpse (a liner corner by the grate, a lid close-up), never billed.
+    # Not when Claude failed (a timeout is no verdict), nor offline: those still bill as unknown.
+    def corroborated(d: Decision) -> bool:
+        others = [r for r in results if r.cam not in d.cameras]
+        if not others:
+            return True
+        for r in others:
+            if r.moved or r.deferred or r.status not in ("none", "blobs") or r.cam not in empties:
+                return True  # that camera couldn't look
+            if any(r.cam in o.cameras and o.kind in ("added", "moved") for o in out if o is not d):
+                return True  # it saw something new too
+        return False
+    for d in [d for d in out if d.kind == "added" and d.product_id is None and d.asked and len(set(d.cameras)) == 1]:
+        if not corroborated(d):
+            log.info("IGNORED: only cam%d saw %s and the other camera saw nothing new: not billed",
+                     d.cameras[0], d.label)
+            out.remove(d)
     # A lone unknown (one camera, no name) in a settle whose hand-in was for something else (an item taken
     # out, another put in, a late view) is the kind of glimpse that goes away: hold it for the recheck.
     if placement is not None:
@@ -580,6 +615,6 @@ def apply_decision(cart: CartMemory, d: Decision) -> Instance | None:
     if d.kind == "removed":
         return cart.remove(d.instance_id) if d.instance_id in cart.instances else None
     if d.kind == "moved":
-        cart.update_views(d.instance_id, d.views)
+        cart.update_views(d.instance_id, d.views, d.placement)
         return cart.instances[d.instance_id]
     return None

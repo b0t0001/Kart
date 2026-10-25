@@ -16,6 +16,7 @@ class Identification:
     label: str
     count: int = 1  # identical units in this blob (claude_count beta)
     personal: bool = False  # the shopper's own belonging: remember it, never bill it (personal_items)
+    asked: bool = False     # unknown after Claude really looked (not a timeout or no cloud at all)
 
 
 class HybridIdentifier:
@@ -66,4 +67,4 @@ class HybridIdentifier:
                 cloud_label = a.label
 
         label = cloud_label or (self.catalog.name(ranked[0][0]) if ranked else "unknown item")
-        return Identification(None, best_conf, "none", label)
+        return Identification(None, best_conf, "none", label, asked=cloud_label is not None)

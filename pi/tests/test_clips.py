@@ -79,4 +79,5 @@ def test_enrollment_captures_every_placed_item_and_nothing_else(clip, tmp_path):
     gallery.load()
     ticks = held(iter_ticks(load_recording(clip)), cfg.settle_s + cfg.intrusion_recheck_s + 1.0)
     n = run_enrollment(ticks, "red-box", 99, gallery, synth_catalog(), cfg, tmp_path / "w", on_progress=lambda m: None)
-    assert n == sum(x["type"] == "added" for x in exp["expected"])
+    # (an out-and-in of one product within one settle is a move, not an add: expected.json may say so)
+    assert n == exp.get("enrollment_captures", sum(x["type"] == "added" for x in exp["expected"]))

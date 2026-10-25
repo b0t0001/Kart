@@ -110,7 +110,8 @@ def test_hybrid_policy():
         Identification("rao-marinara", 0.9, "cloud", "Rao's Marinara")
     assert hyb([("kirkland-parmesan", 0.6)], c).method == "cloud" and hyb([], c).method == "cloud"
     assert hyb([("kirkland-parmesan", 0.6)], FakeCloud(CloudAnswer("rao-marinara", 0.4, "maybe jar"))) == \
-        Identification(None, 0.6, "none", "maybe jar")
+        Identification(None, 0.6, "none", "maybe jar", asked=True)  # Claude looked: a real verdict
+    assert not hyb([], FakeCloud(CloudAnswer(None, 0.0, "error: timeout"))).asked  # a timeout is none
     assert hyb([("kirkland-parmesan", 0.6)], None) == Identification(None, 0.6, "none", "Kirkland Parmigiano Reggiano")
     assert hyb([("gone-product", 0.95), ("kirkland-parmesan", 0.6)], None) == \
         Identification(None, 0.6, "none", "Kirkland Parmigiano Reggiano")

@@ -58,9 +58,11 @@ class CartMemory:
         self.instances[instance_id].event_id = event_id
         self.save()
 
-    def update_views(self, instance_id: str, views: dict[int, View]) -> None:
+    def update_views(self, instance_id: str, views: dict[int, View], placement: str = "") -> None:
         inst = self.instances[instance_id]
         inst.views.update(views)
+        if placement:  # moved by a hand-in: it belongs to that one now
+            inst.placement = placement
         for c in views:
             inst.awaiting.pop(c, None)
         self.save()

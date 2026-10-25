@@ -31,6 +31,10 @@ from kartcv.roi import draw_outline
 log = logging.getLogger(__name__)
 
 
+def _overlaps(a: tuple, b: tuple) -> bool:
+    return a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
+
+
 class Pipeline:
     def __init__(self, cfg, cams: list[int], identifier, features, sinks: list, state_dir: Path,
                  background: bool = False):
@@ -70,6 +74,7 @@ class Pipeline:
         self._peak: dict[int, float] = {}
         self._held: list[tuple[Decision, float]] = []  # lone unknowns waiting for the recheck (judging thread)
         self._used: set[str] = set()  # placements that already took something out or put something in
+        self._pending: dict[int, list[tuple[tuple, str]]] = {}  # per camera: waiting spots, and their hand-in
         self._worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="judge") if background else None
         self._jobs: list[Future] = []
 
@@ -138,6 +143,7 @@ class Pipeline:
         self.settle.reset()
         self.cart.clear()
         self._held = []
+        self._pending = {}
         self.camera_moved.clear()
         self._resync.difference_update(frames)
         self._reset_requested.clear()
@@ -225,6 +231,11 @@ class Pipeline:
                 continue
             old_ref = self.references[c]
             r = detect_changes(c, old_ref, f.image, self.cfg, roi=self._roi(c))
+            # A change that waited on an intrusion keeps the hand-in it started in, even when the next item's
+            # hand-in comes first and it is only judged then (items put in 3 s apart).
+            pending = self._pending.pop(c, [])
+            for b in r.blobs:
+                b.placement = next((p for box, p in pending if _overlaps(b.box, box)), "")
             scale = f.image.shape[1] / self.cfg.diff_size[0]
             new_ref = f.image
             if r.moved:
@@ -254,6 +265,8 @@ class Pipeline:
                         new_ref[y:y + h, x:x + w] = old_ref[y:y + h, x:x + w]
                     r.blobs = [b for b in r.blobs if b not in edge]
                     r.deferred = [b.box for b in edge]
+                    self._pending[c] = [((b.ident_box if b.ident is not None else b.box), b.placement or self.placement)
+                                        for b in edge]
                     if not r.blobs:
                         r.status = "none"
             self.references[c] = new_ref

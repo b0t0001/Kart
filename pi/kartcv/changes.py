@@ -80,6 +80,7 @@ class Blob:
     edge: bool = False  # part of a change that reaches the image edge: an arm over the rim, a strap
     ident: np.ndarray | None = None
     ident_box: tuple[int, int, int, int] = (0, 0, 0, 0)  # x, y, w, h in full-res pixels
+    placement: str = ""  # the hand-in it started in, if it waited on an intrusion across a later one
 
     @property
     def ident_crop(self) -> np.ndarray:
