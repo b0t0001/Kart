@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 night · CV fixes hold at demo pace
+- With the fixes running, the pasta runs ended with the right bill 3/3 (was 1/3, pre-fix). Run 4 at 3–4 s gaps re-billed items (a pending cam0 check crossing the next placement); that's CV's top fix, with a pasta-fast clip coming. CV pushed: a close-up piece joins the other camera's item; one quick Claude retry.
+
 ### 2026-10-24 late · floor passes, double count is top bug
 - The flattened paper liner passed the 3-drop test (no phantoms). One drop was billed twice (both cams named it), which would trigger a false "Keep the extra?". It's CV's top fix, with a single-drops clip coming. cam0 was knocked 216 px and re-aimed.
 
