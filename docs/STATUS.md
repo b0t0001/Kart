@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-25 03:35 · video takes done; repo presentable
+- Successful store takes at 02:15 and 02:45; their BTS MP4s are on the bts-clips branch (take-0215 with "what Claude saw" insets; take-0245 full plus clips). repo-presentation merged into main (README, ARCHITECTURE, LICENSE, .env.example, privacy scrub; history still has the old details).
+
 ### 2026-10-25 02:30 · store shoot
 - Demo-video aisles live (layout demo-video: 1A/3A/2A/1B; re-apply after every pre_judging). The 02:15 store take was clean end to end (empty basket at trip start, items spread, cart not rolled). Rolling into new light and a jar next to a box caused re-bills earlier; CV pushed a lighting fix (39349d9), not on the frozen Pi. BTS grabber is extended; the 02:15 clips are being cut first.
 
