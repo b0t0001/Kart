@@ -1,0 +1,149 @@
+{
+ "what_happened": "empty cart; ONE Barilla spaghetti box dropped in and taken out 5 times, ~5 s each way: 1 center, 2 near cam0 (middle-front Brio), 3 near cam1 (wide Aoozi, top-basket end), 4 on a liner seam, 5 tossed in quickly. The 5th removal happened just after the recording ended, so the box is still in at the last frame.",
+ "expected": [
+  {
+   "type": "added",
+   "product_id": "barilla-spaghetti"
+  },
+  {
+   "type": "removed",
+   "product_id": "barilla-spaghetti"
+  },
+  {
+   "type": "added",
+   "product_id": "barilla-spaghetti"
+  },
+  {
+   "type": "removed",
+   "product_id": "barilla-spaghetti"
+  },
+  {
+   "type": "added",
+   "product_id": "barilla-spaghetti"
+  },
+  {
+   "type": "removed",
+   "product_id": "barilla-spaghetti"
+  },
+  {
+   "type": "added",
+   "product_id": "barilla-spaghetti"
+  },
+  {
+   "type": "removed",
+   "product_id": "barilla-spaghetti"
+  },
+  {
+   "type": "added",
+   "product_id": "barilla-spaghetti"
+  }
+ ],
+ "live": [
+  "ADDED barilla-spaghetti (local 0.70)",
+  "REMOVED barilla-spaghetti (memory 1.00)",
+  "INTRUSION: cam1 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "ADDED barilla-spaghetti (cloud 0.92)",
+  "INTRUSION: cam1 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "REMOVED barilla-spaghetti (memory 0.98)",
+  "ADDED barilla-spaghetti (cloud 0.97)",
+  "REMOVED barilla-spaghetti (memory 0.99)",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "ADDED barilla-spaghetti (local 0.76)",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "REMOVED barilla-spaghetti (memory 0.98)",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "RECHECK: the edge-touching change stayed still 3 s more: judging it as an item",
+  "ADDED barilla-spaghetti (local 0.71)",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "(5th REMOVED barilla-spaghetti (memory 0.99) came after the recording ended)"
+ ],
+ "notes": "repro attempt for the per-camera double count seen on drop 1 of the 3-drop test: this run had NO double count. Live: adds local 0.70 / cloud 0.92 / cloud 0.97 / local 0.76 / local 0.71 (after INTRUSION -> RECHECK), removes memory 1.00 / 0.98 / 0.99 / 0.98 (+0.99 after the clip). Same final layout, black paper liner, ROI redrawn for cam0 just before.",
+ "roi": {
+  "0": [
+   [
+    0.01,
+    0.99
+   ],
+   [
+    0.01,
+    0.19
+   ],
+   [
+    0.05,
+    0.165
+   ],
+   [
+    0.5,
+    0.16
+   ],
+   [
+    0.86,
+    0.16
+   ],
+   [
+    0.9,
+    0.2
+   ],
+   [
+    0.99,
+    0.44
+   ],
+   [
+    0.99,
+    0.99
+   ]
+  ],
+  "1": [
+   [
+    0.04,
+    0.99
+   ],
+   [
+    0.04,
+    0.83
+   ],
+   [
+    0.11,
+    0.68
+   ],
+   [
+    0.22,
+    0.53
+   ],
+   [
+    0.36,
+    0.36
+   ],
+   [
+    0.41,
+    0.29
+   ],
+   [
+    0.47,
+    0.27
+   ],
+   [
+    0.66,
+    0.33
+   ],
+   [
+    0.82,
+    0.41
+   ],
+   [
+    0.81,
+    0.6
+   ],
+   [
+    0.79,
+    0.8
+   ],
+   [
+    0.77,
+    0.99
+   ]
+  ]
+ },
+ "setup": "final 2-camera layout: cam0 Brio mid-front looking back; cam1 wide Aoozi at the top-basket end (USB port 1.3). Floor liner: flattened black paper, corners taped; grate strips at the edges outside the ROI.",
+ "recording": "640x360, 5 Hz, re-encoded JPEG q55; still stretches trimmed by hardware/trim_clip.py (timestamps kept)"
+}
