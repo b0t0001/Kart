@@ -15,7 +15,8 @@ import Testing
         let s = try #require(b.cart.suggestion)
         #expect(s.dealId == "d-parm-3off" && s.productId == "kirkland-parmesan")
         #expect(s.text == (try Fixtures.dealLine("d-parm-3off")))
-        #expect(s.salePrice == Decimal(string: "3.99") && s.aisle == "Aisle 4")
+        let sale = try Fixtures.salePrice("d-parm-3off")              // list - $1, whatever the shelf price is
+        #expect(s.salePrice == sale && s.aisle == "Aisle 4")
         #expect(b.cart.suggestedDeals == ["d-parm-3off"])
     }
     @Test func plannedProductsAreNeverSuggested() async throws {
@@ -64,10 +65,11 @@ import Testing
         let b = try await started()
         await b.simulateVision(.added, productId: "kirkland-parmesan", confidence: 0.9, label: "p")
         await b.removeDeal(id: "d-parm-3off")
-        #expect(b.cart.items.map(\.price) == [Decimal(string: "3.99")!])
+        let sale = try Fixtures.salePrice("d-parm-3off")
+        #expect(b.cart.items.map(\.price) == [sale])
         await b.simulateVision(.added, productId: "kirkland-parmesan", confidence: 0.9, label: "p")
-        #expect(b.cart.items.map(\.price) == [Decimal(string: "3.99")!] && b.cart.items[0].qty == 2)   // one line keeps the lower price
-        #expect(b.cart.total == Decimal(string: "7.98"))
+        #expect(b.cart.items.map(\.price) == [sale] && b.cart.items[0].qty == 2)   // one line keeps the lower price
+        #expect(b.cart.total == sale * 2)
     }
     @Test func storeCreatedDealReplacesCurrentSuggestion() async throws {
         let b = try await started()
@@ -92,7 +94,9 @@ import Testing
         await b.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")
         clock.now += 1380
         let r = try await b.checkout(provider: "simulated")
-        #expect(r.total == Decimal(string: "5.98") && r.savings == 1 && r.itemCount == 2 && r.durationS == 1380)
+        let total = try Fixtures.salePrice("d-parm-3off") + Fixtures.listPrice("barilla-spaghetti")
+        let saved = try Fixtures.dealValue("d-parm-3off")
+        #expect(r.total == total && r.savings == saved && r.itemCount == 2 && r.durationS == 1380)
         #expect(r.provider == "simulated" && r.status == "paid" && r.items.count == 2 && r.tripId == b.cart.tripId)
         #expect(b.cart.status == .paid)
         #expect(try await b.checkout(provider: "simulated") == r)          // idempotent per trip

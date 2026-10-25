@@ -22,8 +22,11 @@ import Testing
         let b = try backend(); try await b.startTrip()
         await b.simulateVision(.added, productId: "kirkland-parmesan", confidence: 0.9, label: "parmesan")
         let line = try #require(b.cart.items.first)
-        #expect(line.price == Decimal(string: "3.99") && line.listPrice == Decimal(string: "4.99"))
-        #expect(line.dealLabel == "$1 off" && b.cart.savings == 1)
+        let sale = try Fixtures.salePrice("d-parm-3off"), list = try Fixtures.listPrice("kirkland-parmesan")
+        let label = try Fixtures.catalog().deals.first { $0.id == "d-parm-3off" }?.label
+        let saved = try Fixtures.dealValue("d-parm-3off")
+        #expect(line.price == sale && line.listPrice == list)
+        #expect(line.dealLabel == label && b.cart.savings == saved)
     }
     @Test func percentDealRoundsToCents() async throws {
         let b = try backend(); try await b.startTrip()

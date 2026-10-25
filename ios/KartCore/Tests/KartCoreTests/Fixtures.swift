@@ -18,6 +18,45 @@ enum Fixtures {
         return (raw?["products"] as? [Any])?.count ?? 0
     }
 
+    struct Missing: Error { let what: String }
+
+    /// The published file as JSON (not through the decoder), for expectations that follow the data.
+    static func raw() throws -> [String: Any] {
+        guard let raw = try JSONSerialization.jsonObject(with: Data(contentsOf: storeURL)) as? [String: Any] else {
+            throw Missing(what: "store.json")
+        }
+        return raw
+    }
+
+    static func rawProduct(_ id: String) throws -> [String: Any] {
+        guard let product = (try raw()["products"] as? [[String: Any]])?.first(where: { $0["id"] as? String == id }) else {
+            throw Missing(what: id)
+        }
+        return product
+    }
+
+    private static func decimal(_ value: Any?, _ what: String) throws -> Decimal {
+        guard let number = value as? NSNumber, let decimal = Decimal(string: number.stringValue) else { throw Missing(what: what) }
+        return decimal
+    }
+
+    /// A product's shelf price as the file says it today.
+    static func listPrice(_ id: String) throws -> Decimal {
+        try decimal(try rawProduct(id)["price"], "\(id) price")
+    }
+
+    /// An amount-off deal's value ($1 off -> 1).
+    static func dealValue(_ dealId: String) throws -> Decimal {
+        let deal = (try raw()["deals"] as? [[String: Any]])?.first { $0["id"] as? String == dealId }
+        return try decimal(deal?["value"], "\(dealId) value")
+    }
+
+    /// The sale price an amount-off deal gives: list price - value.
+    static func salePrice(_ dealId: String) throws -> Decimal {
+        guard let deal = try catalog().deals.first(where: { $0.id == dealId }) else { throw Missing(what: dealId) }
+        return try listPrice(deal.productId) - dealValue(dealId)
+    }
+
     /// A deal card's line as the data says it today: "Garlic Bread is $1 off in Aisle 8. Want it?".
     static func dealLine(_ dealId: String) throws -> String {
         let catalog = try catalog()

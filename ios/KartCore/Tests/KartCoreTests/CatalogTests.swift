@@ -5,14 +5,17 @@ import Testing
 @Test func loadsPublishedStoreFile() throws {
     let c = try Fixtures.catalog()
     #expect(c.products.count == (try Fixtures.productCount()))   // every product in the file decodes
-    #expect(c.deals.count == 5)
+    let deals = (try Fixtures.raw()["deals"] as? [Any])?.count
+    #expect(c.deals.count == deals)
     #expect(c.layout.sections.count == 10)
     #expect(c.layout.store.width == 20 && c.layout.store.height == 12)
     let parm = try #require(c.product("kirkland-parmesan"))
-    #expect(parm.shortName == "Parmesan")
-    #expect(parm.price == Decimal(string: "4.99"))
-    #expect(parm.section == "A4")
-    #expect(parm.stock == 18)
+    let raw = try Fixtures.rawProduct("kirkland-parmesan")       // decoded fields match the file, whatever it says today
+    #expect(parm.shortName == raw["short_name"] as? String)
+    let price = try Fixtures.listPrice("kirkland-parmesan")
+    #expect(parm.price == price)
+    #expect(parm.section == raw["section"] as? String)
+    #expect(parm.stock == raw["stock"] as? Int)
 }
 
 @Test func sectionLabels() throws {
