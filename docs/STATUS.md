@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 23:35 · Pi on the power bank, cam1 outline refit
+- The Pi moved to the 20,000 mAh bank (a 20 min outage: a USB-PD bank with a C-to-C cable never switched on; fixed, throttled 0x0). cam1's floor outline refit inside the paper after the cart move; cam0 unplugged; code still frozen on f329278. Hardware README covers battery, Wi-Fi backup and Tailscale.
+
 ### 2026-10-24 22:25 · tap-to-pay on the iPad, fresh end-to-end
 - The tap-to-pay build (9c1e5d3) is installed and relaunched with -KartBackend supabase -KartVoice line -KartTapToPay YES; cart 7 reset for a fresh end-to-end. Live bug for after the demo: touching items merge (marinara billed as spaghetti; removal took both). Keep gaps between items.
 
