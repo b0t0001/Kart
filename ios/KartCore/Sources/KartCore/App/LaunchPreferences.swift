@@ -42,4 +42,7 @@ extension LaunchPreferences {
     public static func holdToTalk(defaults: UserDefaults) -> Bool { defaults.bool(forKey: holdToTalkKey) }
 
     public static func persistHoldToTalk(_ on: Bool, defaults: UserDefaults) { defaults.set(on, forKey: holdToTalkKey) }
+
+    /// Demo: Pay opens a tap-to-pay terminal (nothing is charged). Off by default; the debug panel switch sticks.
+    public static let tapToPayKey = "KartTapToPay"
 }

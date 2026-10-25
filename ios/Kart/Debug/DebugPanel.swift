@@ -3,6 +3,7 @@ import SwiftUI
 
 /// Everything needed to run the demo by hand: fake the Pi, put words in the shopper's mouth, play the merchant.
 struct DebugPanel: View {
+    @AppStorage(LaunchPreferences.tapToPayKey) private var tapToPay = false
     let world: KartWorld
     @Environment(\.dismiss) private var dismiss
 
@@ -42,6 +43,8 @@ struct DebugPanel: View {
                         get: { world.voice.holdToTalk },
                         set: { world.voice.holdToTalk = $0; LaunchPreferences.persistHoldToTalk($0, defaults: .standard) }))
                         .accessibilityIdentifier("debug.holdToTalk")
+                    Toggle("Tap-to-pay terminal (demo, no charge)", isOn: $tapToPay)
+                        .accessibilityIdentifier("debug.tapToPay")
                     if let error = world.supabase?.lastError {
                         Text("Last backend error: \(error)").foregroundStyle(.red).font(.footnote)
                     }

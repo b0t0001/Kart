@@ -113,6 +113,8 @@ private struct PaySummary: View {
     let unresolved: Int
     /// A nudge card is open: its action is the one to take first, so Pay drops to outlined (still works).
     var nudgeOpen = false
+    @AppStorage(LaunchPreferences.tapToPayKey) private var tapToPay = false
+    @State private var terminal = false
 
     var body: some View {
         let cart = model.backend.cart
@@ -135,7 +137,7 @@ private struct PaySummary: View {
             }
             Spacer(minLength: Theme.xl)
             Button {
-                Task { await model.pay() }
+                if tapToPay && unresolved == 0 { terminal = true } else { Task { await model.pay() } }
             } label: {
                 Text(unresolved == 0 ? "Pay \(Money.format(cart.total))"
                                      : "Confirm \(unresolved) \(unresolved == 1 ? "item" : "items") first")
@@ -153,6 +155,9 @@ private struct PaySummary: View {
         .padding(Theme.xxl)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+        .fullScreenCover(isPresented: $terminal) {
+            TapToPayTerminal(total: cart.total, onPaid: { await model.pay(); terminal = false }, onCancel: { terminal = false })
+        }
     }
 }
 

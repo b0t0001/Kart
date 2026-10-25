@@ -11,14 +11,9 @@ struct WelcomeView: View {
         VStack(spacing: Theme.xxl) {
             AvatarView(mood: .idle, reaction: model.reaction, size: 360)
                 .matchedGeometryEffect(id: "kart", in: namespace)
-            VStack(spacing: Theme.m) {
-                Text("Tap to start shopping")
-                    .font(Theme.title)
-                    .foregroundStyle(Theme.ink)
-                Label("The mic stays off until you start.", systemImage: "mic.slash")
-                    .font(Theme.caption)
-                    .foregroundStyle(Theme.inkSecondary)
-            }
+            Text("Tap to start shopping")
+                .font(Theme.title)
+                .foregroundStyle(Theme.ink)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())

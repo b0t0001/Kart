@@ -69,6 +69,19 @@ final class RehearsalTests: XCTestCase {
     }
 
     @MainActor
+    func testTapToPayTerminal() {
+        launch(["-KartScenario", "checkout", "-KartTapToPay", "YES"])
+        app.buttons["pay.button"].tap()
+        expectText("Hold your phone near the iPad", timeout: 5)
+        shot("tap-1-ready")
+        app.buttons["tap.reader"].tap()
+        expectText("Approved", timeout: 5)
+        shot("tap-2-approved")
+        expectText("You're all set", timeout: 15)                   // the usual receipt
+        shot("tap-3-receipt")
+    }
+
+    @MainActor
     func testFailurePaths() {
         launch(["-KartScenario", "checkout"])
         debugToggle("debug.forceFailure")
