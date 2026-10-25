@@ -434,31 +434,38 @@ def _join_view(old: View, new: View) -> View:
 
 def _one_per_placement(decisions: list[Decision], cart: CartMemory, placement: str | None,
                        widths: dict[int, int]) -> list[Decision]:
-    """One placement (one hand in and out) brings one unit of a product. Another "added" of the same
-    product (or an unknown) in the same placement is a piece or a late view of that unit, not a second
-    one: a box its own print cuts in two (pieces of one settle, next to each other), a camera that looks
-    only now (no view of the unit yet), or a view lying mostly on the unit's own box. Anything at a
-    distinct spot in a camera that sees both is a second unit: two items put in together, apart, are
-    two, and a box set beside one billed earlier is billed even if its hand-in went unseen."""
+    """One placement (one hand in and out) brings one unit of a product. Another "added" in the same
+    placement is more of that unit, not a second one, when it is:
+      - the same product (or unknown): a piece next to it in this settle (a box its own print cuts in
+        two), a view from a camera that hadn't seen it (a camera that looks only now), or a view
+        lying mostly on its box;
+      - any product, seen by ONE camera only: a piece right next to it in this settle that the other
+        camera explains as part of it, or a camera's first view of it (cam0's close-up of a jar's lid,
+        which the gallery may even misname, while cam1 names the jar).
+    The better-explained add (more cameras) goes first, so the lone piece joins it, not the reverse.
+    An unknown billed first is replaced once the other camera names it. Anything at a distinct spot in
+    a camera that sees both is a second unit: two items put in together, apart, are two, and a box set
+    beside one billed earlier is billed even if its hand-in went unseen."""
     if placement is None:
         return decisions
     leaving = {d.instance_id for d in decisions if d.kind == "removed"}
     units: list = [i for i in cart.instances.values() if i.placement == placement and i.instance_id not in leaving]
-    out = []
-    for d in decisions:
-        if d.kind != "added":
-            out.append(d)
-            continue
+    out = [d for d in decisions if d.kind != "added"]
+    for d in sorted((d for d in decisions if d.kind == "added"), key=lambda d: -len(set(d.cameras))):
+        lone = len(set(d.cameras)) == 1
         twin = None
         for u in reversed(units):  # newest first
-            if d.product_id is not None and u.product_id is not None and u.product_id != d.product_id:
-                continue
+            same_product = d.product_id is None or u.product_id is None or u.product_id == d.product_id
             shared = [b for b in d.blobs if b.cam in u.views]
             if isinstance(u, Decision):  # pieces seen in this same settle: next to each other is enough
-                same_spot = any(_near(b.box, u.views[b.cam].box, NEAR * widths.get(b.cam, 1280)) for b in shared)
-            else:  # a unit billed earlier: only a view of it from a camera that hadn't seen it, or one lying
-                same_spot = any(_coverage(b.box, u.views[b.cam].box) >= 0.5 for b in shared)  # mostly on it
-            if not shared or same_spot:
+                near = any(_near(b.box, u.views[b.cam].box, NEAR * widths.get(b.cam, 1280)) for b in shared)
+                explained = bool(set(u.views) - set(d.cameras))  # another camera saw it but not this piece
+                ok = (same_product and (not shared or near)) or (lone and near and explained)
+            else:  # a unit billed earlier: a view of it from a camera that hadn't seen it, or one lying on it
+                late = not shared
+                on_it = any(_coverage(b.box, u.views[b.cam].box) >= 0.5 for b in shared)
+                ok = (same_product and (late or on_it)) or (lone and late)
+            if ok:
                 twin = u
                 break
         if twin is None:
@@ -466,14 +473,22 @@ def _one_per_placement(decisions: list[Decision], cart: CartMemory, placement: s
             out.append(d)
             units.append(d)
             continue
-        log.info("ONE UNIT: %s again in the same placement, at its spot: more of the same unit, not a second one",
-                 d.label)
         views = {c: _join_view(twin.views[c], v) if c in twin.views else v for c, v in d.views.items()}
         if isinstance(twin, Decision):  # an add earlier in this settle: fold this one into it
+            log.info("ONE UNIT: cam%s's %s is part of %s", ",".join(map(str, d.cameras)), d.label, twin.label)
             twin.blobs += d.blobs
             twin.cameras = sorted(set(twin.cameras) | set(d.cameras))
             twin.views.update(views)
+        elif twin.product_id is None and d.product_id is not None:  # the other camera names the unknown
+            log.info("NAMED: the unknown billed from cam%s is %s: replaced", ",".join(map(str, twin.views)),
+                     d.label)
+            merged = {**twin.views, **views}
+            out.append(Decision("removed", None, 1.0, "memory", twin.label, sorted(twin.views), [], {},
+                                twin.instance_id, personal=twin.personal))
+            out.append(Decision("added", d.product_id, d.confidence, d.method, d.label, sorted(merged), d.blobs,
+                                merged, count=d.count, private=d.private, placement=placement))
         else:
+            log.info("ONE UNIT: %s again in the same placement: more of the same unit, not a second one", d.label)
             out.append(Decision("moved", twin.product_id, d.confidence, d.method, twin.label, d.cameras, d.blobs,
                                 views, twin.instance_id))
     return out

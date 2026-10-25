@@ -293,3 +293,43 @@ def test_a_box_set_beside_one_already_billed_is_a_second_unit_even_if_its_hand_w
     ds = decide(settle(Scene(items=[first]), Scene(items=[first, beside]), w.cfg), w.empties, w.cart,
                 w.identifier, w.features, w.cfg, placement="p1")  # same placement: its hand-in was missed
     assert [d.kind for d in ds] == ["added"] and len(ds[0].blobs) >= 1
+
+
+LID = Item("lid", 250, 150, w=90, h=90, seed=7)      # a close-up of just the jar's lid: the gallery misnames it
+LID_UNKNOWN = Item("lid", 250, 150, w=90, h=90, seed=4)  # ...or doesn't recognize it at all
+JAR = Item("red-box", 300, 200, seed=1)              # the whole jar, as the other camera sees it
+
+
+def _cam(w, cam, after_items):
+    from kartcv.changes import detect_changes
+    return detect_changes(cam, Scene().render(cam, 1), Scene(items=after_items).render(cam, 2), w.cfg)
+
+
+def test_a_lid_closeup_in_one_camera_and_the_named_jar_in_the_other_are_one_unit(tmp_path):  # pasta run 3
+    w = world(tmp_path)
+    label = Item("red-box", 380, 150, seed=1)  # cam0 also catches part of the label, just past the lid
+    r0 = _cam(w, 0, [LID, label])
+    assert len(r0.blobs) == 2  # two pieces in cam0; the lid alone looks like another product
+    ds = decide([r0, _cam(w, 1, [JAR])], w.empties, w.cart, w.identifier, w.features, w.cfg, placement="p1")
+    assert [(d.kind, d.product_id) for d in ds] == [("added", "red-box")]
+
+
+def test_two_products_put_in_together_stay_two_even_if_one_camera_misses_one(tmp_path):
+    w = world(tmp_path)
+    red, blue = Item("red-box", 120, 80, seed=1), Item("blue-can", 600, 380, seed=2)
+    ds = decide([_cam(w, 0, [blue]), _cam(w, 1, [red, blue])], w.empties, w.cart, w.identifier, w.features,
+                w.cfg, placement="p1")  # cam0 can't see the red box
+    assert sorted(d.product_id for d in ds if d.kind == "added") == ["blue-can", "red-box"]
+
+
+def test_an_unknown_billed_first_is_replaced_when_the_other_camera_names_it(tmp_path):  # cam1 held back
+    w = world(tmp_path)
+    [d] = decide([_cam(w, 0, [LID_UNKNOWN])], w.empties, w.cart, w.identifier, w.features, w.cfg, placement="p1")
+    assert (d.kind, d.product_id) == ("added", None)  # only the lid: unknown
+    apply_decision(w.cart, d)
+    ds = decide([_cam(w, 1, [JAR])], w.empties, w.cart, w.identifier, w.features, w.cfg, placement="p1")
+    assert [(d.kind, d.product_id) for d in ds] == [("removed", None), ("added", "red-box")]
+    for d in ds:
+        apply_decision(w.cart, d)
+    [inst] = w.cart.instances.values()
+    assert inst.product_id == "red-box" and set(inst.views) == {0, 1}  # one unit, named, seen by both
