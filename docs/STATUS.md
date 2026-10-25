@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-25 07:45 · README CV section; iPad replay
+- README leads with real-store CV footage (cv-drop.gif) and adds a "How the cart sees" section. The iPad screen for take-0245 was reconstructed from the transcript, cart_events and receipt via tools/ipad_replay.py plus the app's -KartReplay mode (8fc2a1f).
+
 ### 2026-10-25 03:35 · video takes done; repo presentable
 - Successful store takes at 02:15 and 02:45; their BTS MP4s are on the bts-clips branch (take-0215 with "what Claude saw" insets; take-0245 full plus clips). repo-presentation merged into main (README, ARCHITECTURE, LICENSE, .env.example, privacy scrub; history still has the old details).
 
