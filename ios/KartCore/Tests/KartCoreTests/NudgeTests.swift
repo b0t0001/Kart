@@ -32,12 +32,20 @@ import Testing
         await add(b, "ground-beef")
         let nudge = try #require(b.cart.nudge)
         #expect(nudge.kind == .over && nudge.have == 2 && nudge.need == 1 && nudge.productId == "ground-beef")
-        #expect(nudge.text == "That's your 2nd Ground Beef. Your list says 1. Keep it?")
+        #expect(nudge.text == "That's 2 Ground Beef in the cart, and your list needs 1. Keep the extra 1?")   // as hosted
         #expect(nudge.savings == Decimal(string: "6.99"))
         await b.simulateVision(.removed, productId: "ground-beef", confidence: 0.9, label: "b")   // put back: counts match
         #expect(b.cart.nudge == nil)
         await add(b, "ground-beef")                                     // once per product per direction per trip
         #expect(b.cart.nudge == nil)
+    }
+
+    @Test func theOverNudgeCarriesTheListsReasonLikeTheBackend() async throws {
+        let b = try await started()
+        try await b.setPlan([PlanItem(productId: "barilla-spaghetti", reason: "pasta", qty: 1, done: false, basis: "1 lb serves 4")])
+        await add(b, "barilla-spaghetti", times: 2)
+        try await b.dismissSuggestion()                                 // the Parmesan card first, as on the iPad
+        #expect(b.cart.nudge?.text == "That's 2 Spaghetti in the cart, and your list needs 1 (1 lb serves 4). Keep the extra 1?")
     }
 
     @Test func impulseBuysAreNeverNudged() async throws {

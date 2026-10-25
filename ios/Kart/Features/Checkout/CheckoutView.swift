@@ -115,6 +115,7 @@ private struct PaySummary: View {
     var nudgeOpen = false
     @AppStorage(LaunchPreferences.tapToPayKey) private var tapToPay = false
     @State private var terminal = false
+    @Environment(\.replayDirector) private var director
 
     var body: some View {
         let cart = model.backend.cart
@@ -136,9 +137,7 @@ private struct PaySummary: View {
                 Text(Money.format(cart.total)).font(Theme.display).monospacedDigit().foregroundStyle(Theme.ink)
             }
             Spacer(minLength: Theme.xl)
-            Button {
-                if tapToPay && unresolved == 0 { terminal = true } else { Task { await model.pay() } }
-            } label: {
+            Button(action: payTapped) {
                 Text(unresolved == 0 ? "Pay \(Money.format(cart.total))"
                                      : "Confirm \(unresolved) \(unresolved == 1 ? "item" : "items") first")
                     .frame(maxWidth: .infinity)
@@ -157,7 +156,13 @@ private struct PaySummary: View {
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
         .fullScreenCover(isPresented: $terminal) {
             TapToPayTerminal(total: cart.total, onPaid: { await model.pay(); terminal = false }, onCancel: { terminal = false })
+                .environment(\.replayDirector, director)
         }
+        .onChange(of: director?.pays ?? 0) { _, _ in payTapped() }              // a replayed tap
+    }
+
+    private func payTapped() {
+        if tapToPay && unresolved == 0 { terminal = true } else { Task { await model.pay() } }
     }
 }
 

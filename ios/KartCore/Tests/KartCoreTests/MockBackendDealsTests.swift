@@ -19,6 +19,18 @@ import Testing
         #expect(s.salePrice == sale && s.aisle == "Aisle 4")
         #expect(b.cart.suggestedDeals == ["d-parm-3off"])
     }
+    @Test func takingSomethingOffTheListStopsItsDealsThisTrip() async throws {
+        // As hosted remove_from_plan: "we've got garlic bread at home" means don't pitch it this trip.
+        let b = try await started()
+        try await b.setPlan([PlanItem(productId: "barilla-spaghetti", reason: "pasta"),
+                             PlanItem(productId: "french-baguette", reason: "pasta")])
+        try await b.removeFromPlan("french-baguette")
+        #expect(b.cart.plan.map(\.productId) == ["barilla-spaghetti"])
+        await b.simulateVision(.added, productId: "barilla-spaghetti", confidence: 0.9, label: "s")
+        #expect(b.cart.suggestion?.productId == "kirkland-parmesan")
+        try await b.setPlan(b.cart.plan + [PlanItem(productId: "kirkland-parmesan", reason: "deal")])   // "Yes"
+        #expect(b.cart.suggestion == nil)                       // not the garlic bread just taken off
+    }
     @Test func plannedProductsAreNeverSuggested() async throws {
         let b = try await started()
         try await b.setPlan([PlanItem(productId: "kirkland-parmesan", reason: "pasta dinner"),

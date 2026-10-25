@@ -21,6 +21,8 @@ public final class MockKartBackend: KartBackend {
     /// Mock-only: member writes fail, like a dropped network (tests and the failure rehearsal).
     @ObservationIgnored public var failMemberWrites = false
     @ObservationIgnored private var nextMemoryId = 100
+    /// Replay of a logged trip: the profile a member's sign-in loads, exactly as the hosted backend returned it.
+    @ObservationIgnored public var presetProfiles: [String: MemberProfile] = [:]
 
     public init(catalog: Catalog, cartId: String = "7", clock: @escaping @MainActor () -> Date = { .now }) {
         self.catalog = catalog
@@ -65,6 +67,15 @@ public final class MockKartBackend: KartBackend {
         }
         offerNextPairing()
         recompute()
+    }
+
+    /// As hosted `remove_from_plan` (the agent's tool, not the iPad's): off the list also means its deals aren't
+    /// pitched this trip, and its card goes if it's showing.
+    public func removeFromPlan(_ productId: String) async throws {
+        cart.suggestedDeals += catalog.deals.filter { $0.productId == productId && !cart.suggestedDeals.contains($0.id) }
+            .map(\.id)
+        if cart.suggestion?.productId == productId { cart.suggestion = nil }
+        try await setPlan(cart.plan.filter { $0.productId != productId })
     }
 
     public func dismissSuggestion() async throws {
@@ -154,6 +165,7 @@ public final class MockKartBackend: KartBackend {
     }
 
     public func refreshMemberProfile() async {
+        if let id = cart.memberId, let preset = presetProfiles[id] { memberProfile = preset; return }
         guard let id = cart.memberId, let store = members[id] else { memberProfile = nil; return }
         let taken = Set(cart.plan.map(\.productId) + cart.items.map(\.productId))
         memberProfile = store.profile(memberId: id, today: memberToday, taken: taken, catalog: catalog,
@@ -327,7 +339,8 @@ public final class MockKartBackend: KartBackend {
         guard have > line.qty, mayNudge("over:\(product.id)") else { return }
         cart.nudged.append("over:\(product.id)")                 // raised once per trip, answered or not
         cart.nudge = Nudge(productId: product.id, name: product.shortName, kind: .over, have: have, need: line.qty,
-                           basis: line.basis, text: "That's your \(Self.ordinal(have)) \(product.shortName). Your list says \(line.qty). Keep it?",
+                           basis: line.basis, text: "That's \(have) \(product.shortName) in the cart, and your list needs \(line.qty)"
+                               + (line.basis.map { " (\($0))" } ?? "") + ". Keep the extra \(have - line.qty)?",   // as hosted
                            savings: effectivePrice(of: product).price * Decimal(have - line.qty),
                            aisle: catalog.section(product.section)?.aisleLabel, at: now)
     }
@@ -353,11 +366,6 @@ public final class MockKartBackend: KartBackend {
     private func clearMatchedNudge() {
         guard let nudge = cart.nudge, let line = cart.plan.first(where: { $0.productId == nudge.productId }) else { return }
         if inCart(nudge.productId) == line.qty { cart.nudge = nil }
-    }
-
-    private static func ordinal(_ n: Int) -> String {
-        let suffix = (11...13).contains(n % 100) ? "th" : [1: "st", 2: "nd", 3: "rd"][n % 10] ?? "th"
-        return "\(n)\(suffix)"
     }
 
     /// Effective price after the product's active deal, rounded to cents.

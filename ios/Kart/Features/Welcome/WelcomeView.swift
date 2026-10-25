@@ -6,6 +6,7 @@ struct WelcomeView: View {
     let model: AppModel
     let namespace: Namespace.ID
     @State private var signingIn = false
+    @Environment(\.replayDirector) private var director
 
     var body: some View {
         VStack(spacing: Theme.xxl) {
@@ -37,7 +38,8 @@ struct WelcomeView: View {
             }
         }
         .overlay(alignment: .top) { DemoDateChip(model: model).padding(.top, Theme.xl) }
-        .sheet(isPresented: $signingIn) { MemberSignInView(model: model) }
+        .sheet(isPresented: $signingIn) { MemberSignInView(model: model).environment(\.replayDirector, director) }
+        .onChange(of: director?.signInOpen ?? false) { _, open in if open { signingIn = true } }   // a replayed tap
     }
 }
 

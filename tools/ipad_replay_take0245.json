@@ -1,0 +1,33 @@
+{
+ "label": "take-0245, iPad screen reconstructed from the logs (not the original screen)",
+ "cart_id": "7",
+ "trip_id": "b218eacb-2c00-4628-b840-7ffe5d4ccd79",
+ "start_utc": "2026-10-25T09:44:30Z",
+ "start_local": "02:44:30 PDT",
+ "status_time": "2026-10-25T09:47:00.000Z",
+ "end_utc": "2026-10-25T09:47:40Z",
+ "events_until_utc": "2026-10-25T09:47:40Z",
+ "member_id": "1029",
+ "features": {"member_memory": true, "quantity_nudges": true},
+ "min_stock": 5,
+ "moments": [
+  {"at_utc": "2026-10-25T09:44:27.6Z", "action": "sign_in", "source": "estimated: Member? Sign in, before the first frame"},
+  {"at_utc": "2026-10-25T09:44:28.4Z", "action": "digit", "value": "1", "source": "estimated: member number 1029 (receipt 51's member)"},
+  {"at_utc": "2026-10-25T09:44:28.9Z", "action": "digit", "value": "0", "source": "estimated"},
+  {"at_utc": "2026-10-25T09:44:29.4Z", "action": "digit", "value": "2", "source": "estimated"},
+  {"at_utc": "2026-10-25T09:44:29.9Z", "action": "digit", "value": "9", "source": "estimated"},
+  {"at_utc": "2026-10-25T09:44:31.0Z", "action": "confirm_member", "source": "That's me = trip start: receipt 51 paid 09:47:26.54 after 175 s, so 09:44:30.5-31.5"},
+  {"at_utc": "2026-10-25T09:44:54.6Z", "action": "plan", "items": [
+    {"product_id": "barilla-spaghetti", "reason": "pasta night for 4", "qty": 1, "basis": "1 lb serves 4"},
+    {"product_id": "rao-marinara", "reason": "pasta night for 4", "qty": 1, "basis": "one jar for 1 lb of pasta"},
+    {"product_id": "french-baguette", "reason": "pasta night for 4", "qty": 1, "basis": "one loaf for 4"}],
+   "source": "set_plan after Kart's \"One sec.\", ~0.8 s before its list caption (09:44:55.39); items and bases from Kart's caption and the pasta-night list in its prompt"},
+  {"at_utc": "2026-10-25T09:44:58.1Z", "action": "prompt", "count": 1, "source": "the deals question card, sent with Kart's question (caption 09:44:58.24)"},
+  {"at_utc": "2026-10-25T09:45:14.31Z", "action": "unprompt", "source": "the agent clears the question as Dylan answers (\"No, not now. Also...\", 09:45:14.31)"},
+  {"at_utc": "2026-10-25T09:45:16.2Z", "action": "unplan", "product_id": "french-baguette", "source": "remove_from_plan just before Kart's read-back (09:45:16.61)"},
+  {"at_utc": "2026-10-25T09:45:34.5Z", "action": "accept_deal", "source": "ESTIMATED (not logged; deal_offers 206 accepted_at is the billed add at 09:46:54.90): Yes on the Parmesan card, after box 2 (09:45:33.30) and before Kart's nudge line (09:45:35.63), since a nudge waits behind an open deal card"},
+  {"at_utc": "2026-10-25T09:47:07.3Z", "action": "checkout", "source": "start_checkout between \"pulling up your bill\" and \"Your bill's on screen\" (caption 09:47:08.04)"},
+  {"at_utc": "2026-10-25T09:47:14.0Z", "action": "pay", "source": "ESTIMATED: Pay tapped after Kart read the bill, before \"Thanks.\" (09:47:20.27)"},
+  {"at_utc": "2026-10-25T09:47:23.54Z", "action": "tap_reader", "source": "receipt 51 at 09:47:26.54, less the terminal's 1.8 s and the simulated payment's 1.2 s"}
+ ]
+}

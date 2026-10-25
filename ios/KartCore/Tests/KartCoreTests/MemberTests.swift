@@ -448,3 +448,14 @@ struct MemberContractTests {
                 == ("I can't check member numbers right now. Try again, or shop as a guest.", "Try again", "Shop as guest"))
     }
 }
+
+/// A replay of a logged trip signs in with the profile the hosted backend returned, not the mock's own Dylan.
+@MainActor @Test func aPresetProfileIsWhatSignInLoads() async throws {
+    let b = MockKartBackend(catalog: try Fixtures.catalog())
+    try await b.setFeature("member_memory", on: true)
+    try await b.startTrip()
+    let preset = try KartJSON.decoder().decode(MemberProfile.self, from: Data(Fixtures.memberProfileJSON.utf8))
+    b.presetProfiles["1029"] = preset
+    try await b.signIn(memberId: "1029")
+    #expect(b.memberProfile == preset)
+}

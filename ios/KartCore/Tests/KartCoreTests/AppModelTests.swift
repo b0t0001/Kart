@@ -253,7 +253,7 @@ import Testing
     for _ in 0..<2 { await t.backend.simulateVision(.added, productId: "ground-beef", confidence: 0.9, label: "b"); t.model.ingest(cart: t.backend.cart) }
     t.model.ingest(cart: t.backend.cart)
     let card = try #require(t.model.visibleCard)
-    #expect(card.title == "That's your 2nd Ground Beef. Your list says 1. Keep it?" && card.actions == [.keepIt, .gotIt])
+    #expect(card.title == "That's 2 Ground Beef in the cart, and your list needs 1. Keep the extra 1?" && card.actions == [.keepIt, .gotIt])
     #expect(t.voice.sent.filter { if case .nudge = $0 { true } else { false } }.count == 1)
     await t.model.respond(to: card, with: .keepIt)
     #expect(t.backend.cart.plan.first?.qty == 2 && t.backend.cart.nudge == nil)

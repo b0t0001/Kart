@@ -18,6 +18,7 @@ struct KartApp: App {
                 }
             }
             .environment(\.kartStill, UserDefaults.standard.bool(forKey: "KartStill"))
+            .environment(\.replayDirector, world.replay?.director)
             .statusBarHidden()
             .persistentSystemOverlays(.hidden)
             .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
@@ -70,20 +71,24 @@ final class KartWorld {
     let mockVoice: MockVoiceSession?
     let payment = SimulatedPaymentProvider()
     let model: AppModel
+    /// `-KartReplay`: a logged trip played back for a screen recording (the mock backend and a silent voice).
+    let replay: ReplayDriver?
     @ObservationIgnored private var started = false
     @ObservationIgnored private let network = NetworkWatch()
 
     init() {
+        let replay = ReplayFile.fromLaunch().map { ReplayDriver(file: $0.file, folder: $0.folder) }
+        self.replay = replay
         let url = Bundle.main.url(forResource: "store", withExtension: "json")!
-        let catalog = (try? Catalog.load(from: url)) ?? Catalog(layout: StoreLayout(store: StoreInfo(name: "Kart", width: 20, height: 12),
+        let catalog = replay?.catalog ?? (try? Catalog.load(from: url)) ?? Catalog(layout: StoreLayout(store: StoreInfo(name: "Kart", width: 20, height: 12),
                                                                                    entrance: GridPoint(x: 0, y: 6), sections: []),
                                                                 products: [], deals: [])
         let defaults = UserDefaults.standard
         let config = SupabaseConfig.fromInfoPlist().map { config in   // `-KartCartID` overrides (live rehearsal uses its own cart)
             SupabaseConfig(url: config.url, anonKey: config.anonKey, cartId: defaults.string(forKey: "KartCartID") ?? config.cartId)
         }
-        let kind = BackendKind(rawValue: LaunchPreferences.backend(defaults: defaults, scenario: scenario,
-                                                                  hasConfig: config != nil).rawValue) ?? .mock
+        let kind = replay != nil ? .mock : BackendKind(rawValue: LaunchPreferences.backend(defaults: defaults, scenario: scenario,
+                                                                                          hasConfig: config != nil).rawValue) ?? .mock
         let clock = clock
 
         if kind == .supabase, let config {
@@ -102,7 +107,11 @@ final class KartWorld {
             backendKind = .mock
         }
 
-        if LaunchPreferences.voice(defaults: defaults, scenario: scenario, hasConfig: config != nil) == .line, let config {
+        if let replay {
+            voice = replay.voice
+            mockVoice = nil
+            voiceKind = .mock
+        } else if LaunchPreferences.voice(defaults: defaults, scenario: scenario, hasConfig: config != nil) == .line, let config {
             voice = LineVoiceSession(tokens: SupabaseVoiceTokenProvider(url: config.url, anonKey: config.anonKey),
                                      transport: WebSocketTransport(), audio: EngineAudio())
             mockVoice = nil
@@ -138,5 +147,6 @@ final class KartWorld {
             if let mockVoice { mockVoice.resume() } else { await model.retryVoice() }
         }
         model.bind()
+        if let replay, let mock { Task { await replay.run(model: model, backend: mock) } }
     }
 }

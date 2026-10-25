@@ -8,6 +8,7 @@ struct MemberSignInView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var digits = ""
     @State private var step: MemberSignInStep?
+    @Environment(\.replayDirector) private var director
 
     var body: some View {
         VStack(spacing: Theme.xl) {
@@ -29,6 +30,10 @@ struct MemberSignInView: View {
         }
         .padding(Theme.xxl)
         .presentationDetents([.large])
+        .onChange(of: director?.digits ?? "") { old, new in                    // replayed key presses
+            if new.count > old.count, let digit = new.last.flatMap({ Int(String($0)) }) { press(digit) }
+        }
+        .onChange(of: director?.confirms ?? 0) { _, _ in if step != nil { start() } }
     }
 
     private func press(_ digit: Int) {

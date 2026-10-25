@@ -11,6 +11,7 @@ struct TapToPayTerminal: View {
     private enum Phase { case ready, reading, approved }
     @State private var phase: Phase = .ready
     @State private var wave = false
+    @Environment(\.replayDirector) private var director
 
     var body: some View {
         ZStack {
@@ -38,6 +39,7 @@ struct TapToPayTerminal: View {
             .padding(Theme.xxl)
         }
         .onAppear { wave = true }
+        .onChange(of: director?.readerTaps ?? 0) { _, _ in if phase == .ready { read() } }   // a replayed tap
     }
 
     private var title: String {
