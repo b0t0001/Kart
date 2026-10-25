@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-25 00:40 · end-to-end passed, BTS recording
+- Dylan's 00:14 live end-to-end (real voice, tap-to-pay) billed right at checkout ($7.37); 1 phantom from a nudged jar, removed on the iPad. Agent fix deployed: natural declines clear the deals question (75ac548). BTS: James's laptop grabs /cam/0 overlay frames at 5 Hz; clips go to the bts-clips branch; CV added tools/bts_record.py.
+
 ### 2026-10-24 23:35 · Pi on the power bank, cam1 outline refit
 - The Pi moved to the 20,000 mAh bank (a 20 min outage: a USB-PD bank with a C-to-C cable never switched on; fixed, throttled 0x0). cam1's floor outline refit inside the paper after the cart move; cam0 unplugged; code still frozen on f329278. Hardware README covers battery, Wi-Fi backup and Tailscale.
 
