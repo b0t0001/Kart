@@ -282,3 +282,14 @@ def test_a_late_view_of_the_unit_just_billed_is_that_unit_not_a_second(tmp_path)
         apply_decision(w.cart, d)
         ds = decide([rs[0]], w.empties, w.cart, w.identifier, w.features, w.cfg, placement=placement)  # cam0, later
         assert [d.kind for d in ds] == kinds, placement
+
+
+def test_a_box_set_beside_one_already_billed_is_a_second_unit_even_if_its_hand_went_unseen(tmp_path):  # counting
+    w = world(tmp_path)
+    first, beside = Item("red-box", 300, 200, seed=1), Item("red-box", 440, 200, seed=1)  # a small gap between
+    for d in decide(settle(Scene(), Scene(items=[first]), w.cfg), w.empties, w.cart, w.identifier, w.features,
+                    w.cfg, placement="p1"):
+        apply_decision(w.cart, d)
+    ds = decide(settle(Scene(items=[first]), Scene(items=[first, beside]), w.cfg), w.empties, w.cart,
+                w.identifier, w.features, w.cfg, placement="p1")  # same placement: its hand-in was missed
+    assert [d.kind for d in ds] == ["added"] and len(ds[0].blobs) >= 1

@@ -436,8 +436,10 @@ def _one_per_placement(decisions: list[Decision], cart: CartMemory, placement: s
                        widths: dict[int, int]) -> list[Decision]:
     """One placement (one hand in and out) brings one unit of a product. Another "added" of the same
     product (or an unknown) in the same placement is a piece or a late view of that unit, not a second
-    one: a box its own print cuts in two, a camera that looks only now. Unless it lies at a distinct
-    spot in a camera that sees both: two items put in together, apart, are two."""
+    one: a box its own print cuts in two (pieces of one settle, next to each other), a camera that looks
+    only now (no view of the unit yet), or a view lying mostly on the unit's own box. Anything at a
+    distinct spot in a camera that sees both is a second unit: two items put in together, apart, are
+    two, and a box set beside one billed earlier is billed even if its hand-in went unseen."""
     if placement is None:
         return decisions
     leaving = {d.instance_id for d in decisions if d.kind == "removed"}
@@ -452,7 +454,11 @@ def _one_per_placement(decisions: list[Decision], cart: CartMemory, placement: s
             if d.product_id is not None and u.product_id is not None and u.product_id != d.product_id:
                 continue
             shared = [b for b in d.blobs if b.cam in u.views]
-            if not shared or any(_near(b.box, u.views[b.cam].box, NEAR * widths.get(b.cam, 1280)) for b in shared):
+            if isinstance(u, Decision):  # pieces seen in this same settle: next to each other is enough
+                same_spot = any(_near(b.box, u.views[b.cam].box, NEAR * widths.get(b.cam, 1280)) for b in shared)
+            else:  # a unit billed earlier: only a view of it from a camera that hadn't seen it, or one lying
+                same_spot = any(_coverage(b.box, u.views[b.cam].box) >= 0.5 for b in shared)  # mostly on it
+            if not shared or same_spot:
                 twin = u
                 break
         if twin is None:
