@@ -185,6 +185,28 @@ def test_each_identical_box_a_hand_puts_in_is_billed(tmp_path):  # counting: thr
     assert run(p, sc) == [("added", "red-box")] * 3
 
 
+GHOST = Item("ghost", 560, 330, w=90, h=90, seed=4)  # something no enrolled product looks like, cam0 only
+
+
+def _remove_red_while_cam0_glimpses(stays: bool):
+    sc = Script(Scene()).still(1.0).drop(RED).still(1.0)
+    sc.take("red-box").set(items=[GHOST], hidden={1: {"ghost"}}).still(1.5)  # as the box comes out
+    if not stays:
+        sc.set(items=[], hidden={})  # ...gone again before the recheck: a shadow, a sleeve, a crease
+    return sc.still(5.0)
+
+
+def test_a_lone_unknown_glimpsed_during_a_removal_is_held_and_dropped_if_it_goes(tmp_path):  # pasta run 1
+    p, _ = make(tmp_path)
+    assert run(p, _remove_red_while_cam0_glimpses(stays=False)) == [("added", "red-box"), ("removed", "red-box")]
+
+
+def test_a_lone_unknown_that_stays_is_billed_after_the_recheck(tmp_path):
+    p, _ = make(tmp_path)
+    assert run(p, _remove_red_while_cam0_glimpses(stays=True)) == \
+        [("added", "red-box"), ("removed", "red-box"), ("added", None)]
+
+
 def test_reset_restart_and_missing_camera(tmp_path):
     p, _ = make(tmp_path)
     sc = Script(Scene()).still(1.0).drop(RED)

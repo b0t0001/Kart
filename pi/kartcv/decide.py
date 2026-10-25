@@ -36,7 +36,7 @@ FAINT_BARE = 0.85        # ...whose changed part is now this much bare floor: th
 
 @dataclass
 class Decision:
-    kind: str  # "added" | "removed" | "moved"
+    kind: str  # "added" | "removed" | "moved" | "held" (a lone unknown waiting for the recheck)
     product_id: str | None
     confidence: float
     method: str  # "local" | "cloud" | "memory" | "none"
@@ -495,7 +495,7 @@ def _one_per_placement(decisions: list[Decision], cart: CartMemory, placement: s
 
 
 def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: CartMemory,
-           identifier, features, cfg, placement: str | None = None) -> list[Decision]:
+           identifier, features, cfg, placement: str | None = None, placement_used: bool = False) -> list[Decision]:
     added: dict[int, list[Blob]] = {}
     removed: dict[int, list[Blob]] = {}
     settled: list[Decision] = []
@@ -551,9 +551,27 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
     decided = {d.instance_id for d in late + settled + decisions if d.instance_id}
     faint = _faint_removals(results, empties, cart, cfg, matched_by_cam, decided)
     out = late + settled + _cancel_nudges(decisions, cart, cfg) + faint
+    # A lone unknown (one camera, no name) in a settle whose hand-in was for something else (an item taken
+    # out, another put in, a late view) is the kind of glimpse that goes away: hold it for the recheck.
+    if placement is not None:
+        busy = len(out) > 1 or placement_used or any(i.placement == placement for i in cart.instances.values())
+        for d in out:
+            if d.kind == "added" and d.product_id is None and len(set(d.cameras)) == 1 and busy:
+                log.info("HELD: cam%d's %s came with another item's hand-in: waiting %.0f s before billing it",
+                         d.cameras[0], d.label, cfg.intrusion_recheck_s)
+                d.kind = "held"
     # Out before in: a box taken out and another put in within one settle must never show as two at once
     # (with quantity nudges, that would be "two boxes… keep the extra?").
     return sorted(out, key=lambda d: {"removed": 0, "moved": 1}.get(d.kind, 2))
+
+
+def still_there(blob: Blob, result: ChangeResult, empty: np.ndarray, cart: CartMemory, cfg) -> bool:
+    """Is something (not bare floor) still lying where this blob was, in result's frame?"""
+    cur, _, m = gain_matched(result, empty, cfg.roi.get(str(blob.cam)), cart)
+    core = blob.core_box
+    if _covered(_crop(cur, core), _crop(empty, core), _crop(m, core) if m is not None else None, cfg) < cfg.empty_share:
+        return False
+    return not _bare_liner(cur, core, m, liner_model(empty, m))
 
 
 def apply_decision(cart: CartMemory, d: Decision) -> Instance | None:

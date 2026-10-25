@@ -23,7 +23,7 @@ import numpy as np
 
 from kartcv.cart import CartMemory
 from kartcv.changes import detect_changes
-from kartcv.decide import Decision, apply_decision, decide
+from kartcv.decide import Decision, apply_decision, decide, still_there
 from kartcv.events import Event
 from kartcv.motion import HAND, MotionDetector, SettleTracker, floor_difference
 from kartcv.roi import draw_outline
@@ -68,6 +68,8 @@ class Pipeline:
         self._run_id = uuid.uuid4().hex[:6]
         self._placements = 0
         self._peak: dict[int, float] = {}
+        self._held: list[tuple[Decision, float]] = []  # lone unknowns waiting for the recheck (judging thread)
+        self._used: set[str] = set()  # placements that already took something out or put something in
         self._worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="judge") if background else None
         self._jobs: list[Future] = []
 
@@ -135,6 +137,7 @@ class Pipeline:
             self.motion[c].reset()
         self.settle.reset()
         self.cart.clear()
+        self._held = []
         self.camera_moved.clear()
         self._resync.difference_update(frames)
         self._reset_requested.clear()
@@ -193,7 +196,12 @@ class Pipeline:
         if settled:
             log.info("SETTLED")
             return self._process(frames, ts, accept_edges=False)
-        if self._recheck_at is not None and self.settle.state == "idle" and ts >= self._recheck_at - 1e-6:
+        due = self._recheck_at
+        held = list(self._held)
+        if held:  # a held glimpse is judged once things have been still for the recheck time
+            hd = min(t for _, t in held) + self.cfg.intrusion_recheck_s
+            due = hd if due is None else min(due, hd)
+        if due is not None and self.settle.state == "idle" and ts >= due - 1e-6:
             self._recheck_at = None
             log.info("RECHECK: the edge-touching change stayed still %.0f s more: judging it as an item",
                      self.cfg.intrusion_recheck_s)
@@ -252,7 +260,7 @@ class Pipeline:
             results.append(r)
         if edge_cams:
             self._recheck_at = ts + self.cfg.intrusion_recheck_s
-        if not self.cart.instances and not self._busy():
+        if not self.cart.instances and not self._busy() and not self._held:
             # Nothing in the cart and nothing new: this is a fresh empty-basket picture (tracks light drift).
             for r in results:
                 if r.cam in edge_cams:
@@ -263,18 +271,43 @@ class Pipeline:
 
         empties = dict(self.empties)  # a snapshot: the worker must not see later resets mid-judgment
         if self._worker is None:
-            return self._judge(results, empties, self.placement)
-        job = self._worker.submit(self._judge, results, empties, self.placement)
+            return self._judge(results, empties, self.placement, ts)
+        job = self._worker.submit(self._judge, results, empties, self.placement, ts)
         job.add_done_callback(lambda j: j.exception() and log.error("judging failed", exc_info=j.exception()))
         self._jobs.append(job)
         return []
 
-    def _judge(self, results: list, empties: dict, placement: str | None = None) -> list[Event]:
+    def _release_held(self, results: list, empties: dict, ts: float) -> list[Decision]:
+        """Held glimpses whose wait is over: still lying there → billed now; bare again → dropped."""
+        keep, out = [], []
+        for d, t in self._held:
+            b = d.blobs[0]
+            r = next((r for r in results if r.cam == b.cam and r.frame is not None), None)
+            if ts < t + self.cfg.intrusion_recheck_s - 1e-6 or r is None or b.cam not in empties:
+                keep.append((d, t))
+                continue
+            if still_there(b, r, empties[b.cam], self.cart, self.cfg):
+                log.info("STAYED: cam%d's %s is still there after the recheck: billing it", b.cam, d.label)
+                d.kind = "added"
+                out.append(d)
+            else:
+                log.info("DROPPED: cam%d's %s was gone by the recheck: never billed", b.cam, d.label)
+        self._held = keep
+        return out
+
+    def _judge(self, results: list, empties: dict, placement: str | None = None, ts: float = 0.0) -> list[Event]:
         """Decide, update memory and emit for one settle (inline, or on the worker thread)."""
-        decisions = decide(results, empties, self.cart, self.identifier, self.features, self.cfg, placement)
+        released = self._release_held(results, empties, ts)
+        decisions = released + decide(results, empties, self.cart, self.identifier, self.features, self.cfg,
+                                      placement, placement in self._used)
+        if placement is not None and any(d.kind != "held" for d in decisions):
+            self._used.add(placement)
         self.last_decisions = decisions
         events = []
         for d in decisions:
+            if d.kind == "held":
+                self._held.append((d, ts))
+                continue
             if d.kind == "moved":
                 apply_decision(self.cart, d)
                 continue
