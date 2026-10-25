@@ -36,6 +36,10 @@
   {
    "type": "added",
    "product_id": "barilla-spaghetti"
+  },
+  {
+   "type": "removed",
+   "product_id": "barilla-spaghetti"
   }
  ],
  "live": [
@@ -57,7 +61,7 @@
   "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
   "(5th REMOVED barilla-spaghetti (memory 0.99) came after the recording ended)"
  ],
- "notes": "repro attempt for the per-camera double count seen on drop 1 of the 3-drop test: this run had NO double count. Live: adds local 0.70 / cloud 0.92 / cloud 0.97 / local 0.76 / local 0.71 (after INTRUSION -> RECHECK), removes memory 1.00 / 0.98 / 0.99 / 0.98 (+0.99 after the clip). Same final layout, black paper liner, ROI redrawn for cam0 just before.",
+ "notes": "repro attempt for the per-camera double count seen on drop 1 of the 3-drop test: this run had NO double count. Live: adds local 0.70 / cloud 0.92 / cloud 0.97 / local 0.76 / local 0.71 (after INTRUSION -> RECHECK), removes memory 1.00 / 0.98 / 0.99 / 0.98 (+0.99 after the clip). Same final layout, black paper liner, ROI redrawn for cam0 just before. CV, 2026-10-25: the last frames already show the box out (both cameras), so the 5th removal is in the clip; the replay holds the last frame still and judges it, as live did right after the recording ended. Expected = 5 adds + 5 removes.",
  "roi": {
   "0": [
    [

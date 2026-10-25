@@ -119,6 +119,20 @@ def _bare_liner(img: np.ndarray, box: tuple[int, int, int, int], m: np.ndarray |
     return liner_share(img[y:y + h, x:x + w], m[y:y + h, x:x + w] if m is not None else None, model) >= LINER_MAX
 
 
+def _foreground(img: np.ndarray, empty: np.ndarray, box: tuple[int, int, int, int], m: np.ndarray | None,
+                cfg) -> np.ndarray:
+    """The part of a box that isn't bare floor: cropped to the pixels that differ from the empty picture,
+    so a sliver of a remembered item revealed in a mostly-empty spot is fingerprinted as that item."""
+    x, y, w, h = box
+    d = lab_distance(img[y:y + h, x:x + w], empty[y:y + h, x:x + w]) > cfg.change_thresh
+    if m is not None:
+        d &= m[y:y + h, x:x + w].astype(bool)
+    ys, xs = np.nonzero(d)
+    if len(ys) < 0.05 * max(1, d.size):
+        return img[y:y + h, x:x + w]
+    return img[y + ys.min():y + ys.max() + 1, x + xs.min():x + xs.max() + 1]
+
+
 def _covered(crop: np.ndarray, empty_crop: np.ndarray, m: np.ndarray | None, cfg) -> float:
     """Share of the floor in this crop that something lies on (differs from the empty basket)."""
     return _mean((lab_distance(crop, empty_crop) > cfg.change_thresh).astype(np.float32), m)
@@ -144,12 +158,16 @@ def classify_blob(blob: Blob, result: ChangeResult, empty: np.ndarray, cart: Car
     after = _crop(cur, blob.box)
     before = _crop(ref, blob.box)
     mc = _crop(m, blob.box) if m is not None else None  # judge the floor only, not the room behind it
-    # Empty = like the empty picture there, or bare liner: its creases shift, and something lying there
-    # when the empty picture was taken leaves bare liner behind when it's lifted. Neither is an item.
-    after_empty = (_mean(lab_distance(after, empty_crop), mc) < cfg.empty_thresh
-                   or _bare_liner(cur, blob.core_box, m, liner))
-    before_empty = (_mean(lab_distance(before, empty_crop), mc) < cfg.empty_thresh
-                    or _bare_liner(ref, blob.core_box, m, liner))
+    # Empty = hardly any of the changed box itself differs from the empty picture (a share, not a mean
+    # distance: a dark box lying diagonally on a dark liner fills a third of its box, and a mean over it
+    # nearly passed for empty), or bare liner: its creases shift, and something lying there when the
+    # empty picture was taken leaves bare liner behind when it's lifted.
+    core = blob.core_box
+    e_core, m_core = _crop(empty, core), (_crop(m, core) if m is not None else None)
+    after_empty = (_covered(_crop(cur, core), e_core, m_core, cfg) < cfg.empty_share
+                   or _bare_liner(cur, core, m, liner))
+    before_empty = (_covered(_crop(ref, core), e_core, m_core, cfg) < cfg.empty_share
+                    or _bare_liner(ref, core, m, liner))
     if after_empty and before_empty:
         return None
     if after_empty:
@@ -163,7 +181,8 @@ def classify_blob(blob: Blob, result: ChangeResult, empty: np.ndarray, cart: Car
     # If what's visible now looks like an item we remembered under this spot, and clearly MORE like it
     # than what was there before, the top one left. Relative, so features that find everything
     # similar (pooled CNN embeddings on look-alike packs) can't fake a reveal.
-    fp_after, fp_before = features(blob.after_core), features(blob.before_core)
+    fp_after = features(_foreground(cur, empty, core, m, cfg))
+    fp_before = features(_foreground(ref, empty, core, m, cfg))
     for _, view in cart.views_in(blob.cam):
         if _iou(view.box, blob.box) <= IOU_OVERLAP:
             continue
@@ -510,7 +529,10 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
     decisions = _one_per_placement(decisions, cart, placement, widths)
     decided = {d.instance_id for d in late + settled + decisions if d.instance_id}
     faint = _faint_removals(results, empties, cart, cfg, matched_by_cam, decided)
-    return late + settled + _cancel_nudges(decisions, cart, cfg) + faint
+    out = late + settled + _cancel_nudges(decisions, cart, cfg) + faint
+    # Out before in: a box taken out and another put in within one settle must never show as two at once
+    # (with quantity nudges, that would be "two boxes… keep the extra?").
+    return sorted(out, key=lambda d: {"removed": 0, "moved": 1}.get(d.kind, 2))
 
 
 def apply_decision(cart: CartMemory, d: Decision) -> Instance | None:

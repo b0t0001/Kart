@@ -5,7 +5,7 @@ def test_defaults_match_spec():
     c = Config()
     assert (c.motion_size, c.motion_thresh, c.motion_frac, c.settle_s) == ((320, 180), 25, 0.005, 1.0)
     assert (c.diff_size, c.change_thresh, c.min_blob_frac, c.disturbed_frac) == ((640, 360), 30.0, 0.004, 0.60)
-    assert (c.empty_thresh, c.crop_pad, c.local_min_score, c.local_min_margin) == (18.0, 0.10, 0.70, 0.08)
+    assert (c.empty_share, c.crop_pad, c.local_min_score, c.local_min_margin) == (0.20, 0.10, 0.70, 0.08)
     assert (c.cloud_model, c.cloud_min_conf, c.cloud_timeout_s, c.server_port) == ("claude-haiku-5-5", 0.6, 6.0, 8080)
     assert not c.edge_privacy and not c.personal_items and not c.claude_count  # stable path: all betas off
     assert c.features == "hist"  # review C3: the validated path; switch to "auto" after tools/gallery_check.py

@@ -122,7 +122,7 @@ Each camera keeps an **empty-basket picture**, taken on reset. For each blob:
 2. **Before ≈ empty basket** → **added**. New stuff on the mat.
 3. **Neither** (something on top of something): if the *after* crop matches an item cart memory already has in that camera at an overlapping box, and clearly better than the *before* crop did, the top item was **removed** (it revealed what was under). Otherwise a new item was **added** on top.
 
-"≈ empty" means the brightness-normalized mean color distance inside the blob is below `empty_thresh` (start at **18**; tuned on the real mat).
+"≈ empty" means the brightness-normalized mean color distance inside the blob is below `empty_thresh` (start at **18**; tuned on the real mat). *Revised 2026-10-25 on the final cart:* under `empty_share` (0.20) of the changed box differs from the empty picture, or it is bare liner (a mean distance let a dark box on the black liner pass for empty).
 
 ### 5.4 Combining both cameras
 Each blob is identified (section 6). Then, per settle:
