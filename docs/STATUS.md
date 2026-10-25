@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 21:35 · demo freeze, end-to-end under way
+- Demo decision: cam1 only (config.cam1.json), Pi frozen on f329278, kart-cv.service autostarts on cart 7 (reboot-proven). Cartesia Pro bought; real voice confirmed from the iPad (relaunched with -KartBackend supabase -KartVoice line). Cart 7 reset with judging stock and member memory on. Tap-to-pay built (0db108f), held for the venue install.
+
 ### 2026-10-24 night · CV fixes hold at demo pace
 - With the fixes running, the pasta runs ended with the right bill 3/3 (was 1/3, pre-fix). Run 4 at 3–4 s gaps re-billed items (a pending cam0 check crossing the next placement); that's CV's top fix, with a pasta-fast clip coming. CV pushed: a close-up piece joins the other camera's item; one quick Claude retry.
 
