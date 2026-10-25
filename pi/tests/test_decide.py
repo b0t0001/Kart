@@ -398,3 +398,50 @@ def test_an_item_put_against_a_billed_one_is_named_for_itself(tmp_path):  # demo
         assert all(len(r.blobs) == 1 for r in rs)  # one change covers the box and the jar
         ds = decide(rs, w.empties, w.cart, w.identifier, w.features, w.cfg, placement="p2")
         assert [(d.kind, d.product_id) for d in ds if d.kind == "added"] == [("added", "blue-can")], (nudge, jx)
+
+
+def _relight(img, boxes):
+    """Rolled from a dim aisle into a bright cooler: everything brighter, the glossy packs shifting cooler."""
+    import numpy as np
+    out = img.astype(np.float32) * 1.3
+    for x, y, w_, h_ in boxes:
+        out[y:y + h_, x:x + w_, 0] *= 1.9  # blue up
+        out[y:y + h_, x:x + w_, 2] *= 0.8  # red down
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def _rolled(w, before_scene, after_scene, items):
+    from kartcv.changes import detect_changes
+    from kartcv.synth import item_box
+    return [detect_changes(c, before_scene.render(c, 1),
+                           _relight(after_scene.render(c, 2), [item_box(c, it, pad=0.0) for it in items]), w.cfg,
+                           roi=w.cfg.roi[str(c)]) for c in (0, 1)]
+
+
+def _floor_world(tmp_path):
+    from kartcv.synth import mat_roi
+    w = world(tmp_path)
+    w.cfg.roi = {"0": mat_roi(0), "1": mat_roi(1)}
+    return w
+
+
+def test_items_under_new_light_are_not_billed_again(tmp_path):  # store shoot 01:56: rolled into a bright cooler
+    w = _floor_world(tmp_path)
+    scene = Scene(items=[RED, BLUE])
+    for d in decide(settle(Scene(), scene, w.cfg), w.empties, w.cart, w.identifier, w.features, w.cfg, placement="p1"):
+        apply_decision(w.cart, d)
+    ds = decide(_rolled(w, scene, scene, [RED, BLUE]), w.empties, w.cart, w.identifier, w.features, w.cfg,
+                placement="p2")
+    assert [d.kind for d in ds if d.kind in ("added", "removed")] == []
+    assert w.cart.count("red-box") == 1 and w.cart.count("blue-can") == 1
+
+
+def test_a_new_item_under_new_light_is_still_billed_once(tmp_path):  # ...and the marinara dropped right after
+    w = _floor_world(tmp_path)
+    scene = Scene(items=[RED, BLUE])
+    for d in decide(settle(Scene(), scene, w.cfg), w.empties, w.cart, w.identifier, w.features, w.cfg, placement="p1"):
+        apply_decision(w.cart, d)
+    green = Item("green-bag", 80, 380, seed=3)
+    ds = decide(_rolled(w, scene, Scene(items=[RED, BLUE, green]), [RED, BLUE, green]), w.empties, w.cart,
+                w.identifier, w.features, w.cfg, placement="p2")
+    assert [d.kind for d in ds if d.kind in ("added", "removed")] == ["added"]  # once (named live by Claude)

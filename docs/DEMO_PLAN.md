@@ -1,5 +1,7 @@
 # KART end-to-end demo plan
 
+> **LIVE-DEMO ORDER (2026-10-25, layout `demo-video`: pasta 1A, marinara 3A, Parmesan 2A, kids' scissors 1B; apply with `backend/db.py layout demo-video` after every pre_judging):** sign in → "Pasta night for my family of 4" → "Not now" → garlic bread off → scissors added (Aisle 1B, last) → **at 1A:** spaghetti → "Yes" to Parmesan $1 off in Aisle 2A → **box 2** → "Keep the extra?" → "No" → box 2 out → **Leo's party** saved → **3A:** marinara → olive oil → **2A:** Parmesan (saved $1) → **1B:** scissors in/out → "Yes, the school has some" → Check out → tap-to-pay ($7.37). Act 2 unchanged (first stop Aisle 1A).
+>
 > **FINAL SCRIPT (2026-10-24): one natural trip. This supersedes §3 Meal A below.**
 >
 > **Props:** Barilla spaghetti **×3** (identical, all bought), Good & Gather marinara, Market Pantry grated Parmesan, up&up kids' scissors. **Quantity nudges are ON** (main feature, per Dylan). Not bought: garlic bread (removed by voice) and olive oil (not sold at Target Berkeley Central, and not in our catalog).

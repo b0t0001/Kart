@@ -31,6 +31,8 @@ LINER_MAX = 0.85         # a spot whose pixels are this much the liner's own col
 LINER_TOL = np.float32([60, 6, 6])  # LAB: a crease changes the liner's lightness, hardly its color
 NEAR = 0.05              # of the frame width: pieces of one item this close in a camera are at one spot
 NUDGE = 0.15             # a billed item's footprint, grown this much each side: room for it being bumped
+RELIT = 0.15             # the floor's color or brightness moved this much (any channel): the light changed
+RELIT_PRINT = 0.6        # ...and the print on a billed item still matches this well: that item, relit
 FAINT_GONE = 0.6         # a remembered spot this emptied with no blob over it (only a sliver ever showed)...
 FAINT_BARE = 0.85        # ...whose changed part is now this much bare floor: that unit was taken out
 
@@ -173,6 +175,36 @@ def new_part(blob: Blob, result: ChangeResult, matched: tuple, cart: CartMemory,
                 gray_outside(result.reference[y0:y1, x0:x1], mc), gray_outside(result.frame[y0:y1, x0:x1], mc),
                 (cx0 - x0, cy0 - y0, cx1 - cx0, cy1 - cy0), blob.edge,
                 result.frame[y0:y1, x0:x1].copy(), (x0, y0, x1 - x0, y1 - y0), blob.placement)
+
+
+def _edges(crop: np.ndarray) -> np.ndarray:
+    g = cv2.GaussianBlur(cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY).astype(np.float32), (5, 5), 0)
+    return cv2.magnitude(cv2.Sobel(g, cv2.CV_32F, 1, 0), cv2.Sobel(g, cv2.CV_32F, 0, 1))
+
+
+def same_print(after: np.ndarray, before: np.ndarray) -> float:
+    """How well the printed pattern (edges, which a color cast or brightness change leaves alone) of what's
+    there now matches what was there before, allowing a small shift (it may have been bumped)."""
+    ea, eb = _edges(after), _edges(before)
+    h, w = ea.shape[:2]
+    if h < 10 or w < 10 or eb.shape != ea.shape:
+        return 0.0
+    my, mx = max(1, h // 10), max(1, w // 10)
+    tpl = ea[my:h - my, mx:w - mx]
+    if tpl.std() < 1e-3 or eb.std() < 1e-3:
+        return 0.0
+    return float(cv2.matchTemplate(eb, tpl, cv2.TM_CCOEFF_NORMED).max())
+
+
+def relit_unit(blob: Blob, result: ChangeResult, cart: CartMemory, features, cfg) -> Instance | None:
+    """When the light changed (the cart rolled from a dim aisle to a bright cooler), a change lying on a
+    billed item whose print still matches what was there: that item under new light, never a new one."""
+    if max(abs(g - 1.0) for g in result.gain) < RELIT:
+        return None
+    best = max(((_iou(v.box, blob.box), i) for i, v in cart.views_in(blob.cam)), default=(0.0, None), key=lambda x: x[0])
+    if best[1] is None or best[0] < SAME_SPOT_IOU:
+        return None
+    return best[1] if same_print(blob.after_core, blob.before_core) >= RELIT_PRINT else None
 
 
 def settled_unit(blob: Blob, cart: CartMemory, fp_after, cfg) -> Instance | None:
@@ -573,6 +605,12 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
                     if kind == "settled":
                         log.info("NEW ITEM: cam%d's change next to a billed item holds something new too", r.cam)
                     b, kind = part, "added"
+                elif kind == "added" and (inst := relit_unit(b, r, cart, features, cfg)) is not None:
+                    log.info("RELIT: cam%d sees %s under new light (gain %s): same item, not billed", r.cam,
+                             inst.label, "/".join(f"{g:.2f}" for g in r.gain))
+                    settled.append(Decision("moved", inst.product_id, 1.0, "memory", inst.label, [r.cam], [b],
+                                            _views([b], features), inst.instance_id))
+                    continue
             if kind == "added":
                 added.setdefault(r.cam, []).append(b)
             elif kind == "removed":

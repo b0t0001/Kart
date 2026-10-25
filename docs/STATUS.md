@@ -23,6 +23,12 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-25 02:30 · store shoot
+- Demo-video aisles live (layout demo-video: 1A/3A/2A/1B; re-apply after every pre_judging). The 02:15 store take was clean end to end (empty basket at trip start, items spread, cart not rolled). Rolling into new light and a jar next to a box caused re-bills earlier; CV pushed a lighting fix (39349d9), not on the frozen Pi. BTS grabber is extended; the 02:15 clips are being cut first.
+
+### 2026-10-25 01:30 · repo presentation branch
+- `repo-presentation` pushed (README rewrite with architecture diagrams, docs/ARCHITECTURE.md, MIT LICENSE, root .env.example); merge after the demo, after a privacy scrub (project ref, Pi IPs, session IDs, third-party PDFs). bts-clips is still pending from the hardware chat.
+
 ### 2026-10-25 00:40 · end-to-end passed, BTS recording
 - Dylan's 00:14 live end-to-end (real voice, tap-to-pay) billed right at checkout ($7.37); 1 phantom from a nudged jar, removed on the iPad. Agent fix deployed: natural declines clear the deals question (75ac548). BTS: James's laptop grabs /cam/0 overlay frames at 5 Hz; clips go to the bts-clips branch; CV added tools/bts_record.py.
 
