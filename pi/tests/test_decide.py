@@ -383,3 +383,18 @@ def test_an_item_moved_by_a_hand_in_belongs_to_it(tmp_path):  # single-drops 61 
         b.placement = "p2"
     ds = decide([r0], w.empties, w.cart, w.identifier, w.features, w.cfg, placement="p2")
     assert [d.kind for d in ds] == ["moved"] and w.cart.count("red-box") == 1
+
+
+def test_an_item_put_against_a_billed_one_is_named_for_itself(tmp_path):  # demo 21:36: marinara billed as spaghetti
+    box = Item("red-box", 300, 200, w=160, h=100, seed=1)
+    for nudge, jx, jw in ((12, 470, 90), (12, 466, 110), (8, 462, 100)):  # the jar bumps the box as it goes in
+        w = world(tmp_path / f"{nudge}-{jx}")
+        for d in decide(settle(Scene(), Scene(items=[box]), w.cfg), w.empties, w.cart, w.identifier, w.features,
+                        w.cfg, placement="p1"):
+            apply_decision(w.cart, d)
+        moved = Item("red-box", 300 + nudge, 200, w=160, h=100, seed=1)
+        jar = Item("blue-can", jx, 205, w=jw, h=90, seed=2)
+        rs = settle(Scene(items=[box]), Scene(items=[moved, jar]), w.cfg)
+        assert all(len(r.blobs) == 1 for r in rs)  # one change covers the box and the jar
+        ds = decide(rs, w.empties, w.cart, w.identifier, w.features, w.cfg, placement="p2")
+        assert [(d.kind, d.product_id) for d in ds if d.kind == "added"] == [("added", "blue-can")], (nudge, jx)

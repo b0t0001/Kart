@@ -30,6 +30,7 @@ LOOK_WEIGHT = 0.2        # where comes first; look only ranks units whose footpr
 LINER_MAX = 0.85         # a spot whose pixels are this much the liner's own colors is bare liner
 LINER_TOL = np.float32([60, 6, 6])  # LAB: a crease changes the liner's lightness, hardly its color
 NEAR = 0.05              # of the frame width: pieces of one item this close in a camera are at one spot
+NUDGE = 0.15             # a billed item's footprint, grown this much each side: room for it being bumped
 FAINT_GONE = 0.6         # a remembered spot this emptied with no blob over it (only a sliver ever showed)...
 FAINT_BARE = 0.85        # ...whose changed part is now this much bare floor: that unit was taken out
 
@@ -138,6 +139,40 @@ def _foreground(img: np.ndarray, empty: np.ndarray, box: tuple[int, int, int, in
 def _covered(crop: np.ndarray, empty_crop: np.ndarray, m: np.ndarray | None, cfg) -> float:
     """Share of the floor in this crop that something lies on (differs from the empty basket)."""
     return _mean((lab_distance(crop, empty_crop) > cfg.change_thresh).astype(np.float32), m)
+
+
+def new_part(blob: Blob, result: ChangeResult, matched: tuple, cart: CartMemory, cfg) -> Blob | None:
+    """When a change overlaps items already billed (a jar put down against a box, bumping it), the part of
+    it that isn't any of them: changed pixels outside their footprints (grown by NUDGE for the bump). Its
+    own blob, to identify on its own, or None if there's no such part worth an item."""
+    views = [v for _, v in cart.views_in(blob.cam) if _iou(v.box, blob.box) > 0]
+    if not views:
+        return None
+    cur, ref, m = matched
+    x, y, w, h = blob.box
+    d = lab_distance(cv2.GaussianBlur(cur[y:y + h, x:x + w], (7, 7), 0),
+                     cv2.GaussianBlur(ref[y:y + h, x:x + w], (7, 7), 0)) > cfg.change_thresh
+    if m is not None:
+        d &= m[y:y + h, x:x + w].astype(bool)
+    for v in views:  # the billed items, with room for a bump
+        vx, vy, vw, vh = v.box
+        gx, gy = int(vw * NUDGE), int(vh * NUDGE)
+        d[max(0, vy - gy - y):max(0, vy + vh + gy - y), max(0, vx - gx - x):max(0, vx + vw + gx - x)] = False
+    d = cv2.morphologyEx(d.astype(np.uint8), cv2.MORPH_OPEN, np.ones((5, 5), np.uint8)).astype(bool)
+    full_h, full_w = result.frame.shape[:2]
+    if d.sum() < cfg.min_blob_frac * full_w * full_h:
+        return None
+    ys, xs = np.nonzero(d)
+    cx0, cy0, cx1, cy1 = (int(x + xs.min()), int(y + ys.min()), int(x + xs.max() + 1),
+                          int(y + ys.max() + 1))  # plain ints: they go into the cart's JSON
+    px, py = int((cx1 - cx0) * cfg.crop_pad), int((cy1 - cy0) * cfg.crop_pad)
+    x0, y0 = max(0, cx0 - px), max(0, cy0 - py)
+    x1, y1 = min(full_w, cx1 + px), min(full_h, cy1 + py)
+    mc = m[y0:y1, x0:x1] if m is not None else None
+    return Blob(blob.cam, (x0, y0, x1 - x0, y1 - y0), float(d.sum()) / (full_w * full_h),
+                gray_outside(result.reference[y0:y1, x0:x1], mc), gray_outside(result.frame[y0:y1, x0:x1], mc),
+                (cx0 - x0, cy0 - y0, cx1 - cx0, cy1 - cy0), blob.edge,
+                result.frame[y0:y1, x0:x1].copy(), (x0, y0, x1 - x0, y1 - y0), blob.placement)
 
 
 def settled_unit(blob: Blob, cart: CartMemory, fp_after, cfg) -> Instance | None:
@@ -530,6 +565,14 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
         liner = liner_model(empty, matched[2])
         for b in r.blobs:
             kind = classify_blob(b, r, empty, cart, features, cfg, matched, liner)
+            if kind in ("added", "settled"):
+                # Overlapping items already billed: name only what's new (a jar put down against the box,
+                # bumping it, was billed as a second box). A bump with nothing new keeps its verdict.
+                part = new_part(b, r, matched, cart, cfg)
+                if part is not None:
+                    if kind == "settled":
+                        log.info("NEW ITEM: cam%d's change next to a billed item holds something new too", r.cam)
+                    b, kind = part, "added"
             if kind == "added":
                 added.setdefault(r.cam, []).append(b)
             elif kind == "removed":
