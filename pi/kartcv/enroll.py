@@ -17,6 +17,7 @@ from typing import Callable, Iterable
 import cv2
 import numpy as np
 
+from kartcv.decide import liner_model, liner_share
 from kartcv.identify.hybrid import Identification
 from kartcv.motion import floor_difference
 from kartcv.pipeline import Pipeline
@@ -26,7 +27,6 @@ HAND = 0.03          # floor share a hand covers on its way in and out (real car
 EDGE_BAND = 0.03     # of the frame width: the strip inside the floor outline, where the liner meets the wall
 EDGE_MAX = 0.7       # a change this much inside that strip is the liner's edge settling, not a product
 LINER_MAX = 0.85     # a change whose pixels are this much liner-colored is the liner itself (a fold)
-LINER_TOL = np.float32([60, 6, 6])  # LAB: a fold changes the cloth's lightness, hardly its color
 
 
 class _Fixed:
@@ -37,19 +37,9 @@ class _Fixed:
         return self.answer
 
 
-def _lab(img: np.ndarray, mask: np.ndarray | None) -> np.ndarray:
-    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).reshape(-1, 3).astype(np.float32)
-    return lab[mask.reshape(-1).astype(bool)] if mask is not None else lab
-
-
 def liner_colored(crop: np.ndarray, crop_mask, empty: np.ndarray, empty_mask) -> float:
-    """Share of the crop's pixels (inside crop_mask, if any) in the empty liner's own colors: its typical
-    color (median), within its own spread or LINER_TOL, whichever is wider."""
-    ref = _lab(empty[::4, ::4], empty_mask[::4, ::4] if empty_mask is not None else None)
-    med = np.median(ref, axis=0)
-    tol = np.maximum(3 * 1.4826 * np.median(np.abs(ref - med), axis=0), LINER_TOL)
-    px = _lab(crop, crop_mask)
-    return float((np.abs(px - med) <= tol).all(axis=1).mean()) if len(px) else 1.0
+    """Share of the crop's pixels (inside crop_mask, if any) in the empty liner's own colors."""
+    return liner_share(crop, crop_mask, liner_model(empty, empty_mask))
 
 
 def along_outline(box: tuple[int, int, int, int], floor: np.ndarray) -> float:

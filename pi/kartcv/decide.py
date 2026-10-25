@@ -11,11 +11,12 @@ from dataclasses import dataclass, field
 
 import logging
 
+import cv2
 import numpy as np
 
 from kartcv.cart import CartMemory, Instance, View
 from kartcv.changes import Blob, ChangeResult, lab_distance, match_gain
-from kartcv.roi import polygon_mask
+from kartcv.roi import gray_outside, polygon_mask
 
 log = logging.getLogger(__name__)
 
@@ -24,6 +25,12 @@ IOU_WEIGHT = 0.2
 VANISHED_COVERAGE = 0.6  # a remembered unit whose box is this much inside an emptied spot is gone
 SAME_SPOT_IOU = 0.5      # a change this much on a remembered unit's box, still looking like it, is that unit
 GROWTH = 1.5             # ...unless this much more of the spot is covered now: something else was put down
+GONE_MIN = 0.4           # a remembered unit can only be taken off if this much of its own footprint changed
+LOOK_WEIGHT = 0.2        # where comes first; look only ranks units whose footprints emptied alike
+LINER_MAX = 0.85         # a spot whose pixels are this much the liner's own colors is bare liner
+LINER_TOL = np.float32([60, 6, 6])  # LAB: a crease changes the liner's lightness, hardly its color
+FAINT_GONE = 0.6         # a remembered spot this emptied with no blob over it (only a sliver ever showed)...
+FAINT_BARE = 0.85        # ...whose changed part is now this much bare floor: that unit was taken out
 
 
 @dataclass
@@ -85,6 +92,31 @@ def _mean(d: np.ndarray, m: np.ndarray | None) -> float:
     return float(d.mean())
 
 
+def _lab(img: np.ndarray, mask: np.ndarray | None) -> np.ndarray:
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).reshape(-1, 3).astype(np.float32)
+    return lab[mask.reshape(-1).astype(bool)] if mask is not None else lab
+
+
+def liner_model(empty: np.ndarray, mask: np.ndarray | None) -> tuple[np.ndarray, np.ndarray]:
+    """The bare liner's colors from the empty picture's floor: typical LAB color (median, so an item left
+    in the picture doesn't count) and how far from it the liner itself goes (its spread, or LINER_TOL)."""
+    ref = _lab(empty[::4, ::4], mask[::4, ::4] if mask is not None else None)
+    med = np.median(ref, axis=0)
+    return med, np.maximum(3 * 1.4826 * np.median(np.abs(ref - med), axis=0), LINER_TOL)
+
+
+def liner_share(crop: np.ndarray, crop_mask: np.ndarray | None, model: tuple) -> float:
+    """Share of the crop's pixels (inside crop_mask, if any) in the bare liner's own colors."""
+    med, tol = model
+    px = _lab(crop, crop_mask)
+    return float((np.abs(px - med) <= tol).all(axis=1).mean()) if len(px) else 1.0
+
+
+def _bare_liner(img: np.ndarray, box: tuple[int, int, int, int], m: np.ndarray | None, model) -> bool:
+    x, y, w, h = box
+    return liner_share(img[y:y + h, x:x + w], m[y:y + h, x:x + w] if m is not None else None, model) >= LINER_MAX
+
+
 def _covered(crop: np.ndarray, empty_crop: np.ndarray, m: np.ndarray | None, cfg) -> float:
     """Share of the floor in this crop that something lies on (differs from the empty basket)."""
     return _mean((lab_distance(crop, empty_crop) > cfg.change_thresh).astype(np.float32), m)
@@ -102,15 +134,20 @@ def settled_unit(blob: Blob, cart: CartMemory, fp_after, cfg) -> Instance | None
 
 
 def classify_blob(blob: Blob, result: ChangeResult, empty: np.ndarray, cart: CartMemory, features, cfg,
-                  matched: tuple | None = None) -> str | None:
+                  matched: tuple | None = None, liner: tuple | None = None) -> str | None:
     """One of "added", "removed", "settled" (a remembered unit changed shape or shifted in its spot), or None."""
     cur, ref, m = matched if matched is not None else gain_matched(result, empty, cfg.roi.get(str(blob.cam)), cart)
+    liner = liner if liner is not None else liner_model(empty, m)
     empty_crop = _crop(empty, blob.box)
     after = _crop(cur, blob.box)
     before = _crop(ref, blob.box)
     mc = _crop(m, blob.box) if m is not None else None  # judge the floor only, not the room behind it
-    after_empty = _mean(lab_distance(after, empty_crop), mc) < cfg.empty_thresh
-    before_empty = _mean(lab_distance(before, empty_crop), mc) < cfg.empty_thresh
+    # Empty = like the empty picture there, or bare liner: its creases shift, and something lying there
+    # when the empty picture was taken leaves bare liner behind when it's lifted. Neither is an item.
+    after_empty = (_mean(lab_distance(after, empty_crop), mc) < cfg.empty_thresh
+                   or _bare_liner(cur, blob.core_box, m, liner))
+    before_empty = (_mean(lab_distance(before, empty_crop), mc) < cfg.empty_thresh
+                    or _bare_liner(ref, blob.core_box, m, liner))
     if after_empty and before_empty:
         return None
     if after_empty:
@@ -141,6 +178,14 @@ def classify_blob(blob: Blob, result: ChangeResult, empty: np.ndarray, cart: Car
 
 def _views(blobs: list[Blob], features) -> dict[int, View]:
     return {b.cam: View(b.cam, b.box, features(b.after_core).tolist()) for b in blobs}
+
+
+def _merged_view(blobs: list[Blob], features) -> View:
+    """One camera's view of one unit seen as several blobs: their joint box, the biggest one's look."""
+    x0, y0 = min(b.box[0] for b in blobs), min(b.box[1] for b in blobs)
+    x1, y1 = max(b.box[0] + b.box[2] for b in blobs), max(b.box[1] + b.box[3] for b in blobs)
+    big = max(blobs, key=lambda b: b.area_frac)
+    return View(big.cam, (x0, y0, x1 - x0, y1 - y0), features(big.after_core).tolist())
 
 
 def _decide_added(added: dict[int, list[Blob]], identifier, features, cfg) -> list[Decision]:
@@ -200,13 +245,89 @@ def _coverage(inner: tuple[int, int, int, int], outer: tuple[int, int, int, int]
     return ix * iy / area if area > 0 else 0.0
 
 
-def _decide_removed(removed: dict[int, list[Blob]], cart: CartMemory, features, cfg) -> list[Decision]:
+def _spot(box: tuple[int, int, int, int], matched: tuple, empty: np.ndarray | None, cfg,
+          liner: tuple | None = None) -> tuple[float, float]:
+    """(gone, bare) for a remembered unit's box. gone: how much of what lay there (whatever differed from
+    the empty basket) changed this settle, so a thin arm in a tall box scores high when it leaves and a
+    box still lying there scores low, however much a neighbour's emptied spot overlaps it. bare: how
+    much of that changed part is bare floor now (the empty picture, or the liner's own colors)."""
+    cur, ref, m = matched
+    x, y, w, h = box
+    a, b = cur[y:y + h, x:x + w], ref[y:y + h, x:x + w]
+    if a.size == 0:
+        return 0.0, 0.0
+    a_s, b_s = cv2.GaussianBlur(a, (7, 7), 0), cv2.GaussianBlur(b, (7, 7), 0)
+    changed = lab_distance(a_s, b_s) > cfg.change_thresh
+    floor = m[y:y + h, x:x + w].astype(bool) if m is not None else np.ones(changed.shape, bool)
+    there, bare = floor, 0.0
+    if empty is not None:
+        e_s = cv2.GaussianBlur(empty[y:y + h, x:x + w], (7, 7), 0)
+        occupied = floor & (lab_distance(b_s, e_s) > cfg.change_thresh)
+        if occupied.sum() >= 0.02 * max(1, floor.sum()):
+            there = occupied
+        gone_px = changed & there
+        if liner is not None and gone_px.any():
+            med, tol = liner
+            like_liner = (np.abs(cv2.cvtColor(a, cv2.COLOR_BGR2LAB).astype(np.float32) - med) <= tol).all(axis=2)
+            like_empty = lab_distance(a_s, e_s) < cfg.change_thresh
+            bare = float((like_liner | like_empty)[gone_px].mean())
+    return float((changed & there).sum()) / max(1, int(there.sum())), bare
+
+
+def _emptied(box: tuple[int, int, int, int], matched: tuple, empty: np.ndarray | None, cfg) -> float:
+    return _spot(box, matched, empty, cfg)[0]
+
+
+def _faint_removals(results: list[ChangeResult], empties: dict, cart: CartMemory, cfg, matched: dict,
+                    decided: set) -> list[Decision]:
+    """Units taken out with no blob over their spot: only a sliver of them ever showed (a card lying
+    behind a jar), too small to make a blob. Every clean camera that remembers the unit must see its
+    spot emptied to bare floor, and no blob or held-back change in that camera may touch it."""
+    votes: dict[str, list] = {}
+    blocked: set[str] = set()
+    for r in results:
+        empty = empties.get(r.cam)
+        if empty is None or r.moved or r.status not in ("none", "blobs") or r.frame is None:
+            continue  # this camera can't judge: no vote
+        views = [(i, v) for i, v in cart.views_in(r.cam) if i.instance_id not in decided]
+        if not views:
+            continue
+        mt = matched.get(r.cam) or gain_matched(r, empty, cfg.roi.get(str(r.cam)), cart)
+        liner = liner_model(empty, mt[2])
+        for inst, v in views:
+            if r.deferred or any(_iou(b.box, v.box) > 0 for b in r.blobs):
+                blocked.add(inst.instance_id)
+                continue
+            gone, bare = _spot(v.box, mt, empty, cfg, liner)
+            votes.setdefault(inst.instance_id, []).append((gone >= FAINT_GONE and bare >= FAINT_BARE, r, v, mt))
+    out = []
+    for iid, vs in votes.items():
+        if iid in blocked or not all(ok for ok, *_ in vs):
+            continue
+        inst = cart.instances[iid]
+        blobs = []
+        for _, r, v, mt in vs:
+            x, y, w, h = v.box
+            mc = mt[2][y:y + h, x:x + w] if mt[2] is not None else None
+            blobs.append(Blob(r.cam, v.box, 0.0, gray_outside(r.reference[y:y + h, x:x + w], mc),
+                              gray_outside(r.frame[y:y + h, x:x + w], mc)))
+            log.info("TAKEN OUT: cam%d sees %s's spot emptied (too small a change for a blob)", r.cam, inst.label)
+        out.append(Decision("removed", inst.product_id, 1.0, "memory", inst.label, sorted(b.cam for b in blobs),
+                            blobs, {}, iid, personal=inst.personal))
+    return out
+
+
+def _decide_removed(removed: dict[int, list[Blob]], cart: CartMemory, features, cfg,
+                    matched: dict[int, tuple] | None = None, empties: dict | None = None) -> list[Decision]:
     """Match removal blobs to remembered units, by place first.
 
-    A unit this camera remembers only qualifies if it overlaps the emptied spot; a unit it never saw
-    qualifies only on a strong look-alike match. Every unit whose spot emptied counts, so an item and
-    an unknown remembered at the same spot both go. Nothing qualifies → nothing is removed (taking out
-    something that was never billed must not remove something else).
+    A unit this camera remembers only qualifies if the emptied spot overlaps it AND its own footprint
+    changed (GONE_MIN): one still sitting there is never taken off, however its neighbour's spot
+    overlaps it. Among those, the most-emptied footprint wins; look only ranks near-ties. A unit this
+    camera never saw qualifies only on a strong look-alike match, ranked below any place match. Every
+    unit whose footprint emptied counts, so an item and an unknown remembered at the same spot both
+    go. Nothing qualifies → nothing is removed (taking out something that was never billed must not
+    remove something else).
     """
     if not removed or not cart.instances:
         return []
@@ -219,23 +340,24 @@ def _decide_removed(removed: dict[int, list[Blob]], cart: CartMemory, features, 
         vanished = 0
         for inst in cart.instances.values():
             best = None
-            for b in bs:
-                if cam in inst.views:
-                    v = inst.views[cam]
-                    iou = _iou(b.box, v.box)
-                    if iou <= 0.0:
-                        continue
-                    sim = _sim(fps[id(b)], v.fingerprint)
-                    score = sim + IOU_WEIGHT * iou
-                else:
+            if cam in inst.views:
+                v = inst.views[cam]
+                hit = [b for b in bs if _iou(b.box, v.box) > 0.0]
+                if not hit:
+                    continue
+                gone = (_emptied(v.box, matched[cam], (empties or {}).get(cam), cfg) if matched and cam in matched
+                        else max(_coverage(v.box, b.box) for b in hit))
+                if gone < GONE_MIN:
+                    continue
+                vanished += gone >= VANISHED_COVERAGE
+                b = max(hit, key=lambda b: _sim(fps[id(b)], v.fingerprint))
+                sim = _sim(fps[id(b)], v.fingerprint)
+                best = (gone + LOOK_WEIGHT * sim, sim, b)
+            else:
+                for b in bs:
                     sim = max((_sim(fps[id(b)], v.fingerprint) for v in inst.views.values()), default=0.0)
-                    if sim < cfg.local_min_score:
-                        continue
-                    score = sim
-                if best is None or score > best[0]:
-                    best = (score, sim, b)
-            if cam in inst.views and any(_coverage(inst.views[cam].box, b.box) >= VANISHED_COVERAGE for b in bs):
-                vanished += 1
+                    if sim >= cfg.local_min_score and (best is None or sim > best[1]):
+                        best = (LOOK_WEIGHT * sim, sim, b)
             if best is not None:
                 iid = inst.instance_id
                 totals[iid] = totals.get(iid, 0.0) + best[0]
@@ -282,6 +404,7 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
     added: dict[int, list[Blob]] = {}
     removed: dict[int, list[Blob]] = {}
     settled: list[Decision] = []
+    matched_by_cam: dict[int, tuple] = {}
     for r in results:
         if r.status != "blobs":
             continue
@@ -290,9 +413,10 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
             # Without an empty-basket picture a removal looks like an addition; let the other camera decide.
             log.warning("cam%d has no empty-basket picture yet; ignoring its changes (reset with the cart empty)", r.cam)
             continue
-        matched = gain_matched(r, empty, cfg.roi.get(str(r.cam)), cart)
+        matched = matched_by_cam[r.cam] = gain_matched(r, empty, cfg.roi.get(str(r.cam)), cart)
+        liner = liner_model(empty, matched[2])
         for b in r.blobs:
-            kind = classify_blob(b, r, empty, cart, features, cfg, matched)
+            kind = classify_blob(b, r, empty, cart, features, cfg, matched, liner)
             if kind == "added":
                 added.setdefault(r.cam, []).append(b)
             elif kind == "removed":
@@ -304,27 +428,32 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
                 settled.append(Decision("moved", inst.product_id, 1.0, "memory", inst.label, [r.cam], [b],
                                         _views([b], features), inst.instance_id))
     # A camera held back when an item was billed (an arm in its view) now sees that spot: the same unit,
-    # seen late. Attach the view instead of billing it twice.
+    # seen late. Attach the view instead of billing it twice: all of it, even split into several blobs
+    # (a flat box along the frame edge, cut in two by its own print).
     late = []
     for cam, bs in list(added.items()):
         for inst in list(cart.instances.values()):
             spots = inst.awaiting.get(cam) or []
-            b = next((b for b in bs if any(_coverage(b.box, s) >= 0.5 or _iou(b.box, s) >= 0.2 for s in spots)), None)
-            if b is not None:
-                bs.remove(b)
-                late.append(Decision("moved", inst.product_id, 1.0, "memory", inst.label, [cam], [b],
-                                     _views([b], features), inst.instance_id))
+            hits = [b for b in bs if any(_coverage(b.box, s) >= 0.5 or _iou(b.box, s) >= 0.2 for s in spots)]
+            if hits:
+                for b in hits:
+                    bs.remove(b)
+                late.append(Decision("moved", inst.product_id, 1.0, "memory", inst.label, [cam], hits,
+                                     {cam: _merged_view(hits, features)}, inst.instance_id))
         if not bs:
             del added[cam]
     # cameras that had a clean look this settle: earlier held-back spots in them have had their chance
     cart.expire_awaiting({r.cam for r in results if r.status in ("blobs", "none") and not r.deferred})
 
-    decisions = _decide_added(added, identifier, features, cfg) + _decide_removed(removed, cart, features, cfg)
+    decisions = (_decide_added(added, identifier, features, cfg)
+                 + _decide_removed(removed, cart, features, cfg, matched_by_cam, empties))
     held = {r.cam: list(r.deferred) for r in results if r.deferred}
     for d in decisions:
         if d.kind == "added":
             d.awaiting = {c: boxes for c, boxes in held.items() if c not in d.cameras}
-    return late + settled + _cancel_nudges(decisions, cart, cfg)
+    decided = {d.instance_id for d in late + settled + decisions if d.instance_id}
+    faint = _faint_removals(results, empties, cart, cfg, matched_by_cam, decided)
+    return late + settled + _cancel_nudges(decisions, cart, cfg) + faint
 
 
 def apply_decision(cart: CartMemory, d: Decision) -> Instance | None:

@@ -154,6 +154,15 @@ def test_a_second_unit_set_against_the_first_is_billed_not_taken_for_a_reveal(tm
     assert run(p, sc, n) == [("added", "red-box")] and p.cart.count("red-box") == 2
 
 
+def test_lifting_out_something_that_was_in_the_empty_picture_bills_nothing(tmp_path):  # props-final 26 s
+    p, _ = make(tmp_path)
+    sc = Script(Scene(items=[RED])).still(1.0).take("red-box").still(2.0)  # it lay there at startup
+    assert run(p, sc) == [] and len(p.cart.instances) == 0  # bare liner left behind is not an item
+    n = len(sc.ticks)
+    sc.drop(Item("blue-can", 300, 200, seed=2))  # and that spot still works for a real item
+    assert run(p, sc, n) == [("added", "blue-can")]
+
+
 def test_reset_restart_and_missing_camera(tmp_path):
     p, _ = make(tmp_path)
     sc = Script(Scene()).still(1.0).drop(RED)

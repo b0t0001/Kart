@@ -209,3 +209,65 @@ def test_the_held_back_spot_expires_after_one_clean_look(tmp_path):
     decide(clean, w.empties, w.cart, w.identifier, w.features, w.cfg)
     later = _quiet(settle(Scene(), Scene(items=[RED]), w.cfg), 0)
     assert [d.kind for d in decide(later, w.empties, w.cart, w.identifier, w.features, w.cfg)] == ["added"]
+
+
+def test_an_item_still_in_its_spot_is_never_removed_for_a_neighbour(tmp_path):  # props-final 204 s: spaghetti
+    w = world(tmp_path)
+    strip = Item("blue-can", 150, 380, w=500, h=60, seed=2)  # a long box near the front
+    tall = Item("red-box", 200, 250, w=120, h=170, seed=1)   # stood partly on it
+    step(w, Scene(), Scene(items=[strip]))
+    # the other camera already took the tall one off the bill; this camera sees its spot empty only now
+    assert step(w, Scene(items=[strip, tall]), Scene(items=[strip])) == [] and w.cart.count("blue-can") == 1
+
+
+def test_a_removal_goes_to_the_unit_whose_footprint_emptied_however_alike_they_look(tmp_path):  # props-final: scissors
+    from kartcv.decide import _decide_removed, gain_matched
+    w = world(tmp_path)
+    box = Item("blue-can", 150, 300, w=400, h=150, seed=2)
+    card = Item("red-box", 250, 330, w=120, h=80, seed=1)  # lying on the box
+    step(w, Scene(), Scene(items=[box]))
+    step(w, Scene(items=[box]), Scene(items=[box, card]))
+    card_id = next(i.instance_id for i in w.cart.instances.values() if i.product_id == "red-box")
+    rs = settle(Scene(items=[box, card]), Scene(items=[box]), w.cfg)
+    for inst in w.cart.instances.values():  # worst case for look: the box remembers exactly what vanished,
+        for c, v in inst.views.items():     # the card only a sliver that says nothing
+            v.fingerprint = (w.features(rs[c].blobs[0].before_core).tolist() if inst.instance_id != card_id
+                             else [0.0] * len(v.fingerprint))
+    removed = {r.cam: r.blobs for r in rs}
+    matched = {r.cam: gain_matched(r, w.empties[r.cam], None, w.cart) for r in rs}
+    [d] = _decide_removed(removed, w.cart, w.features, w.cfg, matched, w.empties)
+    assert d.instance_id == card_id
+
+
+def test_a_late_view_split_in_two_blobs_attaches_whole(tmp_path):  # props-final: cam0's spaghetti at the edge
+    w = world(tmp_path)
+    halves = [Item("blue-can", 150, 380, w=180, h=60, seed=2), Item("blue-can", 380, 380, w=180, h=60, seed=2)]
+    rs = settle(Scene(), Scene(items=halves), w.cfg)
+    assert len(rs[0].blobs) == 2
+    b1 = rs[1].blobs[0]
+    w.cart.add("blue-can", "Blue Can", {1: View(1, b1.box, w.features(b1.after_core).tolist())},
+               awaiting={0: [b.box for b in rs[0].blobs]})  # billed from cam1; cam0 was held back
+    ds = decide([rs[0]], w.empties, w.cart, w.identifier, w.features, w.cfg)
+    assert [d.kind for d in ds] == ["moved"] and len(w.cart.instances) == 1
+
+
+def test_a_unit_whose_spot_emptied_too_little_for_a_blob_is_still_taken_off(tmp_path):  # props-final: scissors
+    from dataclasses import replace
+    w = world(tmp_path)
+    step(w, Scene(), Scene(items=[RED]))  # billed when it was seen...
+    w.cfg = replace(w.cfg, min_blob_frac=0.05)  # ...but its spot emptying makes less than a blob
+    rs = settle(Scene(items=[RED]), Scene(), w.cfg)
+    assert all(r.status == "none" for r in rs)  # no blob at all: too small
+    [d] = decide(rs, w.empties, w.cart, w.identifier, w.features, w.cfg)
+    assert (d.kind, d.product_id) == ("removed", "red-box")
+
+
+def test_a_spot_that_changed_but_is_not_bare_keeps_its_unit(tmp_path):  # something laid over it, or an arm
+    from dataclasses import replace
+    w = world(tmp_path)
+    step(w, Scene(), Scene(items=[RED]))
+    w.cfg = replace(w.cfg, min_blob_frac=0.5)
+    cover = Item("blue-can", 290, 190, w=140, h=110, seed=2)  # covers it: its spot changed, but isn't bare floor
+    assert decide(settle(Scene(items=[RED]), Scene(items=[RED, cover]), w.cfg), w.empties, w.cart,
+                  w.identifier, w.features, w.cfg) == []
+    assert w.cart.count("red-box") == 1

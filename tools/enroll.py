@@ -6,7 +6,8 @@
   sudo systemctl start kart-cv
 
 Start with the cart EMPTY. Each round: put the item in BY HAND, out on the floor (not against a wall),
-wait for "captured", take it out. Vary the pose (side, upright, label up/down) between rounds.
+wait for "captured", take it out. Vary the pose (side, upright, turned) between rounds, but keep
+the print in view: a plain back or a bare lid looks like every other product's.
 A change no hand made (the liner settling) or that looks like the liner is ignored and says so.
 Each capture prints its photo paths: open them, and delete any that don't show the product.
 """

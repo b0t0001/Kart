@@ -52,9 +52,16 @@ def replay(clip: Path):
 def test_real_clip(clip):
     exp, events, p = replay(clip)
     assert [e.type for e in events] == [x["type"] for x in exp["expected"]], exp["what_happened"]
+    # Offline there's no gallery and no Claude, so units come out unknown. A named one must be right, and
+    # an unknown removal must close the add of the same real product: what was taken out, not a neighbour.
+    add_of = {e.event_id: want for e, want in zip(events, exp["expected"]) if e.type == "added"}
     for got, want in zip(events, exp["expected"]):
-        if want.get("product_id"):  # null or missing = any product (unknowns are fine without enrolled props)
+        if not want.get("product_id"):  # null or missing = any product
+            continue
+        if got.product_id is not None:
             assert got.product_id == want["product_id"]
+        elif got.type == "removed":
+            assert add_of[got.resolves_event_id].get("product_id") == want["product_id"], want
     adds = sum(e.type == "added" for e in events)
     assert len(p.cart.instances) == adds - (len(events) - adds)  # memory agrees with what was billed
 
