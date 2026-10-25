@@ -29,6 +29,7 @@ GONE_MIN = 0.4           # a remembered unit can only be taken off if this much 
 LOOK_WEIGHT = 0.2        # where comes first; look only ranks units whose footprints emptied alike
 LINER_MAX = 0.85         # a spot whose pixels are this much the liner's own colors is bare liner
 LINER_TOL = np.float32([60, 6, 6])  # LAB: a crease changes the liner's lightness, hardly its color
+NEAR = 0.05              # of the frame width: pieces of one item this close in a camera are at one spot
 FAINT_GONE = 0.6         # a remembered spot this emptied with no blob over it (only a sliver ever showed)...
 FAINT_BARE = 0.85        # ...whose changed part is now this much bare floor: that unit was taken out
 
@@ -48,6 +49,7 @@ class Decision:
     count: int = 1  # added: identical units in this blob (claude_count beta); one event and one unit each
     personal: bool = False  # the shopper's own belonging: memory only, no event
     private: bool = False   # came in from the frame edge: its photos never leave the cart (edge_privacy)
+    placement: str = ""     # added: the hand-in that brought it
 
 
 def _iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
@@ -387,7 +389,7 @@ def _same_item(add: Decision, rem: Decision, cart: CartMemory, cfg) -> bool:
 
 def _cancel_nudges(decisions: list[Decision], cart: CartMemory, cfg) -> list[Decision]:
     adds = [d for d in decisions if d.kind == "added"]
-    out = []
+    out = [d for d in decisions if d.kind not in ("added", "removed")]
     for rem in (d for d in decisions if d.kind == "removed"):
         match = next((a for a in adds if _same_item(a, rem, cart, cfg)), None)
         if match is None:
@@ -399,8 +401,61 @@ def _cancel_nudges(decisions: list[Decision], cart: CartMemory, cfg) -> list[Dec
     return adds + out
 
 
+def _near(a: tuple[int, int, int, int], b: tuple[int, int, int, int], margin: float) -> bool:
+    return (a[0] - margin < b[0] + b[2] and b[0] - margin < a[0] + a[2]
+            and a[1] - margin < b[1] + b[3] and b[1] - margin < a[1] + a[3])
+
+
+def _join_view(old: View, new: View) -> View:
+    x0, y0 = min(old.box[0], new.box[0]), min(old.box[1], new.box[1])
+    x1 = max(old.box[0] + old.box[2], new.box[0] + new.box[2])
+    y1 = max(old.box[1] + old.box[3], new.box[1] + new.box[3])
+    return View(old.cam, (x0, y0, x1 - x0, y1 - y0), old.fingerprint, old.crop_path)
+
+
+def _one_per_placement(decisions: list[Decision], cart: CartMemory, placement: str | None,
+                       widths: dict[int, int]) -> list[Decision]:
+    """One placement (one hand in and out) brings one unit of a product. Another "added" of the same
+    product (or an unknown) in the same placement is a piece or a late view of that unit, not a second
+    one: a box its own print cuts in two, a camera that looks only now. Unless it lies at a distinct
+    spot in a camera that sees both: two items put in together, apart, are two."""
+    if placement is None:
+        return decisions
+    leaving = {d.instance_id for d in decisions if d.kind == "removed"}
+    units: list = [i for i in cart.instances.values() if i.placement == placement and i.instance_id not in leaving]
+    out = []
+    for d in decisions:
+        if d.kind != "added":
+            out.append(d)
+            continue
+        twin = None
+        for u in reversed(units):  # newest first
+            if d.product_id is not None and u.product_id is not None and u.product_id != d.product_id:
+                continue
+            shared = [b for b in d.blobs if b.cam in u.views]
+            if not shared or any(_near(b.box, u.views[b.cam].box, NEAR * widths.get(b.cam, 1280)) for b in shared):
+                twin = u
+                break
+        if twin is None:
+            d.placement = placement
+            out.append(d)
+            units.append(d)
+            continue
+        log.info("ONE UNIT: %s again in the same placement, at its spot: more of the same unit, not a second one",
+                 d.label)
+        views = {c: _join_view(twin.views[c], v) if c in twin.views else v for c, v in d.views.items()}
+        if isinstance(twin, Decision):  # an add earlier in this settle: fold this one into it
+            twin.blobs += d.blobs
+            twin.cameras = sorted(set(twin.cameras) | set(d.cameras))
+            twin.views.update(views)
+        else:
+            out.append(Decision("moved", twin.product_id, d.confidence, d.method, twin.label, d.cameras, d.blobs,
+                                views, twin.instance_id))
+    return out
+
+
 def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: CartMemory,
-           identifier, features, cfg) -> list[Decision]:
+           identifier, features, cfg, placement: str | None = None) -> list[Decision]:
     added: dict[int, list[Blob]] = {}
     removed: dict[int, list[Blob]] = {}
     settled: list[Decision] = []
@@ -451,6 +506,8 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
     for d in decisions:
         if d.kind == "added":
             d.awaiting = {c: boxes for c, boxes in held.items() if c not in d.cameras}
+    widths = {r.cam: r.frame.shape[1] for r in results if r.frame is not None}
+    decisions = _one_per_placement(decisions, cart, placement, widths)
     decided = {d.instance_id for d in late + settled + decisions if d.instance_id}
     faint = _faint_removals(results, empties, cart, cfg, matched_by_cam, decided)
     return late + settled + _cancel_nudges(decisions, cart, cfg) + faint
@@ -458,7 +515,7 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
 
 def apply_decision(cart: CartMemory, d: Decision) -> Instance | None:
     if d.kind == "added":
-        return cart.add(d.product_id, d.label, d.views, d.awaiting, personal=d.personal)
+        return cart.add(d.product_id, d.label, d.views, d.awaiting, personal=d.personal, placement=d.placement)
     if d.kind == "removed":
         return cart.remove(d.instance_id) if d.instance_id in cart.instances else None
     if d.kind == "moved":

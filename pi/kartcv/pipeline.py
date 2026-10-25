@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import math
 import threading
+import uuid
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from pathlib import Path
@@ -24,7 +25,7 @@ from kartcv.cart import CartMemory
 from kartcv.changes import detect_changes
 from kartcv.decide import Decision, apply_decision, decide
 from kartcv.events import Event
-from kartcv.motion import MotionDetector, SettleTracker
+from kartcv.motion import HAND, MotionDetector, SettleTracker, floor_difference
 from kartcv.roi import draw_outline
 
 log = logging.getLogger(__name__)
@@ -62,6 +63,11 @@ class Pipeline:
         self._resync: set[int] = set()   # cameras back from an outage: re-reference at the next settle
         self.camera_moved: set[int] = set()  # a big view shift with items in the cart: reset recommended
         self._recheck_at: float | None = None  # when to re-judge a deferred edge-touching change, if still
+        # Placements: each time a hand went in and out (floor covered during the motion, uncovered when
+        # it settles), the count goes up. Everything one placement brings is one unit per product.
+        self._run_id = uuid.uuid4().hex[:6]
+        self._placements = 0
+        self._peak: dict[int, float] = {}
         self._worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="judge") if background else None
         self._jobs: list[Future] = []
 
@@ -169,7 +175,17 @@ class Pipeline:
         moving = {c: self.motion[c].update(f.image) for c, f in frames.items()}
         ts = min(f.ts for f in frames.values())
         was = self.settle.state
+        cover = {}
+        if was == "motion":  # how much of the floor is covered right now: a hand comes and goes
+            cover = {c: floor_difference(f.image, self.references[c], self.cfg.motion_size, self.cfg.motion_thresh,
+                                         self._roi(c)) for c, f in frames.items() if c in self.references}
+            for c, v in cover.items():
+                self._peak[c] = max(self._peak.get(c, 0.0), v)
         settled = self.settle.update(ts, moving)
+        if settled:
+            if any(self._peak.get(c, 0.0) - v >= HAND for c, v in cover.items()):
+                self._placements += 1
+            self._peak = {}
         if any(moving.values()):
             self._recheck_at = None  # it moved: not a static object; the next settle judges it again
         if was == "idle" and self.settle.state == "motion":
@@ -183,6 +199,10 @@ class Pipeline:
                      self.cfg.intrusion_recheck_s)
             return self._process(frames, ts, accept_edges=True)
         return []
+
+    @property
+    def placement(self) -> str:
+        return f"{self._run_id}:{self._placements}"
 
     def _process(self, frames: dict, ts: float, accept_edges: bool) -> list[Event]:
         """Judge a still moment. Changes reaching the image edge (an arm over the rim, or a tall item
@@ -243,15 +263,15 @@ class Pipeline:
 
         empties = dict(self.empties)  # a snapshot: the worker must not see later resets mid-judgment
         if self._worker is None:
-            return self._judge(results, empties)
-        job = self._worker.submit(self._judge, results, empties)
+            return self._judge(results, empties, self.placement)
+        job = self._worker.submit(self._judge, results, empties, self.placement)
         job.add_done_callback(lambda j: j.exception() and log.error("judging failed", exc_info=j.exception()))
         self._jobs.append(job)
         return []
 
-    def _judge(self, results: list, empties: dict) -> list[Event]:
+    def _judge(self, results: list, empties: dict, placement: str | None = None) -> list[Event]:
         """Decide, update memory and emit for one settle (inline, or on the worker thread)."""
-        decisions = decide(results, empties, self.cart, self.identifier, self.features, self.cfg)
+        decisions = decide(results, empties, self.cart, self.identifier, self.features, self.cfg, placement)
         self.last_decisions = decisions
         events = []
         for d in decisions:

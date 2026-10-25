@@ -8,6 +8,7 @@ from kartcv.changes import match_gain, work_size
 from kartcv.roi import polygon_mask
 
 _EPS = 1e-6  # tick timestamps are floats; 2.3 - 1.3 must count as a full second
+HAND = 0.03  # floor share a hand covers on its way in and out (real cart: 0.06–0.63; no hand, even rolling, ≤ 0.014)
 
 
 def _small(image: np.ndarray, size: tuple[int, int]) -> np.ndarray:

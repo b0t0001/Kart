@@ -30,6 +30,7 @@ class Instance:
     # way): that camera's next look there is this unit, seen late, not a second one
     awaiting: dict[int, list] = field(default_factory=dict)
     personal: bool = False  # the shopper's own belonging: tracked so its removal is silent, never billed
+    placement: str = ""  # the hand-in that brought it (pipeline run : count): one placement, one unit of a product
 
 
 class CartMemory:
@@ -39,11 +40,11 @@ class CartMemory:
 
     # --- mutations (each one saves) ---
     def add(self, product_id: str | None, label: str, views: dict[int, View], awaiting: dict | None = None,
-            personal: bool = False) -> Instance:
+            personal: bool = False, placement: str = "") -> Instance:
         views = {c: View(v.cam, tuple(v.box), list(v.fingerprint), v.crop_path) for c, v in views.items()}  # own copies
         inst = Instance(uuid.uuid4().hex, product_id, label, utc_now_iso(), views,
                         awaiting={int(c): [tuple(b) for b in bs] for c, bs in (awaiting or {}).items()},
-                        personal=personal)
+                        personal=personal, placement=placement)
         self.instances[inst.instance_id] = inst
         self.save()
         return inst
@@ -119,6 +120,6 @@ class CartMemory:
                 inst = Instance(d["instance_id"], d["product_id"], d["label"], d["added_ts"], views,
                                 d.get("event_id", ""),
                                 {int(c): [tuple(b) for b in bs] for c, bs in d.get("awaiting", {}).items()},
-                                bool(d.get("personal", False)))
+                                bool(d.get("personal", False)), str(d.get("placement", "")))
                 mem.instances[inst.instance_id] = inst
         return mem

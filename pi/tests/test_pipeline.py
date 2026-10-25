@@ -149,8 +149,8 @@ def test_a_second_unit_set_against_the_first_is_billed_not_taken_for_a_reveal(tm
     sc = Script(Scene()).still(1.0).drop(RED).still(1.0)
     run(p, sc)
     n = len(sc.ticks)
-    # the first box gets bumped as the second lands right against it: one change covers both
-    sc.set(items=[Item("red-box", 318, 200, seed=1), Item("red-box", 428, 200, seed=1)]).still(2.0)
+    # a hand puts the second box in right against the first, bumping it: one change covers both
+    sc.hand_pass().set(items=[Item("red-box", 318, 200, seed=1), Item("red-box", 428, 200, seed=1)]).still(2.0)
     assert run(p, sc, n) == [("added", "red-box")] and p.cart.count("red-box") == 2
 
 
@@ -161,6 +161,28 @@ def test_lifting_out_something_that_was_in_the_empty_picture_bills_nothing(tmp_p
     n = len(sc.ticks)
     sc.drop(Item("blue-can", 300, 200, seed=2))  # and that spot still works for a real item
     assert run(p, sc, n) == [("added", "blue-can")]
+
+
+def test_one_box_seen_in_two_pieces_is_one_unit(tmp_path):  # live 3-drop test: one Barilla box billed twice
+    p, _ = make(tmp_path)
+    # one flat box whose print cuts it in two for the cameras: two same-looking pieces close together
+    pieces = [Item("red-box", 300, 200, w=110, h=90, seed=1), Item("red-box", 445, 200, w=110, h=90, seed=1)]
+    sc = Script(Scene()).still(1.0).drop_many(pieces).still(2.0)
+    assert run(p, sc) == [("added", "red-box")] and p.cart.count("red-box") == 1
+
+
+def test_two_identical_items_put_in_together_far_apart_are_two_units(tmp_path):
+    p, _ = make(tmp_path)
+    sc = Script(Scene()).still(1.0).drop_many([Item("red-box", 120, 80, seed=1), Item("red-box", 600, 380, seed=1)])
+    assert run(p, sc.still(2.0)) == [("added", "red-box")] * 2
+
+
+def test_each_identical_box_a_hand_puts_in_is_billed(tmp_path):  # counting: three spaghetti boxes
+    p, _ = make(tmp_path)
+    sc = Script(Scene()).still(1.0)
+    for x in (120, 330, 540):
+        sc.drop(Item("red-box", x, 200, seed=1)).still(1.0)
+    assert run(p, sc) == [("added", "red-box")] * 3
 
 
 def test_reset_restart_and_missing_camera(tmp_path):

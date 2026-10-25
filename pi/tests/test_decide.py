@@ -271,3 +271,14 @@ def test_a_spot_that_changed_but_is_not_bare_keeps_its_unit(tmp_path):  # someth
     assert decide(settle(Scene(items=[RED]), Scene(items=[RED, cover]), w.cfg), w.empties, w.cart,
                   w.identifier, w.features, w.cfg) == []
     assert w.cart.count("red-box") == 1
+
+
+
+def test_a_late_view_of_the_unit_just_billed_is_that_unit_not_a_second(tmp_path):  # live: drop 1 billed twice
+    for placement, kinds in (("p1", ["moved"]), ("p2", ["added"])):  # p2: a new hand went in meanwhile
+        w = world(tmp_path / placement)
+        rs = settle(Scene(), Scene(items=[RED]), w.cfg)
+        [d] = decide([rs[1]], w.empties, w.cart, w.identifier, w.features, w.cfg, placement="p1")  # cam1 bills it
+        apply_decision(w.cart, d)
+        ds = decide([rs[0]], w.empties, w.cart, w.identifier, w.features, w.cfg, placement=placement)  # cam0, later
+        assert [d.kind for d in ds] == kinds, placement

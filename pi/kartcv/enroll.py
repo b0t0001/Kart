@@ -19,11 +19,10 @@ import numpy as np
 
 from kartcv.decide import liner_model, liner_share
 from kartcv.identify.hybrid import Identification
-from kartcv.motion import floor_difference
+from kartcv.motion import HAND, floor_difference
 from kartcv.pipeline import Pipeline
 from kartcv.roi import polygon_mask
 
-HAND = 0.03          # floor share a hand covers on its way in and out (real cart: 0.06–0.63; no hand, even rolling, ≤ 0.014)
 EDGE_BAND = 0.03     # of the frame width: the strip inside the floor outline, where the liner meets the wall
 EDGE_MAX = 0.7       # a change this much inside that strip is the liner's edge settling, not a product
 LINER_MAX = 0.85     # a change whose pixels are this much liner-colored is the liner itself (a fold)
