@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 late · floor passes, double count is top bug
+- The flattened paper liner passed the 3-drop test (no phantoms). One drop was billed twice (both cams named it), which would trigger a false "Keep the extra?". It's CV's top fix, with a single-drops clip coming. cam0 was knocked 216 px and re-aimed.
+
 ### 2026-10-24 late · props enrolled
 - 4 props enrolled (pi/gallery, props-final clip). Live: all 4 named right, but 3 CV bugs remain (removal mis-attribution, late-view phantom, liner phantom); CV is fixing them. Catalog now matches the real props (marinara $2.19, Parmesan $4.19; demo bill $7.37). Liner flattened; the 3-drop test and counting clips run after Dylan's dinner.
 
