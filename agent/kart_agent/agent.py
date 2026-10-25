@@ -33,10 +33,15 @@ def _count_word(n: int) -> str:
     return ["zero", "one", "two", "three"][n] if 0 <= n <= 3 else str(n)
 
 
+_NOT_NOW = re.compile(r"\b(not (right )?now|later|i'?m (good|okay|ok|fine|all set)|no thanks|no thank you|nah|nope|"
+                      r"skip (it|them|that|those)|pass|(don'?t|do not) (want|need) (to hear|it|them))\b", re.IGNORECASE)
+_ALSO_ASKS = re.compile(r"\?|\b(but|and|also|what|how|where|which|why|when|if)\b", re.IGNORECASE)
+
+
 def _digest_answer(text: str) -> str | None:
-    """"Yes" / "not now" to the deals question or to one deal; None for anything else (Claude hears it)."""
-    lowered = text.lower()
-    if "not now" in lowered or "later" in lowered:
+    """"Yes" / "not now" to the deals question or to one deal, in the shopper's own words ("Oh, actually no, I'm good
+    for now"); None for anything more (a question, a "but", a request), which Claude hears."""
+    if _NOT_NOW.search(text) and not _ALSO_ASKS.search(text):
         return "no"
     return yes_or_no(text)
 
@@ -331,6 +336,9 @@ class KartAgent:
                 async for out in self._say([line], interruptible=False):
                     yield out
                 return
+            if self._digest and self._digest["i"] < 0:   # the deals question, answered in more words or passed over:
+                self._digest = None                      # off the iPad; each deal is still said at its shelf
+                yield AgentSendCustom(metadata={"type": "digest_done"})
             heard = text
             if self._offer:                              # more than a yes/no: Claude still needs to know what was asked
                 heard = f'(Kart just asked: "{self._offer.get("text", "")}") {text}'

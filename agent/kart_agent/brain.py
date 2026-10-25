@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, AsyncIterator, Protocol
 
 from .memory import MEMBER_TOOLS
@@ -159,7 +160,15 @@ class Brain:
             stop_reason = "end_turn"
             streamed: list[str] = []
             held: list[str] = []                         # text that might still turn out to be <quiet>
+            opening = "" if last_said else None          # after a tool round: its first words, to drop a second "Okay,"
             async for item in self.llm.stream(system=self.system, messages=self.messages, tools=self.tools):
+                if item[0] == "text" and opening is not None:
+                    opening += item[1]
+                    if len(opening) < ACK_WINDOW:
+                        continue
+                    item, opening = ("text", _without_ack(opening)), None
+                    if not item[1]:
+                        continue
                 if item[0] == "text" and not streamed and QUIET.startswith(("".join(held) + item[1]).strip()):
                     held.append(item[1])                 # don't speak it yet
                     continue
@@ -175,6 +184,16 @@ class Brain:
                     yield text
                 elif item[0] == "final":
                     content, stop_reason = item[1], item[2]
+            if opening and QUIET.startswith(opening.strip()):   # "<quiet>" after the tool round: the check below
+                held.append(opening)
+            elif opening:                                # a short reply after the tool round
+                text = _without_ack(opening)
+                if text:
+                    if last_said and not last_said[-1].isspace() and not text[0].isspace():
+                        text = " " + text
+                    streamed.append(text)
+                    last_said = text
+                    yield text
             if "".join(held).strip() == QUIET:            # side chatter: say nothing, and keep the turn in history
                 self.messages.append({"role": "assistant", "content": [{"type": "text", "text": QUIET}]})
                 return
@@ -204,6 +223,18 @@ class Brain:
                 self.messages.append({"role": "assistant", "content": [{"type": "text", "text": readback}]})
                 return
         yield "Sorry, give me a second and say that again?"
+
+
+_ACK = re.compile(r"^\s*(okay|ok|sure|alright|all right|got it|no problem|sounds good)[,.!]\s*", re.IGNORECASE)
+ACK_WINDOW = 14                                          # held after a tool round: enough to see "Sounds good," whole
+
+
+def _without_ack(text: str) -> str:
+    """Kart already spoke before the tool round ("No problem."), so the answer after it skips its own "Okay,"."""
+    rest = _ACK.sub("", text, count=1)
+    if rest == text:
+        return text
+    return rest[:1].upper() + rest[1:]
 
 
 EDIT_TOOLS = {"add_to_plan", "remove_from_plan", "undo_last_edit"}

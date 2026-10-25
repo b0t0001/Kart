@@ -1,6 +1,8 @@
 import asyncio
 import re
 
+import pytest
+
 from line.events import AgentSendCustom, AgentSendText, CallStarted, UserCustomSent, UserTextSent, UserTurnEnded, UserTurnStarted
 
 from kart_agent.agent import GREETING, KartAgent
@@ -411,6 +413,28 @@ async def test_not_now_means_kart_tells_you_at_the_shelf():
     assert spoken(outs) == ["No problem. I'll tell you at the shelf."] and cards(outs) == [{"type": "digest_done"}]
     assert agent.run_filter(UserCustomSent(metadata=PARM_OFFER))       # the spaghetti went in: Kart says the deal
     assert await run(agent, UserTurnEnded(content=[UserTextSent(content="Yes.")])) == ["Added Parmesan to your list."]
+
+
+@pytest.mark.parametrize("decline", ["Oh, actually no, I'm good for now.", "I'm good.", "I'm good for now.", "No thanks.",
+                                     "Nah.", "I don't want to hear the deal right now.", "Skip it.", "Maybe later.",
+                                     "Not right now."])
+async def test_a_no_in_the_shoppers_own_words_gets_the_quick_answer(decline):
+    agent, backend = planned_agent()
+    await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content=decline)]))
+    assert spoken(outs) == ["No problem. I'll tell you at the shelf."] and cards(outs) == [{"type": "digest_done"}]
+
+
+async def test_the_deals_question_leaves_the_screen_whatever_answers_it():
+    plan_call = ToolUse("t1", "set_plan", {"meal": "pasta night for 4",
+                                           "items": [{"product_id": "barilla-spaghetti", "reason": "pasta"}]})
+    agent, backend = make([Turn(chunks=["One sec."], tools=[plan_call]), Turn(chunks=["Spaghetti's on your list."]),
+                           Turn(chunks=["Not now, sure. Spaghetti's in Aisle 6."])])
+    await outputs(agent, UserTurnEnded(content=[UserTextSent(content="pasta night for four")]))
+    outs = await outputs(agent, UserTurnEnded(content=[UserTextSent(content="Not now, but where's the spaghetti?")]))
+    assert spoken(outs) == ["Not now, sure. Spaghetti's in Aisle 6."]     # more than a no: Claude answers it
+    assert cards(outs) == [{"type": "digest_done"}]                         # ...and the question still comes off the iPad
+    assert agent.run_filter(UserCustomSent(metadata=PARM_OFFER))           # each deal is still said at its shelf
 
 
 async def test_a_tap_on_the_digest_cards_works_like_saying_it():

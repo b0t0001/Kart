@@ -199,3 +199,25 @@ async def test_a_combined_read_back_keeps_the_budget_warning():
     said = await collect(Brain(llm=FakeLLM([Turn(chunks=["Sure."], tools=adds)])).respond(
         "add marinara and salsa", {"backend": backend, "cart_id": "7", "trip_id": "t"}))
     assert "".join(said) == "Sure. Added rao's sauce, Aisle 6, and salsa, Aisle 5. That puts you at $10.48, over your $10."
+
+
+async def test_kart_acknowledges_once_across_a_lookup():
+    # "No problem." before a tool round, then "Okay, I'll skip that one." after it: the second "Okay," goes.
+    llm = FakeLLM([Turn(chunks=["No problem."], tools=[ToolUse("t1", "get_cart", {})]),
+                   Turn(chunks=["Okay, ", "I'll skip", " that one."])])
+    chunks = await collect(Brain(llm=llm).respond("I'm all set", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
+    assert "".join(chunks) == "No problem. I'll skip that one."
+
+
+async def test_an_answer_that_only_starts_like_an_acknowledgement_is_kept():
+    llm = FakeLLM([Turn(chunks=["One sec."], tools=[ToolUse("t1", "get_cart", {})]),
+                   Turn(chunks=["Sure thing: ", "your total is $7.37."])])
+    chunks = await collect(Brain(llm=llm).respond("total?", {"backend": FakeBackend(), "cart_id": "7", "trip_id": "t"}))
+    assert "".join(chunks) == "One sec. Sure thing: your total is $7.37."
+
+
+async def test_quiet_after_a_lookup_is_still_never_said():
+    llm = FakeLLM([Turn(chunks=["Hm."], tools=[ToolUse("t1", "get_cart", {})]), Turn(chunks=["<quiet>"])])
+    chunks = await collect(Brain(llm=llm).respond("(to a friend) grab the car", {"backend": FakeBackend(), "cart_id": "7",
+                                                                                  "trip_id": "t"}))
+    assert "".join(chunks) == "Hm."
