@@ -292,6 +292,27 @@ def test_an_arm_filling_cam0s_view_is_not_baked_into_its_picture(tmp_path):  # "
     assert sink.events[-1].type == "added" and len(sink.events) == 1 and p.cart.count("red-box") == 1
 
 
+def test_a_box_crossing_the_floor_outline_is_billed_once_by_one_camera(tmp_path):  # cam1-only demo, far corner
+    import cv2
+    from kartcv.sources import Frame
+    w = world(tmp_path)
+    w.cfg.roi = {"0": [[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]]}
+    p = Pipeline(w.cfg, [0], w.identifier, w.features, [MemorySink()], tmp_path / "state")
+    empty = Scene().render(0, 1)
+    H, W = empty.shape[:2]
+    box = empty.copy()  # its print splits it: a piece inside, and a piece across the outline to the frame edge
+    cv2.rectangle(box, (int(0.52 * W), int(0.45 * H)), (int(0.68 * W), int(0.62 * H)), (30, 60, 200), -1)
+    cv2.rectangle(box, (int(0.68 * W) + 44, int(0.45 * H)), (W - 1, int(0.62 * H)), (30, 60, 200), -1)
+    hand = empty.copy()
+    cv2.rectangle(hand, (int(0.4 * W), int(0.3 * H)), (W - 1, int(0.75 * H)), (90, 120, 170), -1)
+    ts = 0.0
+    for img, secs in ((empty, 1.0), (hand, 0.5), (box, 12.0)):  # the inner piece at SETTLED, the rest at RECHECK
+        for _ in range(int(secs * 10)):
+            ts += 0.1
+            p.step({0: Frame(img, ts, 0)})
+    assert [e.type for e in p.sinks[0].events] == ["added"] and len(p.cart.instances) == 1
+
+
 def test_reset_restart_and_missing_camera(tmp_path):
     p, _ = make(tmp_path)
     sc = Script(Scene()).still(1.0).drop(RED)
