@@ -50,12 +50,14 @@ def test_request_shape():
     kw = fc.kwargs
     content = kw["messages"][0]["content"]
     imgs = [b for b in content if b["type"] == "image"]
-    assert kw["model"] == "claude-haiku-5-5" and fc.options == {"timeout": 6.0, "max_retries": 0} and len(imgs) == 2
+    # one quick retry: a hotspot hiccup (one call took 9.5 s) gets a second chance instead of "unknown"
+    assert kw["model"] == "claude-haiku-5-5" and fc.options == {"timeout": 6.0, "max_retries": 1} and len(imgs) == 2
     assert imgs[0]["source"]["media_type"] == "image/jpeg" and content[-1]["type"] == "text"
     assert "rao-marinara | Rao's Marinara | jar" in content[-1]["text"]
     schema = kw["output_config"]["format"]["schema"]
     assert set(schema["properties"]["product_id"]["enum"]) == {"kirkland-parmesan", "rao-marinara", "unknown"}
     assert kw["output_config"]["effort"] == "low"
+    assert "thinking" not in kw  # model default: off saved ~0.3 s but put the marinara on the 0.6 line
 
 
 def test_images_downscaled():

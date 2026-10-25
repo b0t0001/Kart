@@ -81,7 +81,10 @@ class CloudIdentifier:
                   for c in crops[:MAX_CROPS]]
         text = {"type": "text", "text": "Catalog (id | name | what it looks like):\n" + self.catalog.prompt_lines()}
         try:
-            resp = self._client.with_options(timeout=self.timeout_s, max_retries=0).messages.create(
+            # One quick retry (timeouts and connection drops): a hotspot hiccup (one call took 9.5 s) gets a
+            # second chance before the item goes unknown. Thinking stays at the model's default: switched
+            # off it saved ~0.3 s but put the marinara at 0.60, right on cloud_min_conf, three times of three.
+            resp = self._client.with_options(timeout=self.timeout_s, max_retries=1).messages.create(
                 model=self.model,
                 max_tokens=1024,
                 system=SYSTEM + (PERSONAL_HINT if self.personal else "") + (COUNT_HINT if self.count else ""),
