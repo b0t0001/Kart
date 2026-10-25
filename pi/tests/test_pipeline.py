@@ -237,6 +237,61 @@ def test_a_lone_unknown_is_still_billed_when_claude_could_not_answer(tmp_path): 
     assert run(p, _cam0_only_ghost_appears()) == [("added", "red-box"), ("added", None)]
 
 
+def _cam1_primary(tmp_path, blind=None):
+    w = world(tmp_path)
+    w.cfg.primary_cam = 1  # the wide top view decides; cam0 is the fallback
+    if blind:
+        w.cfg.blind_zone = {"0": blind}
+    sink = MemorySink()
+    return Pipeline(w.cfg, [0, 1], w.identifier, w.features, [sink], tmp_path / "state"), sink
+
+
+HIDDEN = Item("blue-can", 560, 330, seed=2)  # cam1 can't see it (hidden={1: ...})
+
+
+def test_with_cam1_primary_a_cam0_only_add_never_bills_alone(tmp_path):  # tonight: 8 of 11 cam0-only adds wrong
+    p, _ = _cam1_primary(tmp_path)
+    assert run(p, Script(Scene(hidden={1: {"blue-can"}})).still(1.0).drop(HIDDEN).still(5.0)) == []
+
+
+def test_a_cam0_only_add_in_cam1s_blind_zone_bills(tmp_path):
+    from kartcv.synth import CAM_SIZE, item_box
+    x, y, w, h = item_box(0, HIDDEN, pad=0.3)
+    W, H = CAM_SIZE
+    zone = [[x / W, y / H], [(x + w) / W, y / H], [(x + w) / W, (y + h) / H], [x / W, (y + h) / H]]
+    p, _ = _cam1_primary(tmp_path, blind=zone)
+    assert run(p, Script(Scene(hidden={1: {"blue-can"}})).still(1.0).drop(HIDDEN).still(5.0)) == [("added", "blue-can")]
+
+
+def test_cam0s_early_view_waits_for_cam1_and_joins_its_item(tmp_path):  # take 1: cam1 still held the jar
+    p, _ = _cam1_primary(tmp_path)
+    sc = Script(Scene(hidden={1: {"blue-can"}})).still(1.0).drop(HIDDEN).still(1.5)
+    sc.set(hidden={}).still(5.0)  # cam1 sees it a moment later (it was behind the arm)
+    assert run(p, sc) == [("added", "blue-can")]
+    [inst] = p.cart.instances.values()
+    assert set(inst.views) == {0, 1}
+
+
+def test_an_arm_filling_cam0s_view_is_not_baked_into_its_picture(tmp_path):  # "65% of the view changed"
+    import numpy as np
+    from kartcv.sources import Frame
+    p, sink = make(tmp_path)
+    sc = Script(Scene()).still(1.0).drop(RED).still(1.0)
+    run(p, sc)
+    before = p.references[0].copy()
+    last = sc.ticks[-1]
+    t0 = max(f.ts for f in last.values())
+    sleeve = np.full_like(last[0].image, (90, 40, 20))  # an arm right in front of cam0 fills its view
+    ticks = [{0: Frame(sleeve if i < 15 else last[0].image, t0 + 0.1 * (i + 1), 0),
+              1: Frame(last[1].image, t0 + 0.1 * (i + 1), 1)} for i in range(60)]
+    for t in ticks[:15]:
+        p.step(t)
+    assert np.array_equal(p.references[0], before)  # judged while it was there: its picture kept
+    for t in ticks[15:]:
+        p.step(t)
+    assert sink.events[-1].type == "added" and len(sink.events) == 1 and p.cart.count("red-box") == 1
+
+
 def test_reset_restart_and_missing_camera(tmp_path):
     p, _ = make(tmp_path)
     sc = Script(Scene()).still(1.0).drop(RED)

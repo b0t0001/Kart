@@ -22,8 +22,8 @@ import cv2
 import numpy as np
 
 from kartcv.cart import CartMemory
-from kartcv.changes import detect_changes
-from kartcv.decide import Decision, apply_decision, decide, still_there
+from kartcv.changes import detect_changes, floor_texture
+from kartcv.decide import Decision, apply_decision, decide, primary_twin, still_there
 from kartcv.events import Event
 from kartcv.motion import HAND, MotionDetector, SettleTracker, floor_difference
 from kartcv.roi import draw_outline
@@ -75,6 +75,8 @@ class Pipeline:
         self._held: list[tuple[Decision, float]] = []  # lone unknowns waiting for the recheck (judging thread)
         self._used: set[str] = set()  # placements that already took something out or put something in
         self._pending: dict[int, list[tuple[tuple, str]]] = {}  # per camera: waiting spots, and their hand-in
+        self._disturbed: set[int] = set()  # cameras whose view changed wholesale last settle (picture kept)
+        self._bare: dict[int, float] = {}  # per camera: how much detail its empty basket shows (lens test)
         self._worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="judge") if background else None
         self._jobs: list[Future] = []
 
@@ -144,12 +146,14 @@ class Pipeline:
         self.cart.clear()
         self._held = []
         self._pending = {}
+        self._disturbed = set()
         self.camera_moved.clear()
         self._resync.difference_update(frames)
         self._reset_requested.clear()
 
     def _set_empty(self, cam: int, image: np.ndarray) -> None:
         self.empties[cam] = image
+        self._bare.pop(cam, None)
         cv2.imwrite(str(self._empty_path(cam)), image, [cv2.IMWRITE_JPEG_QUALITY, 95])
 
     def step(self, tick: dict) -> list[Event]:
@@ -230,7 +234,9 @@ class Pipeline:
                 self._resync.discard(c)
                 continue
             old_ref = self.references[c]
-            r = detect_changes(c, old_ref, f.image, self.cfg, roi=self._roi(c))
+            if c in self.empties and c not in self._bare:
+                self._bare[c] = floor_texture(self.empties[c], self.cfg, self._roi(c))
+            r = detect_changes(c, old_ref, f.image, self.cfg, roi=self._roi(c), bare_texture=self._bare.get(c))
             # A change that waited on an intrusion keeps the hand-in it started in, even when the next item's
             # hand-in comes first and it is only judged then (items put in 3 s apart).
             pending = self._pending.pop(c, [])
@@ -249,7 +255,17 @@ class Pipeline:
                     self.camera_moved.add(c)
                     new_ref = old_ref
             elif r.status == "disturbed":
-                log.warning("cam%d: %.0f%% of the view changed (lighting?); ignoring this settle", c, 100 * r.changed_frac)
+                if c not in self._disturbed:
+                    # Most likely an arm right in front of the lens: keep the picture from before it and look
+                    # again; if it's still changed then (the lighting changed), take the new view.
+                    log.warning("cam%d: %.0f%% of the view changed (an arm in front of it? lighting?); "
+                                "keeping its picture and looking again", c, 100 * r.changed_frac)
+                    self._disturbed.add(c)
+                    new_ref = old_ref
+                    edge_cams.add(c)
+                else:
+                    log.warning("cam%d: its view is still changed (lighting): taking the new view", c)
+                    self._disturbed.discard(c)
             elif r.status == "blobs" and not accept_edges:
                 # Something reaching the image edge: an arm over the rim, or a tall item poking up past it.
                 # Defer it, keeping the old reference under it, so that whatever an arm put down, took or
@@ -269,6 +285,8 @@ class Pipeline:
                                         for b in edge]
                     if not r.blobs:
                         r.status = "none"
+            if r.status != "disturbed":
+                self._disturbed.discard(c)
             self.references[c] = new_ref
             results.append(r)
         if edge_cams:
@@ -299,6 +317,31 @@ class Pipeline:
             if ts < t + self.cfg.intrusion_recheck_s - 1e-6 or r is None or b.cam not in empties:
                 keep.append((d, t))
                 continue
+            if d.wait_primary:  # only the secondary camera saw it: the primary's item, or nothing
+                twin = primary_twin(d, self.cart, self.cfg)
+                rp = next((r for r in results if r.cam == self.cfg.primary_cam), None)
+                blocked = rp is None or bool(rp.deferred) or rp.status == "disturbed" or rp.moved
+                if twin is not None:
+                    log.info("JOINED: cam%d's %s is part of %s, which cam%d billed", b.cam, d.label, twin.label,
+                             self.cfg.primary_cam)
+                    out.append(Decision("moved", twin.product_id, d.confidence, d.method, twin.label, d.cameras,
+                                        d.blobs, d.views, twin.instance_id))
+                elif not blocked:
+                    log.info("DROPPED: only cam%d saw %s and cam%d, looking, never confirmed it: never billed",
+                             b.cam, d.label, self.cfg.primary_cam)
+                elif ts < t + 2 * self.cfg.intrusion_recheck_s - 1e-6:
+                    keep.append((d, t))  # the primary is still holding its own look (an arm, a tall item)
+                elif still_there(b, r, empties[b.cam], self.cart, self.cfg):
+                    # The primary still can't look (a tall bottle right by it keeps reaching its frame edge):
+                    # the other camera is the fallback. If the primary sees it later, it joins this unit.
+                    log.info("FALLBACK: cam%d still can't look; cam%d's %s is still there: billing it",
+                             self.cfg.primary_cam, b.cam, d.label)
+                    d.kind, d.wait_primary = "added", False
+                    out.append(d)
+                else:
+                    log.info("DROPPED: cam%d's %s was gone before cam%d could look", b.cam, d.label,
+                             self.cfg.primary_cam)
+                continue
             if still_there(b, r, empties[b.cam], self.cart, self.cfg):
                 log.info("STAYED: cam%d's %s is still there after the recheck: billing it", b.cam, d.label)
                 d.kind = "added"
@@ -309,13 +352,20 @@ class Pipeline:
         return out
 
     def _judge(self, results: list, empties: dict, placement: str | None = None, ts: float = 0.0) -> list[Event]:
-        """Decide, update memory and emit for one settle (inline, or on the worker thread)."""
-        released = self._release_held(results, empties, ts)
-        decisions = released + decide(results, empties, self.cart, self.identifier, self.features, self.cfg,
-                                      placement, placement in self._used)
+        """Decide, update memory and emit for one settle (inline, or on the worker thread). Held views are
+        released after this settle's own decisions, so one waiting for the primary camera sees what it
+        billed just now."""
+        decisions = decide(results, empties, self.cart, self.identifier, self.features, self.cfg,
+                           placement, placement in self._used)
         if placement is not None and any(d.kind != "held" for d in decisions):
             self._used.add(placement)
-        self.last_decisions = decisions
+        events = self._apply(decisions, ts)
+        released = self._release_held(results, empties, ts)
+        events += self._apply(released, ts)
+        self.last_decisions = decisions + released
+        return events
+
+    def _apply(self, decisions: list, ts: float) -> list[Event]:
         events = []
         for d in decisions:
             if d.kind == "held":

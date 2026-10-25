@@ -95,12 +95,12 @@ def preview(img: np.ndarray, poly) -> np.ndarray:
     return draw_outline(out, poly)
 
 
-def write_roi(config_path, cam: int, poly) -> None:
-    """Set roi[cam] in pi/config.json, keeping every other setting."""
+def write_roi(config_path, cam: int, poly, key: str = "roi") -> None:
+    """Set roi[cam] (or another per-camera polygon, like blind_zone) in pi/config.json, keeping the rest."""
     import json
     from pathlib import Path
 
     path = Path(config_path)
     data = json.loads(path.read_text()) if path.exists() else {}
-    data.setdefault("roi", {})[str(cam)] = [[float(x), float(y)] for x, y in poly]
+    data.setdefault(key, {})[str(cam)] = [[float(x), float(y)] for x, y in poly]
     path.write_text(json.dumps(data, indent=2) + "\n")

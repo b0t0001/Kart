@@ -35,9 +35,9 @@ def held(ticks, seconds: float, hz: float = 5.0):
         yield {c: replace(f, ts=f.ts + i / hz) if f is not None else None for c, f in last.items()}
 
 
-def replay(clip: Path):
+def replay(clip: Path, primary_cam=None):
     exp = json.loads((clip / "expected.json").read_text())
-    cfg = Config(features="hist", roi=exp.get("roi", {}))
+    cfg = Config(features="hist", roi=exp.get("roi", {}), primary_cam=primary_cam)
     catalog = load_catalog(REPO_ROOT / "data/store.json")
     sink = MemorySink()
     sources = load_recording(clip)
@@ -48,9 +48,10 @@ def replay(clip: Path):
     return exp, sink.events, p
 
 
+@pytest.mark.parametrize("primary_cam", [None, 1], ids=["both-cams", "cam1-primary"])
 @pytest.mark.parametrize("clip", CLIPS, ids=[c.name for c in CLIPS])
-def test_real_clip(clip):
-    exp, events, p = replay(clip)
+def test_real_clip(clip, primary_cam):
+    exp, events, p = replay(clip, primary_cam)
     assert [e.type for e in events] == [x["type"] for x in exp["expected"]], exp["what_happened"]
     # Offline there's no gallery and no Claude, so units come out unknown. A named one must be right, and
     # an unknown removal must close the add of the same real product: what was taken out, not a neighbour.

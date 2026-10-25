@@ -38,6 +38,8 @@
   "claude_count": false,
   "personal_items": false,
   "edge_privacy": false,
+  "primary_cam": null,
+  "blind_zone": {},
   "cloud_timeout_s": 6.0,
   "catalog_path": "data/store.json",
   "state_dir": "pi/state",

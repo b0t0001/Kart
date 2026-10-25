@@ -11,6 +11,7 @@ from kartcv.roi import gray_outside, polygon_mask
 
 _OPEN = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
 _CLOSE = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+LENS_COVERED = 0.3  # the floor kept under this share of its texture: something right in front of the lens
 RAISE_MAX = 2.0  # an identification box rises at most this many times its own height above the floor box
 BODY_SOLID = 0.5  # ...through rows where at least this share of the item's own columns changed
 
@@ -120,8 +121,23 @@ class ChangeResult:
     deferred: list = field(default_factory=list)  # boxes held back this settle (edge-touching: arm or tall item)
 
 
-def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg, roi=None) -> ChangeResult:
-    """Compare two still frames. `roi` (normalized floor polygon) limits everything to the basket floor."""
+def _texture(img: np.ndarray, floor: np.ndarray) -> float:
+    lap = np.abs(cv2.Laplacian(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), cv2.CV_32F))
+    return float(lap[floor].mean()) if floor.any() else float(lap.mean())
+
+
+def floor_texture(image: np.ndarray, cfg, roi=None) -> float:
+    """How much fine detail the floor shows (at the comparison size): the bare basket's, for the lens test."""
+    w, h = work_size(image.shape, cfg.diff_size)
+    m = polygon_mask(roi, (w, h))
+    return _texture(cv2.resize(image, (w, h), interpolation=cv2.INTER_AREA),
+                    m.astype(bool) if m is not None else np.ones((h, w), bool))
+
+
+def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg, roi=None,
+                   bare_texture: float | None = None) -> ChangeResult:
+    """Compare two still frames. `roi` (normalized floor polygon) limits everything to the basket floor.
+    `bare_texture` (floor_texture of the empty basket) lets it tell a covered lens from an emptied cart."""
     w, h = work_size(current.shape, cfg.diff_size)
     full_h, full_w = current.shape[:2]
     sx, sy = full_w / w, full_h / h
@@ -161,7 +177,14 @@ def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg, ro
             return result("disturbed", frac=plain, shift=shift, moved=True)
         shift = (0.0, 0.0)  # not a camera move: compare the frames as they are
 
-    # 2. Brightness-normalized color difference, cleaned up. Gain comes from the floor that didn't
+    # 2. Something right in front of the lens (an arm passing close to cam0) blurs the whole view flat:
+    # brightness matching would make it pass for bare floor and every item under it look gone. Flatter
+    # than even the bare basket is (lifting a printed box out only gets it back to that).
+    base = _texture(ref_s, floor) if bare_texture is None else min(_texture(ref_s, floor), bare_texture)
+    if _texture(cur_s, floor) < LENS_COVERED * max(base, 1e-6):
+        return result("disturbed", frac=1.0, shift=shift)
+
+    # 3. Brightness-normalized color difference, cleaned up. Gain comes from the floor that didn't
     # change: a big colored item would otherwise skew the medians and make bare floor look "changed".
     ref_b = cv2.GaussianBlur(ref_s, (7, 7), 0)
     dist = lab_distance(ref_b, cv2.GaussianBlur(match_gain(cur_s, ref_s, m), (7, 7), 0))
@@ -191,7 +214,7 @@ def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg, ro
     reaching_edge = set(np.unique(full_labels[border & full])) - {0}
     full_mask = polygon_mask(roi, (full_w, full_h))
 
-    # 3. Solid blobs only (inside the floor).
+    # 4. Solid blobs only (inside the floor).
     n, labels, stats, _ = cv2.connectedComponentsWithStats(inside)
     min_area = cfg.min_blob_frac * w * h
     blobs = []

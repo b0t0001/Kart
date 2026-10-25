@@ -51,6 +51,7 @@ class Decision:
     private: bool = False   # came in from the frame edge: its photos never leave the cart (edge_privacy)
     placement: str = ""     # added: the hand-in that brought it
     asked: bool = False     # added unknown: Claude looked and couldn't name it (not a timeout)
+    wait_primary: bool = False  # held: only the secondary camera saw it; the primary must confirm
 
 
 def _iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
@@ -481,7 +482,7 @@ def _one_per_placement(decisions: list[Decision], cart: CartMemory, placement: s
             # second one, even if its held-back spot doesn't line up. Only then: identical boxes each seen
             # by one camera (cam0's blind zone) stay separate units.
             cam = d.cameras[0]
-            for u in sorted(billed, key=lambda i: i.added_ts, reverse=True):
+            for u in reversed(billed):  # newest first (memory keeps the order units were billed in)
                 if u.product_id == d.product_id and cam not in u.views and u.awaiting.get(cam):
                     twin = u
                     break
@@ -586,6 +587,17 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
             log.info("IGNORED: only cam%d saw %s and the other camera saw nothing new: not billed",
                      d.cameras[0], d.label)
             out.remove(d)
+    # The primary camera's word counts: an add only the other camera saw never bills alone (tonight on the
+    # real cart, 8 of 11 cam0-only adds were wrong: lid close-ups, the liner corner, late views billed
+    # again). It waits for the primary to confirm, then joins that item, or is dropped. Unless it lies
+    # where the primary can't see (its blind zone), or the primary camera is down.
+    primary = cfg.primary_cam
+    if primary is not None and any(r.cam == primary for r in results):
+        for d in out:
+            if d.kind == "added" and primary not in d.cameras and not _in_blind_zone(d, results, cfg):
+                log.info("HELD: only cam%s saw %s: waiting for cam%d to confirm it",
+                         ",".join(map(str, d.cameras)), d.label, primary)
+                d.kind, d.wait_primary = "held", True
     # A lone unknown (one camera, no name) in a settle whose hand-in was for something else (an item taken
     # out, another put in, a late view) is the kind of glimpse that goes away: hold it for the recheck.
     if placement is not None:
@@ -598,6 +610,27 @@ def decide(results: list[ChangeResult], empties: dict[int, np.ndarray], cart: Ca
     # Out before in: a box taken out and another put in within one settle must never show as two at once
     # (with quantity nudges, that would be "two boxes… keep the extra?").
     return sorted(out, key=lambda d: {"removed": 0, "moved": 1}.get(d.kind, 2))
+
+
+def _in_blind_zone(d: Decision, results: list[ChangeResult], cfg) -> bool:
+    """Every blob of this add lies in the primary camera's blind zone (as drawn in its own camera)."""
+    for b in d.blobs:
+        poly = cfg.blind_zone.get(str(b.cam))
+        frame = next((r.frame for r in results if r.cam == b.cam and r.frame is not None), None)
+        if not poly or len(poly) < 3 or frame is None:
+            return False
+        h, w = frame.shape[:2]
+        x, y, bw, bh = b.core_box
+        pts = np.array([[px * (w - 1), py * (h - 1)] for px, py in poly], np.float32)
+        if cv2.pointPolygonTest(pts, (x + bw / 2, y + bh / 2), False) < 0:
+            return False
+    return bool(d.blobs)
+
+
+def primary_twin(d: Decision, cart: CartMemory, cfg) -> Instance | None:
+    """The newest item of d's hand-in that the primary camera has a view of: what d is part of."""
+    units = [i for i in cart.instances.values() if i.placement == d.placement and cfg.primary_cam in i.views]
+    return units[-1] if units else None  # newest (memory keeps billing order; added_ts is only to the second)
 
 
 def still_there(blob: Blob, result: ChangeResult, empty: np.ndarray, cart: CartMemory, cfg) -> bool:

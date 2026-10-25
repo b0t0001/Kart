@@ -54,6 +54,21 @@ the floor should be bright. The debug page outlines each camera's ROI in yellow.
 camera mount moves. In `pi/config.json` it looks like
 `"roi": {"0": [[0.10, 0.40], …], "1": […]}` (normalized 0..1, x right, y down).
 
+### Which camera decides (`primary_cam`) and its blind zone
+
+On the final cart the wide top view (cam1) is right far more often than the low cam0, which sees lid
+close-ups and liner corners. With `"primary_cam": 1` in `pi/config.json`, a change only cam0 sees never
+bills alone: it waits for cam1 and joins the item cam1 bills, or is dropped (`HELD`, `JOINED`,
+`DROPPED` in the log). Where cam1 can't see the floor at all, draw that spot in **cam0's** view as its
+blind zone, and cam0 alone bills there as before:
+
+```bash
+~/venv/bin/python tools/roi.py tools/out/cam0.jpg --cam 0 --blind --points "…" --write
+```
+
+(Put an item where you think cam1 is blind and check `tools/snap.py`'s cam1.jpg: if cam1 doesn't show
+it, that spot belongs in the zone.) Leave `primary_cam` as `null` to have both cameras count alike.
+
 ### The Pi's `.env`
 
 The Pi needs exactly these four lines in `~/kart/.env` (Dylan has the values; never commit the file):

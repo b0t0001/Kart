@@ -59,6 +59,8 @@ def main() -> int:
     ap.add_argument("--points", help='"x,y x,y x,y …" normalized (or pixels)')
     ap.add_argument("--click", action="store_true", help="click the corners in a window")
     ap.add_argument("--write", action="store_true", help="save into pi/config.json")
+    ap.add_argument("--blind", action="store_true",
+                    help="this polygon is where the primary camera can't see (blind_zone), not the floor")
     ap.add_argument("--config", type=Path, default=REPO_ROOT / "pi/config.json")
     args = ap.parse_args()
     img = cv2.imread(str(args.image))
@@ -86,15 +88,16 @@ def main() -> int:
     out = args.image.with_name(args.image.stem + "_roi.jpg")
     cv2.imwrite(str(out), preview(img, poly))
     print(f"wrote {out} (check it: only the basket floor should be bright)")
-    print(json.dumps({"roi": {str(args.cam if args.cam is not None else 0): poly}}))
+    key = "blind_zone" if args.blind else "roi"
+    print(json.dumps({key: {str(args.cam if args.cam is not None else 0): poly}}))
     if args.write:
         if args.cam is None:
             print("--write needs --cam")
             return 1
         if not args.config.exists() and (REPO_ROOT / "pi/config.example.json").exists():
             shutil.copy(REPO_ROOT / "pi/config.example.json", args.config)
-        write_roi(args.config, args.cam, poly)
-        print(f"saved roi[{args.cam}] into {args.config}; restart the cart to use it")
+        write_roi(args.config, args.cam, poly, key)
+        print(f"saved {key}[{args.cam}] into {args.config}; restart the cart to use it")
     return 0
 
 

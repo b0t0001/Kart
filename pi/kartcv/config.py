@@ -55,6 +55,10 @@ class Config:
     personal_items: bool = False  # Claude may answer "personal" (purse, phone…): remembered, never billed
     edge_privacy: bool = False  # on: a change that came in from the frame edge (an arm, a child's hand) never goes to Claude
     cloud_timeout_s: float = 6.0  # Haiku vision + upload over a phone hotspot regularly exceeds 3 s
+    # The camera whose word counts (the wide top view on the final cart: 1). A change only the other camera
+    # sees never bills alone, unless it lies in that camera's blind_zone. None: both cameras count alike.
+    primary_cam: int | None = None
+    blind_zone: dict = field(default_factory=dict)  # {"0": [[x, y], ...]}: where primary_cam can't see, per other camera
 
     # files, relative to the repo root unless absolute
     catalog_path: str = "data/store.json"
