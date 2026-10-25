@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 22:25 · tap-to-pay on the iPad, fresh end-to-end
+- The tap-to-pay build (9c1e5d3) is installed and relaunched with -KartBackend supabase -KartVoice line -KartTapToPay YES; cart 7 reset for a fresh end-to-end. Live bug for after the demo: touching items merge (marinara billed as spaghetti; removal took both). Keep gaps between items.
+
 ### 2026-10-24 21:35 · demo freeze, end-to-end under way
 - Demo decision: cam1 only (config.cam1.json), Pi frozen on f329278, kart-cv.service autostarts on cart 7 (reboot-proven). Cartesia Pro bought; real voice confirmed from the iPad (relaunched with -KartBackend supabase -KartVoice line). Cart 7 reset with judging stock and member memory on. Tap-to-pay built (0db108f), held for the venue install.
 
