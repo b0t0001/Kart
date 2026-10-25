@@ -2,7 +2,7 @@
 
 > **FINAL SCRIPT (2026-10-24): one natural trip. This supersedes §3 Meal A below.**
 >
-> **Props:** Barilla spaghetti **×3** (identical; 2 more being bought), Good & Gather marinara, Market Pantry grated Parmesan, up&up kids' scissors. **Quantity nudges are ON** (main feature, per Dylan). Not bought: garlic bread (removed by voice) and olive oil (not sold at Target Berkeley Central, and not in our catalog).
+> **Props:** Barilla spaghetti **×3** (identical, all bought), Good & Gather marinara, Market Pantry grated Parmesan, up&up kids' scissors. **Quantity nudges are ON** (main feature, per Dylan). Not bought: garlic bread (removed by voice) and olive oil (not sold at Target Berkeley Central, and not in our catalog).
 >
 > | # | Shopper | Kart / cart | Shows |
 > |---|---|---|---|
