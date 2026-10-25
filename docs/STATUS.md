@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-24 late · props enrolled
+- 4 props enrolled (pi/gallery, props-final clip). Live: all 4 named right, but 3 CV bugs remain (removal mis-attribution, late-view phantom, liner phantom); CV is fixing them. Catalog now matches the real props (marinara $2.19, Parmesan $4.19; demo bill $7.37). Liner flattened; the 3-drop test and counting clips run after Dylan's dinner.
+
 ### 2026-10-24 night · enrollment under way, deals quiet
 - One "No thanks" quiets deals for the trip; the route is 6 → 4 → 9 (confirmed on hosted); scissors are the 2 ct pack. Enrollment runs from James's PC: the cams were re-aimed, and the liner shift caused false captures (taping it down; CV is fixing enroll.py). iPad mount CAD pushed.
 
