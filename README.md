@@ -29,6 +29,11 @@ The project is interesting less for any one model than for the coordination: six
 
 ## Core capabilities
 
+| The cart sees what goes in and out (raw camera view, filmed in a store) |
+| :--- |
+| <img src="docs/screens/cv-drop.gif" alt="Overhead camera view of the cart basket: a jar of marinara is placed next to a box of spaghetti inside the yellow floor outline, and an inset in the corner shows the crop that was sent to Claude" width="820" /> |
+| One overhead camera watches the basket floor (yellow outline). When something lands and the hand is gone, the Pi diffs the settled frame against the last one, crops only what changed (the inset) and names it: first against photos taken at enrollment, then with Claude choosing from the store's own catalog. No model was trained, and nothing is scanned or tagged. More in [How the cart sees](#how-the-cart-sees). |
+
 | Voice-planned, route-ordered trip | A live bill that only moves in your favour |
 | :--- | :--- |
 | <img src="docs/screens/shopping.png" alt="Shopping screen: next stop card, the list with aisles, and the items in the cart" width="400" /> | <img src="docs/screens/live-bill.png" alt="A full cart with deal prices, a 20% off line and 'Saved $2.10' next to the total" width="400" /> |
@@ -72,6 +77,24 @@ The demo is one natural trip, scripted in [`docs/DEMO_PLAN.md`](docs/DEMO_PLAN.m
 The team's last recorded live end-to-end run (real cart, real voice, tap-to-pay) billed the right total at checkout; one phantom item from a nudged jar had to be removed on the iPad ([`docs/STATUS.md`](docs/STATUS.md), 2026-10-25 00:40).
 
 <p align="center"><img src="docs/screens/tap-to-pay.png" alt="Checkout terminal: total $9.36 and 'Hold your phone near the iPad'" width="480" /><br/><sub>The demo checkout terminal (iPad simulator). The payment provider is simulated.</sub></p>
+
+## How the cart sees
+
+These frames are the Pi's own debug view from a take filmed in a store on 2026-10-25, with the cart running its single overhead camera (the demo configuration; the outline is in [`hardware/roi.json`](hardware/roi.json)). The yellow line is the floor outline the camera watches; the inset is exactly what the cart used to decide.
+
+| Added, named by Claude (0.93) | Added, a tall item (0.93) | Removed, matched by where it was (0.99) |
+| :--- | :--- | :--- |
+| <img src="docs/screens/cv-added-spaghetti.jpg" alt="A spaghetti box lying on the basket floor inside the yellow outline; the inset shows the crop of the box that was sent to Claude" width="270" /> | <img src="docs/screens/cv-added-parmesan.jpg" alt="A Parmesan canister standing next to the spaghetti and a marinara jar; the inset shows the canister's label, cropped from the unmasked frame so its full height is visible" width="270" /> | <img src="docs/screens/cv-removed-spaghetti.jpg" alt="One spaghetti box left in the basket after the second was taken out; the inset shows what was taken out" width="270" /> |
+
+How one decision is made, in [`pi/kartcv/`](pi/kartcv/):
+
+1. **Watch, then wait.** Cheap frame differencing runs every tick (`motion.py`). Nothing is judged while a hand is in the basket: the cart waits for motion to stop for `settle_s` (1 s), and a change that touches the frame edge, such as an arm or a tall item, gets an extra `intrusion_recheck_s` (3 s) stillness check.
+2. **Diff the settled frame against the last one.** `changes.py` compares only the floor inside the outline (`roi.py`), so shoppers walking past the mesh, the cart rolling and shelves going by are ignored. Each changed region becomes a blob: something new (an add) or something gone (a removal).
+3. **Name what was added.** `identify/hybrid.py` tries the enrollment gallery first (`gallery.py`, about five photos per product, roughly a minute each to take). The cart accepts its own guess only above `local_min_score` 0.70 with a `local_min_margin` 0.08 lead. Otherwise the crop goes to `claude-haiku-5-5` (`cloud.py`) together with the catalog's names and per-product `vision_hint` text, and Claude must pick from that list or say it's unsure. Below `cloud_min_conf` 0.6 the item is billed as unknown and the iPad asks "Is this…?".
+4. **Attribute removals by place, not look.** `cart.py` remembers where every billed unit sits. A blob that disappears is matched first by its footprint against those positions, then by appearance, so taking out one of two identical boxes removes exactly one.
+5. **Bill each placement once.** Two views of the same placement, a late recheck, or an item settling or slumping never adds a second unit, and a box nudged by a newly placed identical box is never read as removed (`decide.py`). One event per unit goes to Supabase with an idempotent `event_id` (see [Architecture](#architecture)).
+
+**Known limits, observed on the real cart.** The baseline is a picture of the floor, so big lighting changes with items inside, such as rolling the cart from an aisle to a bright cooler, can make billed items look new or gone. A jar set down touching a box can be read as one blob. A box stacked exactly on an identical box reads as the first one settling. The stacked case is pinned by the `count-exact-stack` clip in [`pi/tests/clips/`](pi/tests/clips/); the lighting and touching cases are next, from this footage. In every case the shopper can fix the bill by voice or with a tap.
 
 ## Architecture
 
