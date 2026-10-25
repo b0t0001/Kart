@@ -1,0 +1,130 @@
+{
+  "name": "demo-video",
+  "placeholder": false,
+  "_note": "Demo-video labels (Dylan, 2026-10-25): pasta 1A, kids' scissors 1B, Parmesan 2A, marinara 3A. x positions keep the script's route order spaghetti -> marinara -> Parmesan -> scissors (nearest aisle next). Apply AFTER pre_judging.sh (sync-catalog re-seeds store.json's mini layout): python backend/db.py layout demo-video",
+  "store": {
+    "name": "Kart Demo Warehouse",
+    "width": 20,
+    "height": 12
+  },
+  "entrance": {
+    "x": 0,
+    "y": 6
+  },
+  "sections": [
+    {
+      "id": "A6",
+      "name": "Aisle 1A · Pasta",
+      "x": 2,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A6S",
+      "name": "Aisle 3A · Pasta Sauce",
+      "x": 4,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A4",
+      "name": "Aisle 2A · Cheese & Deli",
+      "x": 6,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A1",
+      "name": "Aisle 1 · Produce",
+      "x": 8,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A2",
+      "name": "Aisle 2 · Dairy & Eggs",
+      "x": 10,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A3",
+      "name": "Aisle 3 · Meat",
+      "x": 11,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A5",
+      "name": "Aisle 5 · Mexican & Salsa",
+      "x": 12,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A7",
+      "name": "Aisle 7 · Snacks & Chips",
+      "x": 14,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A8",
+      "name": "Aisle 8 · Bakery & Tortillas",
+      "x": 16,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "A9",
+      "name": "Aisle 1B · Household & School",
+      "x": 18,
+      "y": 1,
+      "w": 1,
+      "h": 8
+    },
+    {
+      "id": "CK",
+      "name": "Checkout",
+      "x": 6,
+      "y": 10,
+      "w": 8,
+      "h": 1
+    }
+  ],
+  "products": {
+    "kirkland-parmesan": "A4",
+    "barilla-spaghetti": "A6",
+    "rao-marinara": "A6S",
+    "ground-beef": "A3",
+    "caesar-salad-kit": "A1",
+    "french-baguette": "A8",
+    "mission-tortillas": "A8",
+    "tillamook-mexican-cheese": "A4",
+    "tostitos-salsa": "A5",
+    "taco-seasoning": "A5",
+    "queso": "A5",
+    "black-beans": "A5",
+    "jalapenos": "A5",
+    "tostitos-chips": "A7",
+    "hershey-xl": "A7",
+    "avocados": "A1",
+    "daisy-sour-cream": "A2",
+    "bananas": "A1",
+    "whole-milk": "A2",
+    "large-eggs": "A2",
+    "kirkland-paper-towels": "A9",
+    "kirkland-batteries": "A9",
+    "kids-scissors": "A9"
+  },
+  "prices": {}
+}
