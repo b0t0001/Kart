@@ -119,6 +119,7 @@ class ChangeResult:
     reference: np.ndarray | None = None
     moved: bool = False  # the whole view shifted (verified): the camera itself moved
     deferred: list = field(default_factory=list)  # boxes held back this settle (edge-touching: arm or tall item)
+    gain: tuple = (1.0, 1.0, 1.0)  # per-channel (B, G, R) factor that brought this frame's floor to the reference's
 
 
 def _texture(img: np.ndarray, floor: np.ndarray) -> float:
@@ -144,8 +145,10 @@ def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg, ro
     ref_s = cv2.resize(reference, (w, h), interpolation=cv2.INTER_AREA)
     cur_s = cv2.resize(current, (w, h), interpolation=cv2.INTER_AREA)
 
+    gain = (1.0, 1.0, 1.0)
+
     def result(status, blobs=(), frac=0.0, shift=(0.0, 0.0), moved=False):
-        return ChangeResult(cam, status, list(blobs), frac, shift, current, reference, moved)
+        return ChangeResult(cam, status, list(blobs), frac, shift, current, reference, moved, gain=gain)
 
     def changed(a, b, valid):
         """Share of `valid` floor pixels that differ between a and b (b gain-matched to a)."""
@@ -190,7 +193,12 @@ def detect_changes(cam: int, reference: np.ndarray, current: np.ndarray, cfg, ro
     dist = lab_distance(ref_b, cv2.GaussianBlur(match_gain(cur_s, ref_s, m), (7, 7), 0))
     rough = cv2.dilate((dist > cfg.change_thresh).astype(np.uint8), _CLOSE)
     steady = floor & (rough == 0)
-    cur_m = match_gain(cur_s, ref_s, steady.astype(np.uint8) if steady.sum() > 0.05 * floor.sum() else m)
+    sel = steady if steady.sum() > 0.05 * floor.sum() else floor
+    cur_m = match_gain(cur_s, ref_s, sel.astype(np.uint8))
+    step = 4 if sel.size > 200_000 else 1  # the light change, as match_gain measures it (medians of the floor)
+    m_cur = np.median(cur_s[::step, ::step][sel[::step, ::step]].reshape(-1, 3), axis=0) if sel.any() else None
+    m_ref = np.median(ref_s[::step, ::step][sel[::step, ::step]].reshape(-1, 3), axis=0) if sel.any() else None
+    gain = tuple(float(r / c) if c >= 1.0 else 1.0 for r, c in zip(m_ref, m_cur)) if m_cur is not None else (1.0,) * 3
     dist = lab_distance(ref_b, cv2.GaussianBlur(cur_m, (7, 7), 0))
     # Light and shadow (sun through blinds, an item's long shadow) change brightness, not the surface.
     light = lighting_only(ref_s, cur_m, cfg.lighting_chroma, cfg.lighting_structure)
