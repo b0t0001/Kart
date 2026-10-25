@@ -6,17 +6,17 @@
     "barilla-spaghetti": {
       "aisle": "A12",
       "price": 1.99,
-      "target_product": "Barilla Spaghetti Pasta, 16 oz"
+      "target_product": "Barilla Spaghetti Pasta, 16 oz (bought)"
     },
     "rao-marinara": {
       "aisle": "A12",
       "price": 2.19,
-      "target_product": "Good & Gather Marinara Pasta Sauce, 23 oz"
+      "target_product": "Good & Gather Marinara Pasta Sauce, 23 oz (bought; glass jar)"
     },
     "kirkland-parmesan": {
       "aisle": "A12",
       "price": 4.19,
-      "target_product": "Market Pantry Grated Parmesan Cheese, 8 oz shaker"
+      "target_product": "Market Pantry Grated Parmesan Cheese, 8 oz shaker (bought)"
     },
     "tostitos-chips": {
       "aisle": "A6",

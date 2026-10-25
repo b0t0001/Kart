@@ -104,7 +104,7 @@ def test_full_trip_with_the_merchant_beat(rest, db, cart_id, merchant_changes):
         c = rest.rpc("apply_cart_event", **cv_to_rpc(
             cv_event(cart_id, "added", "kirkland-parmesan", "Grated Parmesan, 8 oz shaker", 0.88, "cloud")))
         parm = next(i for i in c["items"] if i["product_id"] == "kirkland-parmesan")
-        assert (parm["price"], parm["list_price"], parm["deal_label"]) == (3.99, 4.99, "$1 off")
+        assert (parm["price"], parm["list_price"], parm["deal_label"]) == (3.19, 4.19, "$1 off")
         assert c["savings"] == 1.0 and c["suggestion"] is None
 
         # CV: something it can't identify → confirm card; checkout is blocked until it's answered
@@ -132,7 +132,7 @@ def test_full_trip_with_the_merchant_beat(rest, db, cart_id, merchant_changes):
         # iPad: Pay
         receipt = rest.rpc("checkout", p_cart_id=cart_id, p_provider="simulated")
         assert (receipt["total"], receipt["savings"], receipt["item_count"]) == (c["total"], 1.0, 3)
-        assert receipt["total"] == round(1.99 + 3.99 + 3.49, 2)
+        assert receipt["total"] == round(1.99 + 3.19 + 2.19, 2)
         assert receipt["trip_id"] == trip and receipt["status"] == "paid" and receipt["duration_s"] >= 0
         assert rest.rpc("checkout", p_cart_id=cart_id, p_provider="simulated")["id"] == receipt["id"]
         assert rest.get("/carts", cart_id=f"eq.{cart_id}", select="status")[0]["status"] == "paid"

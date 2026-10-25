@@ -109,7 +109,7 @@ def test_checkout_writes_receipt_takes_stock_and_sets_paid(cart, conn):
     add(cart, "kirkland-parmesan")
     stock_before = conn.execute("select stock from products where id = 'kirkland-parmesan'").fetchone()[0]
     receipt = cart("checkout", p_provider="simulated")
-    assert (receipt["total"], receipt["savings"], receipt["item_count"]) == (5.98, 1.0, 2)
+    assert (receipt["total"], receipt["savings"], receipt["item_count"]) == (5.18, 1.0, 2)
     assert receipt["status"] == "paid" and receipt["duration_s"] >= 0 and len(receipt["items"]) == 2
     assert current(conn)["status"] == "paid"
     assert conn.execute("select stock from products where id = 'kirkland-parmesan'").fetchone()[0] == stock_before - 1
@@ -155,8 +155,8 @@ def test_store_insights_after_a_paid_trip(cart, conn):
     cart("checkout", p_provider="simulated")
     i = conn.execute("select to_jsonb(s) from store_insights s").fetchone()[0]
     assert (i["trips"], i["avg_basket"], i["avg_items"], i["deals_offered"], i["deals_accepted"]) == \
-        (1, 5.98, 2.0, 2, 1)
-    assert (i["deal_conversion_pct"], i["deal_revenue"]) == (50, 3.99)
+        (1, 5.18, 2.0, 2, 1)
+    assert (i["deal_conversion_pct"], i["deal_revenue"]) == (50, 3.19)
     parm = conn.execute("select to_jsonb(d) from deal_performance d where deal_id = 'd-parm-3off'").fetchone()[0]
     assert (parm["offered"], parm["accepted"], parm["conversion_pct"], parm["units_sold"]) == (1, 1, 100, 1)
 

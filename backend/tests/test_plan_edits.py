@@ -66,12 +66,12 @@ def test_list_edits_keep_nudge_join_times(cart):
 
 def test_budget_running_total_and_estimate(cart):
     cart("set_plan", p_plan=[{"product_id": "barilla-spaghetti", "qty": 1},
-                             {"product_id": "kirkland-parmesan", "qty": 1},     # $4.99, $1 off → $3.99
+                             {"product_id": "kirkland-parmesan", "qty": 1},     # $4.19, $1 off → $3.19
                              {"product_id": "rao-marinara", "qty": 1}])
     row = cart("set_budget", p_amount=30)
-    assert (row["budget"], row["budget_left"], row["plan_estimate"]) == (30.0, 30.0, 9.47)
+    assert (row["budget"], row["budget_left"], row["plan_estimate"]) == (30.0, 30.0, 7.37)
     row = add(cart, "kirkland-parmesan")
-    assert (row["total"], row["budget_left"], row["plan_estimate"]) == (3.99, 26.01, 5.48)
+    assert (row["total"], row["budget_left"], row["plan_estimate"]) == (3.19, 26.81, 4.18)
     assert cart("set_budget", p_amount=None)["budget_left"] is None
     with pytest.raises(psycopg.errors.RaiseException, match="more than"):
         cart("set_budget", p_amount=0)

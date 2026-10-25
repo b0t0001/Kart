@@ -23,14 +23,14 @@
   "products": [
     {
       "id": "kirkland-parmesan",
-      "name": "Grated Parmesan Cheese, 8 oz shaker",
+      "name": "Market Pantry Grated Parmesan Cheese, 8 oz",
       "short_name": "Parmesan",
-      "price": 4.99,
+      "price": 4.19,
       "section": "A4",
       "category": "cheese",
       "tags": ["pasta", "italian"],
       "stock": 18,
-      "vision_hint": "green cylindrical shaker can of grated Parmesan, yellow and red label, plastic shaker-top lid (Kraft style)"
+      "vision_hint": "white plastic cylinder canister with a bright green snap-on shaker lid (white top); label is a wide red band with big white words 'Grated Parmesan Cheese', a small white Market Pantry tab at the top, a thin light-green stripe and 'NET WT 8 OZ (227g)' near the bottom"
     },
     {
       "id": "barilla-spaghetti",
@@ -41,18 +41,18 @@
       "category": "pasta",
       "tags": ["pasta", "italian", "staple"],
       "stock": 60,
-      "vision_hint": "long narrow blue cardboard box, red oval Barilla logo with white lettering, white word Spaghetti, dry spaghetti strands pictured"
+      "vision_hint": "long narrow dark-blue cardboard box; red oval Barilla logo with white lettering; front shows dry spaghetti strands and 'Spaghetti N°5'; back shows a white plate of spaghetti in red sauce with cherry tomatoes, basil, onion and garlic, and 'BUON APPETITO!' in red"
     },
     {
       "id": "rao-marinara",
-      "name": "Marinara Sauce, 24 oz plastic jar",
+      "name": "Good & Gather Marinara Pasta Sauce, 23 oz",
       "short_name": "Marinara",
-      "price": 3.49,
+      "price": 2.19,
       "section": "A6",
       "category": "sauce",
       "tags": ["pasta", "italian"],
       "stock": 24,
-      "vision_hint": "plastic jar of red tomato marinara sauce, about 24 oz, printed paper label and a screw-on lid (exact brand set after shopping)"
+      "vision_hint": "tall GLASS jar of red marinara (the sauce shows through the glass below and above the label); red-orange wrap label with a photo of a ripe tomato and garlic, a vertical blue Good & Gather band, white nutrition panel on the back; flat light-metal twist-off lid"
     },
     {
       "id": "ground-beef",
@@ -272,7 +272,7 @@
       "category": "school-supplies",
       "tags": ["school", "kids", "office"],
       "stock": 20,
-      "vision_hint": "one retail pack on a blue up&up 'Pointed Tip' card holding two pairs of child-size scissors (one black, one light-blue soft-grip handle) with short stainless pointed blades; the whole pack is one item"
+      "vision_hint": "one retail pack: a blue up&up 'Pointed Tip' card with a hang hole (plain white on the back) holding two pairs of child-size scissors with short stainless pointed blades, one with black handles and white inner grips, one white and light blue; the whole pack is one item"
     }
   ],
   "deals": [

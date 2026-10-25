@@ -95,7 +95,7 @@ def test_bad_method_does_not_wedge_cv(cart, conn):
 def test_amount_off_deal_price_and_savings(cart):
     row = add(cart, "kirkland-parmesan")
     item = row["items"][0]
-    assert (item["price"], item["list_price"], item["deal_label"]) == (3.99, 4.99, "$1 off")
+    assert (item["price"], item["list_price"], item["deal_label"]) == (3.19, 4.19, "$1 off")
     assert row["savings"] == 1.0
 
 
@@ -108,7 +108,7 @@ def test_percent_off_deal(cart):
 def test_expired_deal_not_applied(cart, conn):
     conn.execute("update deals set ends_at = now() - interval '1 minute' where id = 'd-parm-3off'")
     row = add(cart, "kirkland-parmesan")
-    assert row["items"][0]["price"] == 4.99 and "deal_label" not in row["items"][0]
+    assert row["items"][0]["price"] == 4.19 and "deal_label" not in row["items"][0]
 
 
 def current(conn):
@@ -147,7 +147,7 @@ def test_ended_deal_is_kept_for_items_already_in_cart(cart, conn):
     add(cart, "kirkland-parmesan")
     conn.execute("update deals set active = false where id = 'd-parm-3off'")
     item = current(conn)["items"][0]
-    assert (item["price"], item["deal_label"]) == (3.99, "$1 off")
+    assert (item["price"], item["deal_label"]) == (3.19, "$1 off")
 
 
 def test_new_deal_reaches_cart_with_a_pairing_item(cart, conn):

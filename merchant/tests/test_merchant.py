@@ -69,9 +69,9 @@ def test_confirm_twice_is_refused(store, tools):
 
 def test_price_preview_reads_plainly(store, tools):
     add_to_cart(store, "kirkland-parmesan")
-    text, ch = tools.run("update_price", {"product_id": "kirkland-parmesan", "new_price": 3.99}, "test")
-    assert ch["summary"] == ("Change the price of Parmesan (Grated Parmesan Cheese, 8 oz shaker) "
-                             "from $4.99 to $3.99. With its $1 off deal, shoppers pay $2.99. "
+    text, ch = tools.run("update_price", {"product_id": "kirkland-parmesan", "new_price": 3.49}, "test")
+    assert ch["summary"] == ("Change the price of Parmesan (Market Pantry Grated Parmesan Cheese, 8 oz) "
+                             "from $4.19 to $3.49. With its $1 off deal, shoppers pay $2.49. "
                              "1 cart with it now gets the lower price right away.")
     assert "NOT applied" in text
 
@@ -92,7 +92,7 @@ def test_deal_preview_with_end_date_and_pairing(store, tools):
     ch = stage(tools, "create_deal", product_id="kirkland-parmesan", type="amount_off", value=2,
                ends_at=sunday.isoformat(), pairs_with=["barilla-spaghetti", "rao-marinara"])
     s = ch["summary"]
-    assert s.startswith("New deal: Parmesan $2 off ($2.99 instead of $4.99), through ")
+    assert s.startswith("New deal: Parmesan $2 off ($2.19 instead of $4.19), through ")
     assert "11:59 PM" in s
     assert "when a shopper picks up Spaghetti or Marinara" in s
     assert "Replaces the current $1 off deal." in s
@@ -129,7 +129,7 @@ def test_new_deal_replaces_old_and_undo_restores_it(store, tools):
                ends_at=None, pairs_with=["barilla-spaghetti"])
     store.apply(ch["id"])
     p = product(store, "kirkland-parmesan")
-    assert (p["deal_label"], float(p["sale_price"])) == ("25% off", 3.74)
+    assert (p["deal_label"], float(p["sale_price"])) == ("25% off", 3.14)
     assert not store.one("select active from deals where id = 'd-parm-3off'")["active"]
     store.undo(ch["id"])
     assert product(store, "kirkland-parmesan")["deal_id"] == "d-parm-3off"
@@ -139,7 +139,7 @@ def test_end_deal_keeps_price_for_carts_that_have_it(store, tools):
     add_to_cart(store, "kirkland-parmesan")
     store.apply(stage(tools, "end_deal", deal_id="d-parm-3off")["id"])
     assert product(store, "kirkland-parmesan")["deal_id"] is None
-    assert cart(store)["items"][0]["price"] == 3.99           # P10: the price you saw
+    assert cart(store)["items"][0]["price"] == 3.19           # P10: the price you saw
 
 
 def test_undo_restores_price_and_is_logged(store, tools):
@@ -295,7 +295,7 @@ def test_console_notes_reach_the_next_turn(store, tools):
     system_msg = fake.calls[1]["messages"][-1]
     assert system_msg["role"] == "system" and "CONFIRMED change #1" in system_msg["content"]
     # the live catalog rides along each turn, so Claude can stage without a search round
-    assert "kirkland-parmesan | Parmesan (" in system_msg["content"] and "$1 off → $3.99" in system_msg["content"]
+    assert "kirkland-parmesan | Parmesan (" in system_msg["content"] and "$1 off → $3.19" in system_msg["content"]
     assert agent.notes == []
 
 

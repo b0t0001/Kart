@@ -95,7 +95,7 @@ on purpose: **cards only show for items not on the list.**
 | 1 | "Pasta night for my family of 4" | `reset_cart`, then `set_plan` (with `basis`) | plan in walking order; `next_step` **"Aisle 6 → Spaghetti"** (Bakery is the last aisle, Aisle 8, so pasta comes first) |
 | 2 | Drop **spaghetti** | `apply_cart_event` (vision) | Spaghetti $1.99 · **suggestion "Parmesan is $1 off in Aisle 4. Want it?"** (pairs with spaghetti *or* marinara, so it doesn't matter which is dropped first) |
 | 3 | Drop **marinara** | add | Marinara on the bill; the Parmesan card stays until it's answered |
-| 4 | "Yes", drop the **Parmesan** | add at the deal price | $4.99 struck through, now $3.99; `savings` $1.00 |
+| 4 | "Yes", drop the **Parmesan** | add at the deal price | $4.19 struck through, now $3.19; `savings` $1.00 |
 | 5 | Drop the **apple** | add with `product_id` null, `applied=false` | "Is this…?" card. `checkout` would raise `unresolved_items: 1` |
 | 6 | "Not this", apple out | the CV removal carries `p_resolves_event_id` | card clears |
 | 7 | *(beta)* spaghetti box 2 | add (qty 2 > plan 1) | `nudge` over: "That's 2 Spaghetti in the cart… Keep the extra 1?" |
