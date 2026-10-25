@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-25 02:30 · store shoot
+- Demo-video aisles live (layout demo-video: 1A/3A/2A/1B; re-apply after every pre_judging). The 02:15 store take was clean end to end (empty basket at trip start, items spread, cart not rolled). Rolling into new light and a jar next to a box caused re-bills earlier; CV pushed a lighting fix (39349d9), not on the frozen Pi. BTS grabber is extended; the 02:15 clips are being cut first.
+
 ### 2026-10-25 01:30 · repo presentation branch
 - `repo-presentation` pushed (README rewrite with architecture diagrams, docs/ARCHITECTURE.md, MIT LICENSE, root .env.example); merge after the demo, after a privacy scrub (project ref, Pi IPs, session IDs, third-party PDFs). bts-clips is still pending from the hardware chat.
 
