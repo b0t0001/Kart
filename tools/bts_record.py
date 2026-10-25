@@ -16,6 +16,8 @@ import argparse
 import csv
 import json
 import re
+import shutil
+import subprocess
 import sys
 import time
 from collections import deque
@@ -47,13 +49,54 @@ def caption_parts(ev: dict) -> list[str]:
     kind = str(ev.get("type", "")).upper()
     method = "memory" if kind == "REMOVED" else ev.get("method", "")
     name = "unrecognized item" if method == "none" else str(ev.get("label") or ev.get("product_id") or "item")
-    name = name.split(",")[0].strip()[:34]  # "Barilla Spaghetti, 1 lb" -> "Barilla Spaghetti"
+    name = name.split(",")[0].strip()  # "Barilla Spaghetti, 1 lb" -> "Barilla Spaghetti"
+    if len(name) > 40:  # a very long name: cut at a word, marked
+        name = name[:40].rsplit(" ", 1)[0].rstrip() + "..."
     how = HOW.get(method, "").format(c=float(ev.get("confidence") or 0.0))
     return [x for x in (kind, name, how) if x]
 
 
 def caption(ev: dict) -> str:
     return "  |  ".join(caption_parts(ev))
+
+
+FONT = cv2.FONT_HERSHEY_DUPLEX
+
+
+def layout(parts, w: int, band: int):
+    """Where each piece of the caption goes: (scale, [("text", t, x, width) | ("dot", "", x, 0) | ("arrow", "",
+    x, length)]). The parts are kept apart by a dot with room on both sides (at least 2% of the width each);
+    a long name first shrinks the font (to 60% at most), then gets cut with "..." so nothing ever touches."""
+    pieces = [[p.strip() for p in part.split("->")] for part in parts]
+    start = 0.5 * band / 28
+
+    def build(scale, pieces):
+        gap = max(int(28 * scale), int(w * 0.02))
+        arrow = max(int(34 * scale), int(w * 0.025))
+        items, x = [], int(w * 0.03)
+        for k, ps in enumerate(pieces):
+            if k:
+                items.append(("dot", "", x + gap, 0))
+                x += 2 * gap
+            for j, t in enumerate(ps):
+                if j:
+                    items.append(("arrow", "", x + gap // 2, arrow))
+                    x += arrow + gap
+                tw = cv2.getTextSize(t, FONT, scale, 1)[0][0]
+                items.append(("text", t, x, tw))
+                x += tw
+        return items, x
+
+    scale = start
+    items, end = build(scale, pieces)
+    while end > w * 0.97 and scale > start * 0.6:
+        scale -= start * 0.05
+        items, end = build(scale, pieces)
+    longest = max(range(len(pieces)), key=lambda k: sum(len(t) for t in pieces[k]))
+    while end > w * 0.97 and len(pieces[longest][0]) > 4:  # still too long: cut the longest part, marked
+        pieces[longest][0] = pieces[longest][0].rstrip(".")[:-1].rstrip() + "..."
+        items, end = build(scale, pieces)
+    return scale, items
 
 
 def burn(img: np.ndarray, parts, inset: np.ndarray | None = None, inset_label: str = "") -> np.ndarray:
@@ -66,32 +109,17 @@ def burn(img: np.ndarray, parts, inset: np.ndarray | None = None, inset_label: s
     shade = out.copy()
     cv2.rectangle(shade, (0, h - band), (w, h), (0, 0, 0), -1)
     out = cv2.addWeighted(shade, 0.65, out, 0.35, 0)
-    font = cv2.FONT_HERSHEY_DUPLEX
-    pieces = [[p.strip() for p in part.split("->")] for part in parts]
-
-    def width(scale):
-        gap, arrow = int(28 * scale), int(34 * scale)
-        tw = sum(cv2.getTextSize(t, font, scale, 1)[0][0] for ps in pieces for t in ps)
-        return tw + gap * (len(pieces) - 1) + sum((arrow + gap // 2) * (len(ps) - 1) for ps in pieces)
-
-    scale = 0.5 * band / 28
-    while scale > 0.3 and width(scale) > w * 0.94:
-        scale -= 0.05
+    scale, items = layout(parts, w, band)
     thick = max(1, int(round(scale * 1.6)))
-    gap, arrow = int(28 * scale), int(34 * scale)
-    x, base = int(w * 0.03), h - int(band * 0.34)
-    mid = base - int(cv2.getTextSize("x", font, scale, 1)[0][1] * 0.5)
-    for k, ps in enumerate(pieces):
-        if k:  # a middle dot, centered between parts
-            cv2.circle(out, (x + gap // 2, mid), max(2, int(3 * scale)), (255, 255, 255), -1, cv2.LINE_AA)
-            x += gap
-        for j, t in enumerate(ps):
-            if j:  # an arrow inside a part ("unsure → asks the shopper"), with room on both sides
-                cv2.arrowedLine(out, (x + gap // 4, mid), (x + gap // 4 + arrow, mid), (255, 255, 255),
-                                thick, cv2.LINE_AA, tipLength=0.3)
-                x += arrow + gap // 2
-            cv2.putText(out, t, (x, base), font, scale, (255, 255, 255), thick, cv2.LINE_AA)
-            x += cv2.getTextSize(t, font, scale, 1)[0][0]
+    base = h - int(band * 0.34)
+    mid = base - int(cv2.getTextSize("x", FONT, scale, 1)[0][1] * 0.5)
+    for kind, t, x, size in items:
+        if kind == "text":
+            cv2.putText(out, t, (x, base), FONT, scale, (255, 255, 255), thick, cv2.LINE_AA)
+        elif kind == "dot":
+            cv2.circle(out, (x, mid), max(2, int(3 * scale)), (255, 255, 255), -1, cv2.LINE_AA)
+        else:
+            cv2.arrowedLine(out, (x, mid), (x + size, mid), (255, 255, 255), thick, cv2.LINE_AA, tipLength=0.3)
     if inset is not None and inset.size:
         iw = int(w * 0.26)
         ih = min(max(1, int(inset.shape[0] * iw / inset.shape[1])), int(h * 0.45))
@@ -100,13 +128,36 @@ def burn(img: np.ndarray, parts, inset: np.ndarray | None = None, inset_label: s
         cv2.rectangle(out, (ix - 2, iy - 2), (ix + iw + 1, iy + ih + 1), (255, 255, 255), 2)
         out[iy:iy + ih, ix:ix + iw] = small
         if inset_label:
-            cv2.putText(out, inset_label, (ix, iy + ih + int(18 * scale / 0.45)), font, scale * 0.8, (255, 255, 255),
+            cv2.putText(out, inset_label, (ix, iy + ih + int(18 * scale / 0.45)), FONT, scale * 0.8, (255, 255, 255),
                         1, cv2.LINE_AA)
     return out
 
 
-def open_writer(path: Path, fps: float, size: tuple[int, int]) -> cv2.VideoWriter:
-    """H.264 if this OpenCV has it, otherwise MPEG-4 (Windows' opencv-python usually lacks H.264)."""
+class FfmpegWriter:
+    """Frames piped to ffmpeg's libx264: H.264 that every editor takes (Windows' opencv-python has none)."""
+
+    def __init__(self, path: Path, fps: float, size: tuple[int, int]):
+        w, h = size
+        self.proc = subprocess.Popen(
+            [shutil.which("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo",
+             "-pix_fmt", "bgr24", "-s", f"{w}x{h}", "-r", f"{fps:g}", "-i", "-",
+             "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+             "-crf", "20", "-preset", "veryfast", str(path)],
+            stdin=subprocess.PIPE)
+
+    def write(self, frame: np.ndarray) -> None:
+        self.proc.stdin.write(np.ascontiguousarray(frame).tobytes())
+
+    def release(self) -> None:
+        self.proc.stdin.close()
+        self.proc.wait()
+
+
+def open_writer(path: Path, fps: float, size: tuple[int, int]):
+    """H.264: ffmpeg's libx264 if ffmpeg is on PATH, else this OpenCV's own (Windows' opencv-python usually
+    has none), else MPEG-4."""
+    if shutil.which("ffmpeg"):
+        return FfmpegWriter(path, fps, size)
     for codec in ("avc1", "mp4v"):
         w = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*codec), fps, size)
         if w.isOpened():

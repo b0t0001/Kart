@@ -111,3 +111,35 @@ def test_cutting_clips_from_saved_frames_and_the_carts_event_log(tmp_path):
     assert abs(int(cv2.VideoCapture(str(out / "full.mp4")).get(cv2.CAP_PROP_FRAME_COUNT)) - span * 5) <= 6
     rows = list(csv.DictReader(open(out / "events.csv")))
     assert [r["type"] for r in rows] == ["added", "removed"]  # the 2020 event is from another session
+
+
+def test_long_names_never_touch_the_method_text():  # field: "...Marinara Pasta Saucenamed by Claude 0.93"
+    parts = ["ADDED", "Good & Gather Marinara Pasta Sauce Family Size Extra Chunky", "named by Claude 0.93"]
+    for w, h in ((1280, 720), (640, 360), (320, 180)):
+        scale, items = bts.layout(parts, w, max(28, int(h * 0.11)))
+        texts = [it for it in items if it[0] == "text"]
+        assert texts[-1][2] + texts[-1][3] <= w * 0.97  # fits the frame
+        gaps = [b[2] - (a[2] + a[3]) for a, b in zip(texts, texts[1:])]
+        assert min(gaps) >= w * 0.02  # room for the dot on both sides, always
+    _, items = bts.layout(parts, 320, 28)
+    assert any(it[1].endswith("...") for it in items if it[0] == "text")  # too long even small: cut, marked
+
+
+def test_h264_through_ffmpeg_when_it_is_installed(tmp_path):
+    import shutil
+    import pytest
+    if not shutil.which("ffmpeg"):
+        pytest.skip("no ffmpeg on PATH")
+    w = bts.open_writer(tmp_path / "x.mp4", 6, (320, 180))
+    for i in range(12):
+        w.write(np.full((180, 320, 3), i * 10, np.uint8))
+    w.release()
+    cap = cv2.VideoCapture(str(tmp_path / "x.mp4"))
+    codec = int(cap.get(cv2.CAP_PROP_FOURCC)).to_bytes(4, "little").decode(errors="replace").lower()
+    assert int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) == 12 and codec in ("avc1", "h264")
+
+
+def test_a_long_name_is_cut_at_a_word_and_marked():
+    e = ev(1, "removed", "memory", "Market Pantry Grated Parmesan Cheese Shaker Family Size, 8 oz", "x", 0.9)
+    name = bts.caption_parts(e)[1]
+    assert name.endswith("...") and name[:-3].split()[-1] in "Market Pantry Grated Parmesan Cheese Shaker Family".split()
