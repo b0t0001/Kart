@@ -1,0 +1,118 @@
+{
+ "what_happened": "empty cart; box 1 in (middle), box 2 next to it with a small gap, box 3 next to those, ~5 s apart; all stay in",
+ "expected": [
+  {
+   "type": "added",
+   "product_id": "barilla-spaghetti"
+  },
+  {
+   "type": "added",
+   "product_id": "barilla-spaghetti"
+  },
+  {
+   "type": "added",
+   "product_id": "barilla-spaghetti"
+  }
+ ],
+ "notes": "LIVE: correct, 3 adds (cloud 0.97, cloud 0.93, local 0.72). The later removal of all 3 (outside this clip) was also correct: 3 removes (memory 0.92, 0.87, 0.83).",
+ "live": [
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "RECHECK: the edge-touching change stayed still 3 s more: judging it as an item",
+  "ADDED barilla-spaghetti (cloud 0.97)",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "INTRUSION: cam1 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "RECHECK: the edge-touching change stayed still 3 s more: judging it as an item",
+  "ADDED barilla-spaghetti (cloud 0.93)",
+  "INTRUSION: cam0 sees something reaching the edge (an arm? a tall item?); waiting 3 s for it to leave or stay",
+  "ADDED barilla-spaghetti (local 0.72)",
+  "RECHECK: the edge-touching change stayed still 3 s more: judging it as an item"
+ ],
+ "roi": {
+  "0": [
+   [
+    0.01,
+    0.99
+   ],
+   [
+    0.01,
+    0.19
+   ],
+   [
+    0.05,
+    0.165
+   ],
+   [
+    0.5,
+    0.16
+   ],
+   [
+    0.86,
+    0.16
+   ],
+   [
+    0.9,
+    0.2
+   ],
+   [
+    0.99,
+    0.44
+   ],
+   [
+    0.99,
+    0.99
+   ]
+  ],
+  "1": [
+   [
+    0.04,
+    0.99
+   ],
+   [
+    0.04,
+    0.83
+   ],
+   [
+    0.11,
+    0.68
+   ],
+   [
+    0.22,
+    0.53
+   ],
+   [
+    0.36,
+    0.36
+   ],
+   [
+    0.41,
+    0.29
+   ],
+   [
+    0.47,
+    0.27
+   ],
+   [
+    0.66,
+    0.33
+   ],
+   [
+    0.82,
+    0.41
+   ],
+   [
+    0.81,
+    0.6
+   ],
+   [
+    0.79,
+    0.8
+   ],
+   [
+    0.77,
+    0.99
+   ]
+  ]
+ },
+ "setup": "final 2-camera layout: cam0 Brio mid-front looking back; cam1 wide Aoozi at the top-basket end (USB port 1.3). Floor liner: flattened black paper, corners taped. Three IDENTICAL Barilla Spaghetti 16 oz boxes.",
+ "recording": "640x360, 5 Hz, re-encoded JPEG q55; still stretches trimmed by hardware/trim_clip.py (timestamps kept)"
+}
