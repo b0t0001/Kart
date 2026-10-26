@@ -23,6 +23,9 @@ Owned by the manager session and updated at each check-in. The newest entry is a
 
 ## Log
 
+### 2026-10-26 · project wrapped
+- Dylan stopped all ops. Manager check-ins cancelled and every chat told to stand down. Main is the final state; `ui-polish` and `bts-clips` stay as unmerged branches. Wind-down: revoke the Supabase access token, cancel Cartesia Pro, power off the Pi.
+
 ### 2026-10-25 07:45 · README CV section; iPad replay
 - README leads with real-store CV footage (cv-drop.gif) and adds a "How the cart sees" section. The iPad screen for take-0245 was reconstructed from the transcript, cart_events and receipt via tools/ipad_replay.py plus the app's -KartReplay mode (8fc2a1f).
 
